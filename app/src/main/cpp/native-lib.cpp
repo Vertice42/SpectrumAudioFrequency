@@ -74,6 +74,7 @@ public:
     }
 };
 
+
 short fft(const short WavePiece[], int WavePieceLength, int Frequency) {
     auto points_distance = (float) (((2 * M_PI) / (float) WavePieceLength) * ((float) Frequency) /PRECISION);
     float x_some = 0;
@@ -83,8 +84,8 @@ short fft(const short WavePiece[], int WavePieceLength, int Frequency) {
         auto radius = (float) WavePiece[i];
         auto amplitude = (float) i;
 
-        x_some += (cos(amplitude * points_distance) * radius);
-        y_some += (sin(amplitude * points_distance) * radius);
+        x_some += cos(amplitude * points_distance) * radius;
+        y_some += sin(amplitude * points_distance) * radius;
     }
 
     auto WavePieceLength_F = (float) WavePieceLength;

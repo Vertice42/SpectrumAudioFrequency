@@ -1,6 +1,7 @@
 package com.example.spectrumaudiofrequency;
 
 import android.content.Context;
+
 import androidx.renderscript.Allocation;
 import androidx.renderscript.Element;
 import androidx.renderscript.RenderScript;
@@ -13,7 +14,7 @@ import static java.lang.Math.sin;
 
 public class SinusoidConverter {
 
-    static final float PRECISION = 1.2f;
+    static final float PRECISION = 10f;
     static final int SPECTRUM_ANALYSIS_SIZE = 16000;
 
     static float ToLogarithmicScale(short data) {
@@ -84,10 +85,9 @@ public class SinusoidConverter {
 
             gpu.set_PRECISION(PRECISION);
             gpu.set_WavePieceLength(J_WavePiece.length);
+            gpu.bind_WavePiece(input_data);
 
-            gpu.bind_WavePiece (input_data);
-
-            int SPECTRUM = (int) (SPECTRUM_ANALYSIS_SIZE * PRECISION);
+            int SPECTRUM = SPECTRUM_ANALYSIS_SIZE * (int) PRECISION;
 
             Allocation output_data = Allocation.createSized(rs, Element.F32(rs), SPECTRUM, Allocation.USAGE_SCRIPT);
 

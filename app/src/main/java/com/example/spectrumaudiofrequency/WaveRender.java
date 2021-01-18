@@ -17,6 +17,7 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.util.Arrays;
 import java.util.Date;
+import java.util.Random;
 import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.RecursiveTask;
 
@@ -103,7 +104,7 @@ class WaveRender {
         float startLineW = SpaceBetweenWaves, endLineW = SpaceBetweenWaves;
         //Initialise Lines
         for (int i = 1; i < wavePiece.length; i++) {
-            float amplitude = wavePiece[i] * 100;
+            float amplitude = wavePiece[i] / Anchor;
             if (amplitude > 0) amplitude *= -1;
             float EndLine = Anchor + amplitude;
             //decreases the amplitude of the sound wave
@@ -344,18 +345,22 @@ class WaveRender {
 
             long fftTime = System.nanoTime();
 
-            float[] fftWave = fftgpu.calculate(this.wavePiece[0]);
-
-            /*
-            short[] s_fftWave = SinusoidConverter.C_fftArray(this.wavePiece[0]);
-            float[] fftWave = new float[s_fftWave.length];
-            for (int i = 0; i < s_fftWave.length; i++) fftWave[i] = s_fftWave[i];
-            */
+            float[] fftWave;
+            int fftColor;
+            if (new Random().nextBoolean()) {
+                short[] s_fftWave = SinusoidConverter.C_fftArray(this.wavePiece[0]);
+                fftWave = new float[s_fftWave.length];
+                for (int i = 0; i < s_fftWave.length; i++) fftWave[i] = (float) s_fftWave[i];
+                fftColor = Color.RED;
+            } else {
+                fftWave = fftgpu.calculate(this.wavePiece[0]);
+                fftColor = Color.BLUE;
+            }
 
             //Log.i("fft", Arrays.toString(fftWave));
             Log.i("fftTime", (System.nanoTime() - fftTime) / 1000000f + "ms");
 
-            Draw_fft(canvas, fftWave, FFtWaveAnchor, Color.BLUE);
+            Draw_fft(canvas, fftWave, FFtWaveAnchor, fftColor);
 
             //DrawFFT_Test(canvas, wavePiece[0], Time, WavePieceDuration);
             //DrawWaveAmplitudeNegative(canvas,wavePiece[0],FFtWaveAnchor,Color.BLACK);
