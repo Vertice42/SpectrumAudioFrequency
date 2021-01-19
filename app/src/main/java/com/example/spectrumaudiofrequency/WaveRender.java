@@ -347,7 +347,7 @@ class WaveRender {
 
             float[] fftWave;
             int fftColor;
-            if (new Random().nextBoolean()) {
+            if (false) {
                 short[] s_fftWave = SinusoidConverter.C_fftArray(this.wavePiece[0]);
                 fftWave = new float[s_fftWave.length];
                 for (int i = 0; i < s_fftWave.length; i++) fftWave[i] = (float) s_fftWave[i];
@@ -357,7 +357,7 @@ class WaveRender {
                 fftColor = Color.BLUE;
             }
 
-            //Log.i("fft", Arrays.toString(fftWave));
+            Log.i("fft", Arrays.toString(fftWave));
             Log.i("fftTime", (System.nanoTime() - fftTime) / 1000000f + "ms");
 
             Draw_fft(canvas, fftWave, FFtWaveAnchor, fftColor);

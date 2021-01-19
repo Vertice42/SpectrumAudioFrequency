@@ -6,11 +6,8 @@ import androidx.renderscript.Allocation;
 import androidx.renderscript.Element;
 import androidx.renderscript.RenderScript;
 
-import com.android.rssample.ScriptC_gpu;
-
 import static java.lang.Math.cos;
 import static java.lang.Math.sin;
-
 
 public class SinusoidConverter {
 
@@ -83,13 +80,14 @@ public class SinusoidConverter {
             Allocation input_data = Allocation.createSized(rs, Element.I16(rs), J_WavePiece.length, Allocation.USAGE_SCRIPT);
             input_data.copy1DRangeFrom(0, J_WavePiece.length, J_WavePiece);
 
-            gpu.set_PRECISION(PRECISION);
-            gpu.set_WavePieceLength(J_WavePiece.length);
+            gpu.set_PRECISION((float) PRECISION);
+            gpu.set_WavePieceLength((float) J_WavePiece.length);
             gpu.bind_WavePiece(input_data);
+
 
             int SPECTRUM = SPECTRUM_ANALYSIS_SIZE * (int) PRECISION;
 
-            Allocation output_data = Allocation.createSized(rs, Element.F32(rs), SPECTRUM, Allocation.USAGE_SCRIPT);
+            Allocation output_data = Allocation.createSized(rs, Element.F32(rs), SPECTRUM, Allocation.USAGE_SHARED);
 
             gpu.forEach_process(output_data);
 

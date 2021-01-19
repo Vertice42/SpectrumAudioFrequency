@@ -74,9 +74,8 @@ public:
     }
 };
 
-
 short fft(const short WavePiece[], int WavePieceLength, int Frequency) {
-    auto points_distance = (float) (((2 * M_PI) / (float) WavePieceLength) * ((float) Frequency) /PRECISION);
+    auto points_distance = (float) (((2 * M_PI) / (float) WavePieceLength) * ((float) Frequency) / PRECISION);
     float x_some = 0;
     float y_some = 0;
 
@@ -129,7 +128,9 @@ short *fftArray(short WavePiece[], int WavePieceLength) {
 }
 
 extern "C" JNIEXPORT jshortArray JNICALL
-Java_com_example_spectrumaudiofrequency_SinusoidConverter_C_1fftArray(JNIEnv *env,__unused jclass THIS,jshortArray array) {
+Java_com_example_spectrumaudiofrequency_SinusoidConverter_C_1fftArray(JNIEnv *env,
+                                                                      __unused jclass THIS,
+                                                                      jshortArray array) {
     short *ShortArray = nullptr;
     int Length = JShortArrayTOShortArray(env, array, &ShortArray);
 
