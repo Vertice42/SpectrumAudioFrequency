@@ -9,15 +9,14 @@ import android.os.Build;
 import android.os.Environment;
 import android.util.Log;
 
-import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
 import androidx.annotation.RequiresApi;
+
+import com.example.spectrumaudiofrequency.SinusoidConverter.GPU.GPU_FFTRequest;
 
 import java.io.File;
 import java.io.FileOutputStream;
 import java.util.Arrays;
 import java.util.Date;
-import java.util.Random;
 import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.RecursiveTask;
 
@@ -37,13 +36,13 @@ class WaveRender {
     public float Frequency = 1;
 
     public boolean AntiAlias = false;
-    private final Context context;
+    private final SinusoidConverter.GPU gpu;
 
     @RequiresApi(api = Build.VERSION_CODES.LOLLIPOP)
     WaveRender(Context context, long SpectrumSize) {
-        this.context = context;
         this.SpectrumSize = SpectrumSize;
         this.forkJoinPool = new ForkJoinPool();
+        this.gpu = new SinusoidConverter.GPU(context);
 
     }
 
@@ -93,7 +92,7 @@ class WaveRender {
         }
     }
 
-    private void Draw_fft(Canvas canvas, float[] wavePiece, float Anchor, int color) {
+    private void Draw_fft(Canvas canvas, float[] wavePiece, float Anchor, int color, float Press) {
         float SpaceBetweenWaves = (float) Width / wavePiece.length;
         //"spacing" determining the line spacing is by consequence the size of the sound wave
         Paint WavePaint = new Paint();
@@ -104,8 +103,10 @@ class WaveRender {
         float startLineW = SpaceBetweenWaves, endLineW = SpaceBetweenWaves;
         //Initialise Lines
         for (int i = 1; i < wavePiece.length; i++) {
-            float amplitude = wavePiece[i] / Anchor;
-            if (amplitude > 0) amplitude *= -1;
+
+            float amplitude = wavePiece[i] / Press;
+
+            //if (amplitude > 0) amplitude *= -1;
             float EndLine = Anchor + amplitude;
             //decreases the amplitude of the sound wave
             canvas.drawLine(startLineW, Anchor, endLineW, EndLine, WavePaint);
@@ -293,8 +294,8 @@ class WaveRender {
 
             float endLineH = EndLine;
 
-            startLineH = Anchor + startLineH / (Anchor * 2);
-            endLineH = Anchor + endLineH / (Anchor * 2);
+            startLineH = Anchor + startLineH / (Anchor * 10);
+            endLineH = Anchor + endLineH / (Anchor * 10);
             //decreases the amplitude of the sound wave
 
             /*
@@ -316,17 +317,18 @@ class WaveRender {
         private final Bitmap imageBitmap;
         private final short[][] wavePiece;
         private final long WavePieceDuration;
+        private final float[] FFTWave;
         private long Time;
         private final WaveRenderListeners onRenderFinish;
-        private SinusoidConverter.fftGPU fftgpu;
+        private float[] FFT_GPU_Result;
 
-        public DrawWaves(Bitmap imageBitmap, short[][] wavePiece, long Time, long WavePieceDuration, WaveRenderListeners onRenderFinish) {
+        public DrawWaves(Bitmap imageBitmap, short[][] wavePiece, float[] FFTWave, long Time, long WavePieceDuration, WaveRenderListeners onRenderFinish) {
             this.imageBitmap = imageBitmap;
             this.wavePiece = wavePiece;
             this.WavePieceDuration = WavePieceDuration;
             this.Time = Time;
             this.onRenderFinish = onRenderFinish;
-            this.fftgpu = new SinusoidConverter.fftGPU(context);
+            this.FFTWave = FFTWave;
 
         }
 
@@ -334,33 +336,26 @@ class WaveRender {
         protected Bitmap compute() {
             Canvas canvas = new Canvas(imageBitmap);
 
-            canvas.drawColor(Color.argb(255, 255, 255, 255));
+            canvas.drawColor(Color.argb
+                    (255, 255, 255, 255));
             //Draw background
 
             //DrawTime(canvas, Time, WavePieceDuration, Height / 20f);
 
             //DrawWaveAmplitude(canvas, wavePiece[0], ((Height / 3f)), Color.GREEN);
             //DrawWaveAmplitudeNegative(canvas, wavePiece[0], ((Height / 2.5f)), Color.GREEN);
-            float FFtWaveAnchor = Height / 1.3f;
 
             long fftTime = System.nanoTime();
+            short[] short_C_fftWave = SinusoidConverter.C_fftArray(this.wavePiece[0]);
+            Log.i("C++ fftTime", (System.nanoTime() - fftTime) / 1000000f + "ms");
+           // Log.i("C++ fft", Arrays.toString(short_C_fftWave));
 
-            float[] fftWave;
-            int fftColor;
-            if (false) {
-                short[] s_fftWave = SinusoidConverter.C_fftArray(this.wavePiece[0]);
-                fftWave = new float[s_fftWave.length];
-                for (int i = 0; i < s_fftWave.length; i++) fftWave[i] = (float) s_fftWave[i];
-                fftColor = Color.RED;
-            } else {
-                fftWave = fftgpu.calculate(this.wavePiece[0]);
-                fftColor = Color.BLUE;
-            }
+            float[] C_fftWave = new float[short_C_fftWave.length];
+            for (int i = 0; i < short_C_fftWave.length; i++)
+                C_fftWave[i] = (float) short_C_fftWave[i];
 
-            Log.i("fft", Arrays.toString(fftWave));
-            Log.i("fftTime", (System.nanoTime() - fftTime) / 1000000f + "ms");
-
-            Draw_fft(canvas, fftWave, FFtWaveAnchor, fftColor);
+            Draw_fft(canvas, this.FFTWave, Height / 1.6f, Color.BLUE, Height);
+            Draw_fft(canvas, C_fftWave, Height / 1.2f, Color.RED, Height*2);
 
             //DrawFFT_Test(canvas, wavePiece[0], Time, WavePieceDuration);
             //DrawWaveAmplitudeNegative(canvas,wavePiece[0],FFtWaveAnchor,Color.BLACK);
@@ -377,8 +372,13 @@ class WaveRender {
         this.Width = imageBitmap.getWidth();
         this.Height = imageBitmap.getHeight();
 
-        DrawWaves drawWaves = new DrawWaves(imageBitmap, WavePiece, Time, PieceDuration, onRenderFinish);
-        forkJoinPool.execute(drawWaves);
+        long fftTime = System.nanoTime();
+        gpu.processFFT(new GPU_FFTRequest(Util.toFloat(WavePiece[0]), FFT_Wave -> {
+            //Log.i("fft", Arrays.toString(FFT_Wave));
+            Log.i("GPU fftTime", (System.nanoTime() - fftTime) / 1000000f + "ms");
+            forkJoinPool.execute(new DrawWaves(imageBitmap, WavePiece, FFT_Wave, Time, PieceDuration, onRenderFinish));
+        }));
+
 
     }
 

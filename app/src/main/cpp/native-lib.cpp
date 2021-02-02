@@ -75,29 +75,27 @@ public:
 };
 
 short fft(const short WavePiece[], int WavePieceLength, int Frequency) {
-    auto points_distance = (float) (((2 * M_PI) / (float) WavePieceLength) * ((float) Frequency) / PRECISION);
+    auto WavePieceLength_F = (float) WavePieceLength;
+    auto points_distance = (float) (((2 * M_PI) / WavePieceLength_F) * ((float) Frequency+1) / PRECISION);
+
     float x_some = 0;
     float y_some = 0;
-
     for (int i = 0; i < WavePieceLength; i++) {
         auto radius = (float) WavePiece[i];
-        auto amplitude = (float) i;
+        auto point = (float) i;
 
-        x_some += cos(amplitude * points_distance) * radius;
-        y_some += sin(amplitude * points_distance) * radius;
+        x_some += (cos(point * points_distance) * radius);
+        y_some += (sin(point * points_distance) * radius);
     }
 
-    auto WavePieceLength_F = (float) WavePieceLength;
-
-    x_some /= WavePieceLength_F;
-    y_some /= WavePieceLength_F;
-
-    return (short) ((x_some + y_some) * PRECISION);
+    return (short) (((x_some + y_some) / WavePieceLength_F)* (float) PRECISION);
 }
 
 short *fftArray(short WavePiece[], int WavePieceLength) {
 
-    auto *fftArray = new short[SPECTRUM_ANALYSIS_SIZE * PRECISION];
+    int outLength = SPECTRUM_ANALYSIS_SIZE * PRECISION;
+
+    auto *fftArray = new short[outLength];
 
     /*
     int threads_Number = 4;
@@ -122,7 +120,7 @@ short *fftArray(short WavePiece[], int WavePieceLength) {
     }
     */
 
-    for (int i = 0; i < WavePieceLength; i++)fftArray[i] = fft(WavePiece, WavePieceLength, i);
+    for (int i = 0; i < outLength; i++)fftArray[i] = fft(WavePiece, WavePieceLength, i);
 
     return fftArray;
 }
@@ -144,24 +142,20 @@ Java_com_example_spectrumaudiofrequency_SinusoidConverter_C_1FFT(JNIEnv *env, __
     int length = env->GetArrayLength(j_wave_piece);
     jshort *C_WavePiece = env->GetShortArrayElements(j_wave_piece, nullptr);
 
-    auto points_distance = (float) (((2 * M_PI) / (float) length) * ((float) frequency) /
-                                    PRECISION);
-
-    float x_some = 0;
-    float y_some = 0;
-
+    /*
     for (int i = 0; i < length; i++) {
         auto radius = (float) C_WavePiece[i];
         auto f = (float) i;
 
-        x_some += (cos(f * points_distance) * radius);
+        points_some += (cos(f * points_distance) * radius);
         y_some += (sin(f * points_distance) * radius);
     }
 
     auto WavePieceLength_F = (float) length;
 
-    x_some /= WavePieceLength_F;
+    points_some /= WavePieceLength_F;
     y_some /= WavePieceLength_F;
+    */
 
-    return (jshort) ((x_some + y_some) * PRECISION);
+    return (jshort) fft(C_WavePiece, length, frequency);
 }

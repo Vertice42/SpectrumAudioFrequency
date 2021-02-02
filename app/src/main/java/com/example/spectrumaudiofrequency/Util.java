@@ -44,4 +44,10 @@ public class Util {
 
         return c;
     }
+
+    public static float[] toFloat(short[] shorts){
+        float[] floats = new float[shorts.length];
+        for (int i = 0; i < shorts.length; i++) floats[i] = shorts[i];
+        return floats;
+    }
 }

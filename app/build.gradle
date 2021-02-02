@@ -6,7 +6,7 @@ android {
 
     defaultConfig {
         applicationId "com.example.spectrumaudiofrequency"
-        minSdkVersion 19
+        minSdkVersion 24
         targetSdkVersion 30
         versionCode 1
         versionName "1.0"
@@ -19,7 +19,7 @@ android {
             }
         }
 
-        renderscriptTargetApi 18
+        renderscriptTargetApi 23
         renderscriptSupportModeEnabled true
     }
 

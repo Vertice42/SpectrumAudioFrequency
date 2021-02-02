@@ -2,31 +2,35 @@
 #pragma rs java_package_name(com.example.spectrumaudiofrequency)
 #pragma rs_fp_relaxed
 
-#pragma rs reduce(addint) accumulator(addintAccum)
-static void addintAccum(float *accum, float val) {
+static const float II_PI = (2 * M_PI);
+
+//reduce requer API 24
+#pragma rs reduce(addfloat) accumulator(addfloatAccum)
+static void addfloatAccum(float *accum, float val) {
   *accum += val;
 }
 
-
-static const float II_PI = (2 * M_PI);
-
-int16_t *WavePiece;
 float WavePieceLength;
 float PRECISION;
 
 void CalculatePointsDistances(float *v_out, uint32_t x) {
-    *v_out = (II_PI / WavePieceLength) * ( ((float)(x+1)) / PRECISION);
+    *v_out = ((2 * M_PI) / WavePieceLength) * ( ((float)(x+1)) / PRECISION);
 }
 
 float *PointsDistances;
-int PointsDistancesID;
-void process(float2 *v_out, uint32_t x) {
-    float radius = (float) WavePiece[x];
-    float amplitude = (float) x;
+float *WavePiece;
 
-    v_out->x = cos(amplitude * PointsDistances[PointsDistancesID]) * radius;
-    v_out->y = sin(amplitude * PointsDistances[PointsDistancesID]) * radius;
+void fftArray(float *v_out, uint32_t x) {
+    float x_some = 0;
+    float y_some = 0;
+    for (int i = 0; i < (int) WavePieceLength; i++) {
+        float radius = (float) WavePiece[i];
+        float point = (float) i;
+        x_some += (cos(point * PointsDistances[x]) * radius);
+        y_some += (sin(point * PointsDistances[x]) * radius);
+     }
+
+      *v_out = (float) ((short) (((x_some + y_some) / WavePieceLength)* PRECISION));
 }
-
 
 
