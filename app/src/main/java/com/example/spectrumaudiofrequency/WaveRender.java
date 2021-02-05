@@ -15,6 +15,7 @@ import com.example.spectrumaudiofrequency.SinusoidConverter.GPU.GPU_FFTRequest;
 
 import java.io.File;
 import java.io.FileOutputStream;
+
 import java.util.Arrays;
 import java.util.Date;
 import java.util.concurrent.ForkJoinPool;
@@ -41,7 +42,7 @@ class WaveRender {
     @RequiresApi(api = Build.VERSION_CODES.LOLLIPOP)
     WaveRender(Context context, long SpectrumSize) {
         this.SpectrumSize = SpectrumSize;
-        this.forkJoinPool = new ForkJoinPool();
+        this.forkJoinPool = ForkJoinPool.commonPool();
         this.gpu = new SinusoidConverter.GPU(context);
 
     }
@@ -106,7 +107,7 @@ class WaveRender {
 
             float amplitude = wavePiece[i] / Press;
 
-            //if (amplitude > 0) amplitude *= -1;
+            if (amplitude > 0) amplitude *= -1;
             float EndLine = Anchor + amplitude;
             //decreases the amplitude of the sound wave
             canvas.drawLine(startLineW, Anchor, endLineW, EndLine, WavePaint);
@@ -346,20 +347,16 @@ class WaveRender {
             //DrawWaveAmplitudeNegative(canvas, wavePiece[0], ((Height / 2.5f)), Color.GREEN);
 
             long fftTime = System.nanoTime();
-            short[] short_C_fftWave = SinusoidConverter.C_fftArray(this.wavePiece[0]);
+            float[] C_fftWave =  new SinusoidConverter(forkJoinPool).C_FFT(this.wavePiece[0]);
             Log.i("C++ fftTime", (System.nanoTime() - fftTime) / 1000000f + "ms");
-           // Log.i("C++ fft", Arrays.toString(short_C_fftWave));
+           // Log.i("C++ fft", Arrays.toString(C_fftWave));
 
-            float[] C_fftWave = new float[short_C_fftWave.length];
-            for (int i = 0; i < short_C_fftWave.length; i++)
-                C_fftWave[i] = (float) short_C_fftWave[i];
-
-            Draw_fft(canvas, this.FFTWave, Height / 1.6f, Color.BLUE, Height);
-            Draw_fft(canvas, C_fftWave, Height / 1.2f, Color.RED, Height*2);
+            Draw_fft(canvas, this.FFTWave, Height / 1.6f, Color.BLUE, Height/10f);
+            Draw_fft(canvas, C_fftWave, Height / 1.2f, Color.RED, Height/10f);
 
             //DrawFFT_Test(canvas, wavePiece[0], Time, WavePieceDuration);
             //DrawWaveAmplitudeNegative(canvas,wavePiece[0],FFtWaveAnchor,Color.BLACK);
-            DrawWave(canvas, wavePiece[0], Height / 5f, Color.BLACK);
+            //DrawWave(canvas, wavePiece[0], Height / 5f, Color.BLACK);
 
             onRenderFinish.onFinish(imageBitmap);
             return imageBitmap;

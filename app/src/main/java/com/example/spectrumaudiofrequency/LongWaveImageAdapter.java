@@ -1,5 +1,6 @@
 package com.example.spectrumaudiofrequency;
 
+import android.annotation.SuppressLint;
 import android.os.Build;
 import android.util.Log;
 import android.view.ViewGroup;
@@ -11,6 +12,8 @@ import androidx.annotation.RequiresApi;
 import androidx.recyclerview.widget.RecyclerView;
 
 import java.util.Date;
+
+import static com.example.spectrumaudiofrequency.MainActivity.InfoTextView;
 
 public class LongWaveImageAdapter extends RecyclerView.Adapter<WaveViewHolder> {
     public int WaveLength = 0;
@@ -134,7 +137,13 @@ public class LongWaveImageAdapter extends RecyclerView.Adapter<WaveViewHolder> {
     boolean inUpdate = false;
     int times = 0;
     int time = 0;
+    private int RenderMediaTimeMS = 0;
 
+    public int getRenderMediaTimeMS() {
+         return RenderMediaTimeMS;
+    }
+
+    @SuppressLint("SetTextI18n")
     @RequiresApi(api = Build.VERSION_CODES.LOLLIPOP)
     public void update(int Time) {
         if (inUpdate) return;
@@ -149,13 +158,15 @@ public class LongWaveImageAdapter extends RecyclerView.Adapter<WaveViewHolder> {
                         this.holderObserved.ImageBitmap = bitmap;
                         this.holderObserved.updateImage();
                         inUpdate = false;
-                        if (times > 10) {
+                        if (times > 1000) {
                             times = 0;
                             time = 0;
                         }
                         time += (new Date().getTime() - RenderStartTime) + RequestTime;
                         times++;
-                        Log.i("TAG", "Time: " + Time + " RenderTime: " + (new Date().getTime() - RenderStartTime) + "ms" + " RequestTime: " + RequestTime + "ms" + " Media:" + time / times + "ms");
+                        RenderMediaTimeMS = time / times;
+                        InfoTextView.setText("Time: " + Time + " RenderTime: " + (new Date().getTime() - RenderStartTime) + "ms"
+                                + " RequestTime: " + RequestTime + "ms" + " Media:" + RenderMediaTimeMS + "ms");
                     });
         }));
     }

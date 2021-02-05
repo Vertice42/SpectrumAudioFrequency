@@ -1,8 +1,12 @@
 package com.example.spectrumaudiofrequency;
 
+import android.os.Build;
 import android.util.Log;
 
+import java.io.File;
+import java.io.FileFilter;
 import java.lang.reflect.Array;
+import java.util.regex.Pattern;
 
 public class Util {
     public static short[][][] SplitArray(short[][] OriginalArray, int Divider) {
@@ -45,9 +49,79 @@ public class Util {
         return c;
     }
 
+    public static float[][] ConcatenateArray(float[][] a, float[][] b) {
+        if (a.length == 0) return b;
+        float[][] c = new float[a.length][a[0].length + b[0].length];
+
+        for (int i = 0; i < a.length; i++) {
+            c[i] = new float[a[i].length + b[i].length];
+
+            System.arraycopy(a[i], 0, c[i], 0, a[i].length);
+            System.arraycopy(b[i], 0, c[i], a[i].length, b[i].length);
+        }
+
+        return c;
+    }
+
+    public static float[] ConcatenateArray(float[] a, float[] b) {
+        if (a.length == 0) return b;
+
+        float[] c = new float[a.length+b.length];
+
+        System.arraycopy(a, 0, c, 0, a.length);
+        System.arraycopy(b, 0, c, a.length, b.length);
+
+        return c;
+    }
+    public static float[] ConcatenateArray(float[][] a) {
+        int length = 0;
+
+        for (float[] floats : a) length += floats.length;
+
+        float[] b = new float[length];
+
+        for (int i = 0; i < a.length; i++){
+            System.arraycopy(a[i], 0, b, a[i].length * i, a[i].length);
+        }
+
+        return b;
+    }
+
+
     public static float[] toFloat(short[] shorts){
         float[] floats = new float[shorts.length];
         for (int i = 0; i < shorts.length; i++) floats[i] = shorts[i];
         return floats;
+    }
+    private static int getNumCoresOldPhones() {
+        //Private Class to display only CPU devices in the directory listing
+        class CpuFilter implements FileFilter {
+            @Override
+            public boolean accept(File pathname) {
+                //Check if filename is "cpu", followed by a single digit number
+                return Pattern.matches("cpu[0-9]+", pathname.getName());
+            }
+        }
+
+        try {
+            //Get directory containing CPU info
+            File dir = new File("/sys/devices/system/cpu/");
+            //Filter to only list the devices we care about
+            File[] files = dir.listFiles(new CpuFilter());
+            //Return the number of cores (virtual CPU devices)
+            return files.length;
+        } catch(Exception e) {
+            //Default to return 1 core
+            return 1;
+        }
+    }
+    public static int getNumberOfCores() {
+        if(Build.VERSION.SDK_INT >= 17) {
+            return Runtime.getRuntime().availableProcessors();
+        }
+        else {
+            // Use saurabh64's answer
+            return getNumCoresOldPhones();
+        }
     }
 }

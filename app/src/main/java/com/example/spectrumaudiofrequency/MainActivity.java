@@ -14,6 +14,7 @@ import android.util.Log;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.SeekBar;
+import android.widget.TextView;
 
 import androidx.annotation.RequiresApi;
 import androidx.appcompat.app.AppCompatActivity;
@@ -26,6 +27,7 @@ import androidx.recyclerview.widget.RecyclerView;
 import java.io.IOException;
 import java.util.Timer;
 import java.util.TimerTask;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 public class MainActivity extends AppCompatActivity {
     static {
@@ -41,6 +43,7 @@ public class MainActivity extends AppCompatActivity {
     public Button playButton;
     public SeekBar ScaleInput;
     public EditText FrequencyInput;
+    public static TextView InfoTextView;
 
     public LongWaveImageAdapter WaveAdapter;
 
@@ -62,11 +65,40 @@ public class MainActivity extends AppCompatActivity {
         WaveAdapter.notifyDataSetChanged();
     }
 
+    static class Array2Don1D {
+        int X_length = 40;
+        int Y_length = 10;
+
+        int ArrayLength = Y_length * X_length;
+
+        int Length = ArrayLength / X_length;
+
+        static void write2DArray(int x, int y, float[] array, int Length, float value) {
+            array[Length * x + y] = value;
+        }
+
+        static float read2DArray(int x, int y, float[] array, int Length) {
+            return array[Length * x + y];
+        }
+
+        float[] Array1D = new float[ArrayLength];
+    }
+
     @RequiresApi(api = Build.VERSION_CODES.LOLLIPOP)
     @SuppressLint("SetTextI18n")
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+
+        Array2Don1D array2Don1D = new Array2Don1D();
+
+        for (int x = 0; x < array2Don1D.X_length; x++) {
+            for (int y = 0; y < array2Don1D.Length; y++) {
+                Array2Don1D.write2DArray(x, y, array2Don1D.Array1D, array2Don1D.Length, y);
+                Log.i("Test", "X: " + x + " Y:" + Array2Don1D.read2DArray(x, y, array2Don1D.Array1D, array2Don1D.Length));
+            }
+        }
+
 
         setContentView(R.layout.activity_main);
 
@@ -78,6 +110,7 @@ public class MainActivity extends AppCompatActivity {
         playButton = this.findViewById(R.id.playButton);
         ScaleInput = this.findViewById(R.id.scaleInput);
         FrequencyInput = this.findViewById(R.id.FrequencyInput);
+        InfoTextView = this.findViewById(R.id.InfoTextView);
 
         Decoder = new AudioDecoder(AUDIO_PATH);
         mediaPlayer = new MediaPlayer();
@@ -91,7 +124,7 @@ public class MainActivity extends AppCompatActivity {
         }
 
         WaveRecyclerView.post(() -> {
-            WaveRender waveRender = new WaveRender(this,Decoder.getDuration());
+            WaveRender waveRender = new WaveRender(this, Decoder.getDuration());
             WaveAdapter = new LongWaveImageAdapter(Decoder, waveRender, this.FrequencyInput);
 
             ScaleInput.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
@@ -126,22 +159,32 @@ public class MainActivity extends AppCompatActivity {
             });
 
             final boolean[] isPlay = {false};
+            AtomicBoolean IsPapered = new AtomicBoolean(false);
             playButton.setOnClickListener((v -> {
                 if (!isPlay[0] && !mediaPlayer.isPlaying()) {
-                    mediaPlayer.setOnPreparedListener((mp) -> {
+                    if (!IsPapered.get()) {
+                        mediaPlayer.setOnPreparedListener((mp) -> {
+                            IsPapered.set(true);
+                            mediaPlayer.start();
+
+                            Timer timer = new Timer();
+                            timer.scheduleAtFixedRate(new TimerTask() {
+                                @Override
+                                public void run() {
+                                    if (mediaPlayer.isPlaying())
+                                        WaveAdapter.update((mediaPlayer.getCurrentPosition() * 1000+WaveAdapter.getRenderMediaTimeMS()));
+                                }
+                            }, 0, 15);
+
+                        });
+                        mediaPlayer.prepareAsync();
+                    } else {
+                        if (mediaPlayer.getCurrentPosition() > mediaPlayer.getDuration()/1.5f)
+                            mediaPlayer.reset();
+
                         mediaPlayer.start();
+                    }
 
-                        Timer timer = new Timer();
-                        timer.scheduleAtFixedRate(new TimerTask() {
-                            @Override
-                            public void run() {
-                                if (mediaPlayer.isPlaying())
-                                    WaveAdapter.update((mediaPlayer.getCurrentPosition() * 1000) + 100000);
-                            }
-                        }, 0, 15);
-
-                    });
-                    mediaPlayer.prepareAsync();
                 } else {
                     mediaPlayer.pause();
                 }
