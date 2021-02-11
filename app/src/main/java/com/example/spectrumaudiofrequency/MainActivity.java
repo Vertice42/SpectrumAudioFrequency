@@ -43,6 +43,8 @@ public class MainActivity extends AppCompatActivity {
     public Button playButton;
     public SeekBar ScaleInput;
     public EditText FrequencyInput;
+
+    @SuppressLint("StaticFieldLeak")
     public static TextView InfoTextView;
 
     public LongWaveImageAdapter WaveAdapter;
@@ -90,6 +92,7 @@ public class MainActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
+        /*
         Array2Don1D array2Don1D = new Array2Don1D();
 
         for (int x = 0; x < array2Don1D.X_length; x++) {
@@ -97,8 +100,7 @@ public class MainActivity extends AppCompatActivity {
                 Array2Don1D.write2DArray(x, y, array2Don1D.Array1D, array2Don1D.Length, y);
                 Log.i("Test", "X: " + x + " Y:" + Array2Don1D.read2DArray(x, y, array2Don1D.Array1D, array2Don1D.Length));
             }
-        }
-
+        }*/
 
         setContentView(R.layout.activity_main);
 
@@ -171,10 +173,9 @@ public class MainActivity extends AppCompatActivity {
                             timer.scheduleAtFixedRate(new TimerTask() {
                                 @Override
                                 public void run() {
-                                    if (mediaPlayer.isPlaying())
-                                        WaveAdapter.update((mediaPlayer.getCurrentPosition() * 1000+WaveAdapter.getRenderMediaTimeMS()));
+                                    if (mediaPlayer.isPlaying()) WaveAdapter.update((mediaPlayer.getCurrentPosition() * 1000+WaveAdapter.getRenderMediaTimeMS()));
                                 }
-                            }, 0, 15);
+                            }, 16, 1);
 
                         });
                         mediaPlayer.prepareAsync();
