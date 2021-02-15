@@ -11,22 +11,26 @@ import android.util.Log;
 
 import androidx.annotation.RequiresApi;
 
-import com.example.spectrumaudiofrequency.SinusoidConverter.FFT_GPUCalculator.GPU_FFTRequest;
+import com.example.spectrumaudiofrequency.SinusoidConverter.CalculatorFFT_GPU.GPU_FFTRequest;
+import com.example.spectrumaudiofrequency.SinusoidConverter.CalculatorFFT_GPU_Adapted;
 
 import java.io.File;
 import java.io.FileOutputStream;
 
+import java.util.Arrays;
 import java.util.Date;
 import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.RecursiveTask;
 
-interface WaveRenderListeners {
-    void onFinish(Bitmap bitmap);
-}
 
 class WaveRender {
+
+    interface WaveRenderListeners {
+        void onFinish(Bitmap bitmap);
+    }
+
     private static final String Folder = "WavePieces";
-    private final ForkJoinPool forkJoinPool;
+    private final ForkJoinPool pool;
 
     public long SpectrumSize;
 
@@ -36,18 +40,20 @@ class WaveRender {
     public float Frequency = 1;
 
     public boolean AntiAlias = false;
-    private final SinusoidConverter.FFT_GPUCalculator gpuFFT;
-    private float[] GPU_fft;
+
+    private float[] fftGpu;
+    private final SinusoidConverter.CalculatorFFT_GPU calculatorFFTGpu;
 
     WaveRender(Context context, long SpectrumSize) {
         this.SpectrumSize = SpectrumSize;
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-            this.forkJoinPool = ForkJoinPool.commonPool();
+            this.pool = ForkJoinPool.commonPool();
         } else {
-            this.forkJoinPool = new ForkJoinPool();
+            this.pool = new ForkJoinPool();
         }
 
-        this.gpuFFT = new SinusoidConverter.FFT_GPUCalculator(context);
+        this.calculatorFFTGpu = new CalculatorFFT_GPU_Adapted(context, pool);
+
     }
 
     public static String getImageFileName(long ImageID) {
@@ -96,8 +102,8 @@ class WaveRender {
         }
     }
 
-    private void Draw_fft(Canvas canvas, float[] wavePiece, float Anchor, int color, float Press) {
-        float SpaceBetweenWaves = (float) Width / wavePiece.length;
+    private void Draw_fft(Canvas canvas, float[] fft, float Anchor, int color, float Press) {
+        float SpaceBetweenWaves = (float) Width / fft.length;
         //"spacing" determining the line spacing is by consequence the size of the sound wave
         Paint WavePaint = new Paint();
         WavePaint.setStrokeWidth(1);
@@ -106,9 +112,8 @@ class WaveRender {
         //activates anti aliasing and sets the thickness of the line
         float startLineW = SpaceBetweenWaves, endLineW = SpaceBetweenWaves;
         //Initialise Lines
-        for (int i = 1; i < wavePiece.length; i++) {
-
-            float amplitude = wavePiece[i] / Press;
+        for (int i = 1; i < fft.length; i++) {
+            float amplitude = fft[i] / Press;
 
             if (amplitude > 0) amplitude *= -1;
             float EndLine = Anchor + amplitude;
@@ -353,12 +358,14 @@ class WaveRender {
             //DrawWaveAmplitudeNegative(canvas, wavePiece[0], ((Height / 2.5f)), Color.GREEN);
 
             long fftTime = System.nanoTime();
-            float[] NativeFFT = sinusoidConverter.NativeFFT(this.sample[0]);
+            float[] NativeFFT = sinusoidConverter.fftNative(this.sample[0]);
             Log.i("C++ fftTime", (System.nanoTime() - fftTime) / 1000000f + "ms");
-            //Log.i("C++ fft", Arrays.toString(NativeFFT));
 
-            Draw_fft(canvas, GPU_fft, Height / 1.4f, Color.BLUE, Height / 10f);
-            Draw_fft(canvas, NativeFFT, Height / 1.2f, Color.RED, Height / 10f);
+            //Log.i("C++ fft", Arrays.toString(NativeFFT));
+            //Log.i("GPU fft", Arrays.toString(fftGpu));
+
+            //Draw_fft(canvas, fftGpu, Height / 1.6f, Color.BLUE, Height / 10f);
+            Draw_fft(canvas, NativeFFT, Height / 1.2f, Color.RED, Height / 20f);
 
             //Log.i("FFT length: ", "C:"+NativeFFT.length+" GPU:"+this.FFTWave.length);
 
@@ -373,16 +380,21 @@ class WaveRender {
     }
 
     @RequiresApi(api = Build.VERSION_CODES.LOLLIPOP)
-    public void render(Bitmap imageBitmap, short[][] sample, long Time, long PieceDuration, WaveRenderListeners onRenderFinish) {
+    public void render(Bitmap imageBitmap, short[][] sample, long Time, long PieceDuration,
+                       WaveRenderListeners onRenderFinish) {
         this.Width = imageBitmap.getWidth();
         this.Height = imageBitmap.getHeight();
 
+        /*
         long fftTime = System.nanoTime();
-        gpuFFT.ProcessFFT(new GPU_FFTRequest(Util.toFloat(sample[0]),(GPU_fft) -> {
+        calculatorFFTGpu.ProcessFFT(new GPU_FFTRequest(Util.toFloat(sample[0]), fftGpu -> {
             Log.i("GPU fftTime", (System.nanoTime() - fftTime) / 1000000f + "ms");
-            this.GPU_fft = GPU_fft;
-            forkJoinPool.execute(new DrawWaves(imageBitmap, sample, Time, PieceDuration, onRenderFinish));
+            this.fftGpu = fftGpu;
+            pool.execute(new DrawWaves(imageBitmap, sample, Time, PieceDuration, onRenderFinish));
         }));
+        */
+
+        pool.execute(new DrawWaves(imageBitmap, sample, Time, PieceDuration, onRenderFinish));
     }
 
     public static boolean Clear() {

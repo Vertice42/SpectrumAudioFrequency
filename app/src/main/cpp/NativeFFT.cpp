@@ -8,7 +8,7 @@
 
 using namespace std;
 
-const float PRECISION = 10;
+static float PRECISION = 10;
 const float II_PI = ((float) (-2.0 * M_PI));
 
 extern "C" JNIEXPORT jfloatArray JNICALL
@@ -78,54 +78,54 @@ int JShortArrayTOShortArray(JNIEnv *env, jshortArray array, short **P_shortArray
 
 static float **Angles;
 static int AnglesLength = -1;
-static int WavePieceLength = -1;
+static int SampleLength = -1;
 
-void CalculateAnglesOfFrequenciesRange(int anglesLength, int wavePieceLength) {
-    if (AnglesLength != anglesLength || WavePieceLength != wavePieceLength) {
+void CalculateAnglesOfFrequenciesRange(int anglesLength, int sampleLength) {
+    if (AnglesLength != anglesLength || SampleLength != sampleLength) {
         AnglesLength = anglesLength;
-        WavePieceLength = wavePieceLength;
+        SampleLength = sampleLength;
         delete Angles;
 
         Angles = new float *[anglesLength];
 
-        for (int Frequency = 0; Frequency < anglesLength; ++Frequency) {
-            Angles[Frequency] = new float[wavePieceLength];
+        for (int Frequency = 0; Frequency < anglesLength; Frequency++) {
+            Angles[Frequency] = new float[sampleLength];
             float PointsDistance =
-                    (II_PI / (float) wavePieceLength) * ((float) (Frequency + 1) / PRECISION);
-            for (int angle_number = 0; angle_number < wavePieceLength; angle_number++) {
+                    (II_PI / (float) sampleLength) * (((float) Frequency) / PRECISION);
+            for (int angle_number = 0; angle_number < sampleLength; angle_number++) {
                 Angles[Frequency][angle_number] = cos((float) (angle_number + 1) * PointsDistance);
             }
         }
     }
 }
 
-float fft(const short Sample[], int SampleLength, int Frequency) {
-    auto WavePieceLength_F = (float) SampleLength;
+float fft(const short Sample[], int sampleLength, int Frequency) {
+    auto F_sampleLength = (float) sampleLength;
     float x_some = 0;
 
-    for (int i = 0; i < SampleLength; i++) {
+    for (int i = 0; i < sampleLength; i++) {
         auto radius = (float) Sample[i];
         x_some += Angles[Frequency][i] * radius;
     }
 
-    return (x_some) / WavePieceLength_F;
+    return (x_some) / F_sampleLength;
 }
 
-float *fft(const short *WavePiece, int start, int end, int SampleLength) {
-    int fftArrayLength = end - start;
+float *fft(const short *Sample, int start, int end, int sampleLength) {
+    int fftLength = end - start;
 
-    auto *fftArray = new float[fftArrayLength];
+    auto *fftResult = new float[fftLength];
 
-    for (int Frequency = 0; Frequency < fftArrayLength; Frequency++)
-        fftArray[Frequency] = fft(WavePiece, SampleLength, start + Frequency);
+    for (int Frequency = 0; Frequency < fftLength; Frequency++)
+        fftResult[Frequency] = fft(Sample, sampleLength, start + Frequency);
 
-    return fftArray;
+    return fftResult;
 }
 
 
 extern "C"
 JNIEXPORT jfloatArray JNICALL
-Java_com_example_spectrumaudiofrequency_SinusoidConverter_NativeFFT(JNIEnv *env,
+Java_com_example_spectrumaudiofrequency_SinusoidConverter_fftNative(JNIEnv *env,
                                                                     __unused jclass clazz,
                                                                     jint start, jint end,
                                                                     jshortArray wave_piece) {
@@ -143,4 +143,9 @@ Java_com_example_spectrumaudiofrequency_SinusoidConverter_CalculateAnglesOfFrequ
         jint anglesLength,
         jint wave_piece_length) {
     CalculateAnglesOfFrequenciesRange((int) anglesLength, (int) wave_piece_length);
+}extern "C"
+JNIEXPORT void JNICALL
+Java_com_example_spectrumaudiofrequency_SinusoidConverter_setPrecision(JNIEnv *env, jclass clazz,
+                                                                       jfloat precision) {
+    PRECISION = precision;
 }
