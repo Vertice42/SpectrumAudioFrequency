@@ -6,6 +6,7 @@ import android.util.Log;
 import java.io.File;
 import java.io.FileFilter;
 import java.lang.reflect.Array;
+import java.math.BigDecimal;
 import java.util.regex.Pattern;
 
 public class Util {
@@ -66,21 +67,22 @@ public class Util {
     public static float[] ConcatenateArray(float[] a, float[] b) {
         if (a.length == 0) return b;
 
-        float[] c = new float[a.length+b.length];
+        float[] c = new float[a.length + b.length];
 
         System.arraycopy(a, 0, c, 0, a.length);
         System.arraycopy(b, 0, c, a.length, b.length);
 
         return c;
     }
-    public static float[] ConcatenateArray(float[][] a) {
+
+    public static double[] ConcatenateArray(double[][] a) {
         int length = 0;
 
-        for (float[] floats : a) length += floats.length;
+        for (double[] floats : a) length += floats.length;
 
-        float[] b = new float[length];
+        double[] b = new double[length];
 
-        for (int i = 0; i < a.length; i++){
+        for (int i = 0; i < a.length; i++) {
             System.arraycopy(a[i], 0, b, a[i].length * i, a[i].length);
         }
 
@@ -88,11 +90,24 @@ public class Util {
     }
 
 
-    public static float[] toFloat(short[] shorts){
+    public static float[] toFloat(short[] shorts) {
         float[] floats = new float[shorts.length];
         for (int i = 0; i < shorts.length; i++) floats[i] = shorts[i];
         return floats;
     }
+
+    public static double[] toDouble(float[] floats) {
+        double[] doubles = new double[floats.length];
+        for (int i = 0; i < floats.length; i++) doubles[i] = (double) floats[i];
+        return doubles;
+    }
+
+    public static float[] toFloat(double[] doubles) {
+        float[] floats = new float[doubles.length];
+        for (int i = 0; i < doubles.length; i++) floats[i] = (float) doubles[i];
+        return floats;
+    }
+
     private static int getNumCoresOldPhones() {
         //Private Class to display only CPU devices in the directory listing
         class CpuFilter implements FileFilter {
@@ -110,16 +125,16 @@ public class Util {
             File[] files = dir.listFiles(new CpuFilter());
             //Return the number of cores (virtual CPU devices)
             return files.length;
-        } catch(Exception e) {
+        } catch (Exception e) {
             //Default to return 1 core
             return 1;
         }
     }
+
     public static int getNumberOfCores() {
-        if(Build.VERSION.SDK_INT >= 17) {
+        if (Build.VERSION.SDK_INT >= 17) {
             return Runtime.getRuntime().availableProcessors();
-        }
-        else {
+        } else {
             // Use saurabh64's answer
             return getNumCoresOldPhones();
         }

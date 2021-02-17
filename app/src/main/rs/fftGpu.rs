@@ -11,7 +11,7 @@ uint16_t AnglesLength;
 rs_allocation Angles;
 
 void CalculateAngles(float *v_out, uint32_t x) {
-    float PointsDistance = II_PI / F32_SampleLength * (float) x / PRECISION;
+    float PointsDistance = II_PI / F32_SampleLength * x / PRECISION;
 
     uint16_t y = 0;
     float interaction = 0;
@@ -22,7 +22,7 @@ void CalculateAngles(float *v_out, uint32_t x) {
     }
 }
 
-float *Sample;
+short *Sample;
 void fft(float *v_out, uint32_t x) {
     float x_some = 0;
     for (uint32_t y = 0; y < uint32_t_SampleLength; y++) {

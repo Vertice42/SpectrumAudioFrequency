@@ -10,20 +10,23 @@ import android.os.Environment;
 import android.util.Log;
 
 import androidx.annotation.RequiresApi;
+import androidx.renderscript.RenderScript;
 
+import com.example.spectrumaudiofrequency.SinusoidConverter.CalculatorFFT_GPU;
 import com.example.spectrumaudiofrequency.SinusoidConverter.CalculatorFFT_GPU.GPU_FFTRequest;
 import com.example.spectrumaudiofrequency.SinusoidConverter.CalculatorFFT_GPU_Adapted;
+import com.example.spectrumaudiofrequency.SinusoidConverter.CalculatorFFT_GPU_Default;
 
 import java.io.File;
 import java.io.FileOutputStream;
 
-import java.util.Arrays;
 import java.util.Date;
 import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.RecursiveTask;
 
-
 class WaveRender {
+
+    private final RenderScript rs;
 
     interface WaveRenderListeners {
         void onFinish(Bitmap bitmap);
@@ -39,10 +42,13 @@ class WaveRender {
 
     public float Frequency = 1;
 
-    public boolean AntiAlias = false;
+    public boolean AntiAlias = true;
 
     private float[] fftGpu;
-    private final SinusoidConverter.CalculatorFFT_GPU calculatorFFTGpu;
+    private float[] fftNative;
+
+    private final CalculatorFFT_GPU calculatorFFTGpu;
+    private final SinusoidConverter.CalculatorFFT_Native calculatorFFT_native;
 
     WaveRender(Context context, long SpectrumSize) {
         this.SpectrumSize = SpectrumSize;
@@ -51,9 +57,16 @@ class WaveRender {
         } else {
             this.pool = new ForkJoinPool();
         }
+        
+        this.rs = RenderScript.create(context);
 
-        this.calculatorFFTGpu = new CalculatorFFT_GPU_Adapted(context, pool);
+        calculatorFFT_native = new SinusoidConverter.CalculatorFFT_Native(pool);
 
+        if (true) {
+            this.calculatorFFTGpu = new CalculatorFFT_GPU_Adapted(rs, pool);
+        } else {
+            this.calculatorFFTGpu = new CalculatorFFT_GPU_Default(rs, pool);
+        }
     }
 
     public static String getImageFileName(long ImageID) {
@@ -112,11 +125,11 @@ class WaveRender {
         //activates anti aliasing and sets the thickness of the line
         float startLineW = SpaceBetweenWaves, endLineW = SpaceBetweenWaves;
         //Initialise Lines
-        for (int i = 1; i < fft.length; i++) {
-            float amplitude = fft[i] / Press;
+        for (float v : fft) {
+            float amplitude = v;
+            if (amplitude > 0) amplitude *= -1f;
 
-            if (amplitude > 0) amplitude *= -1;
-            float EndLine = Anchor + amplitude;
+            float EndLine = Anchor + amplitude / Press;
             //decreases the amplitude of the sound wave
             canvas.drawLine(startLineW, Anchor, endLineW, EndLine, WavePaint);
             //canvas.drawText(String.valueOf((int) EndLine), endLineW, endLineH - endLineH / 10, new Paint());
@@ -126,19 +139,19 @@ class WaveRender {
         }
     }
 
-    private void DrawFFT_Test(Canvas canvas, short[] wavePiece, long Time, long PieceDuration) {
-        if (wavePiece.length < 1) return;
+    private void DrawFFT_Test(Canvas canvas, float[] sample, long Time, long PieceDuration) {
+        if (sample.length < 1) return;
 
-        //Log.i("TAG", "wavePiece:" + wavePiece.length + " Time:" + Time + "PieceDuration: " + PieceDuration + "microns");
+        //Log.i("TAG", "sample:" + sample.length + " Time:" + Time + "PieceDuration: " + PieceDuration + "microns");
 
         /*
-        float byteTime = (float) wavePiece.length / PieceDuration; // Microns
+        float byteTime = (float) sample.length / PieceDuration; // Microns
 
-        int divisor = (int) (wavePiece.length / (byteTime * 100000)); // Microns
+        int divisor = (int) (sample.length / (byteTime * 100000)); // Microns
 
-        short[][] wavePiece = Util.SplitArray(wavePiece, divisor);
+        short[][] sample = Util.SplitArray(sample, divisor);
 
-        short[] wavePiece = wavePiece[0];
+        short[] sample = sample[0];
         */
 
 
@@ -152,18 +165,18 @@ class WaveRender {
         paint.setColor(Color.MAGENTA);
         paint.setAntiAlias(AntiAlias);
 
-        float DistanceBetweenPoints = (float) (2 * Math.PI) / (wavePiece.length) * Frequency;
+        float DistanceBetweenPoints = (float) (2 * Math.PI) / (sample.length) * Frequency;
 
         float finalX = 0;
         float finalY = 0;
 
-        float radius = (float) (wavePiece[0] / radiusMax);
+        float radius = (float) (sample[0] / radiusMax);
 
         float previousX = (float) Math.cos(0 * DistanceBetweenPoints) * radius + CenterX;
         float previousY = (float) Math.sin(0 * DistanceBetweenPoints) * radius + CenterY;
 
-        for (int j = 1; j < wavePiece.length; j++) {
-            radius = (float) (wavePiece[j] / radiusMax);
+        for (int j = 1; j < sample.length; j++) {
+            radius = (float) (sample[j] / radiusMax);
 
             float x = (float) Math.cos(j * DistanceBetweenPoints) * radius + CenterX;
             float y = (float) Math.sin(j * DistanceBetweenPoints) * radius + CenterY;
@@ -177,8 +190,8 @@ class WaveRender {
             previousY = y;
         }
 
-        finalX /= wavePiece.length;
-        finalY /= wavePiece.length;
+        finalX /= sample.length;
+        finalY /= sample.length;
 
         Paint PointPaint = new Paint();
         PointPaint.setColor(Color.BLACK);
@@ -191,9 +204,9 @@ class WaveRender {
 
     }
 
-    private void DrawWaveAmplitude(Canvas canvas, short[] wavePiece, float Anchor, int color) {
+    private void DrawWaveAmplitude(Canvas canvas, float[] sample, float Anchor, int color) {
 
-        float SpaceBetweenWaves = (float) Width / (wavePiece.length);
+        float SpaceBetweenWaves = (float) Width / (sample.length);
         //"spacing" determining the line spacing is by consequence the size of the sound wave
         Paint WavePaint = new Paint();
         WavePaint.setStrokeWidth(2);
@@ -206,12 +219,12 @@ class WaveRender {
         boolean change;
         boolean asPositive = false;
 
-        for (int i = 1; i < wavePiece.length; i++) {
+        for (int i = 1; i < sample.length; i++) {
 
 
-            if (wavePiece[i] != 0) {
+            if (sample[i] != 0) {
 
-                if (wavePiece[i] > 0) {
+                if (sample[i] > 0) {
                     change = !asPositive;
                     asPositive = true;
                 } else {
@@ -231,8 +244,8 @@ class WaveRender {
                 WavePaint.setColor(Color.GRAY);
             }
 
-            float EndLine = SinusoidConverter.ToLogarithmicScale(wavePiece[i]);
-            float startLineH = SinusoidConverter.ToLogarithmicScale(wavePiece[i - 1]);//todo é possivel reutilisar do loop anterior
+            float EndLine = SinusoidConverter.ToLogarithmicScale(sample[i]);
+            float startLineH = SinusoidConverter.ToLogarithmicScale(sample[i - 1]);//todo é possivel reutilisar do loop anterior
 
             float endLineH = EndLine;
 
@@ -249,9 +262,9 @@ class WaveRender {
         }
     }
 
-    private void DrawWaveAmplitudeNegative(Canvas canvas, short[] wavePiece, float Anchor, int color) {
+    private void DrawWaveAmplitudeNegative(Canvas canvas, float[] sample, float Anchor, int color) {
 
-        float SpaceBetweenWaves = (float) Width / (wavePiece.length);
+        float SpaceBetweenWaves = (float) Width / (sample.length);
         //"spacing" determining the line spacing is by consequence the size of the sound wave
         Paint WavePaint = new Paint();
         WavePaint.setStrokeWidth(2);
@@ -262,9 +275,9 @@ class WaveRender {
         //Initialise Lines
 
 
-        for (int i = 1; i < wavePiece.length; i++) {
-            float EndLine = SinusoidConverter.ToLogarithmicScale(wavePiece[i]);
-            float startLineH = SinusoidConverter.ToLogarithmicScale(wavePiece[i - 1]);//todo é possivel reutilisar do loop anterior
+        for (int i = 1; i < sample.length; i++) {
+            float EndLine = SinusoidConverter.ToLogarithmicScale(sample[i]);
+            float startLineH = SinusoidConverter.ToLogarithmicScale(sample[i - 1]);//todo é possivel reutilisar do loop anterior
 
             if (EndLine > 0) EndLine *= -1;
             if (startLineH > 0) startLineH *= -1;
@@ -284,8 +297,8 @@ class WaveRender {
         }
     }
 
-    private void DrawWave(Canvas canvas, short[] wavePiece, float Anchor, int color) {
-        float SpaceBetweenWaves = (float) Width / wavePiece.length;
+    private void DrawWave(Canvas canvas, short[] sample, float Anchor, int color, float Press) {
+        float SpaceBetweenWaves = (float) Width / sample.length;
         //"spacing" determining the line spacing is by consequence the size of the sound wave
         Paint WavePaint = new Paint();
         WavePaint.setStrokeWidth(2);
@@ -295,16 +308,16 @@ class WaveRender {
         //activates anti aliasing and sets the thickness of the line
         float startLineW = 0, endLineW = SpaceBetweenWaves;
         //Initialise Lines
-        for (int i = 1; i < wavePiece.length; i++) {
-            float EndLine = wavePiece[i];
-            EndLine = (wavePiece[i] > 0) ? EndLine * -1 : EndLine;
-            float startLineH = wavePiece[i - 1];//todo é possivel reutilisar do loop anterior
-            startLineH = (wavePiece[i - 1] < 0) ? startLineH * -1 : startLineH;
+        for (int i = 1; i < sample.length; i++) {
+            float EndLine = sample[i];
+            EndLine = (sample[i] > 0) ? EndLine * -1 : EndLine;
+            float startLineH = sample[i - 1];//todo é possivel reutilisar do loop anterior
+            startLineH = (sample[i - 1] < 0) ? startLineH * -1 : startLineH;
 
             float endLineH = EndLine;
 
-            startLineH = Anchor + startLineH / (Anchor * 10);
-            endLineH = Anchor + endLineH / (Anchor * 10);
+            startLineH = Anchor + startLineH / Press;
+            endLineH = Anchor + endLineH / Press;
             //decreases the amplitude of the sound wave
 
             /*
@@ -324,54 +337,37 @@ class WaveRender {
     public class DrawWaves extends RecursiveTask<Bitmap> {
 
         private final Bitmap imageBitmap;
-        private final short[][] sample;
+        private final short[][] sampleChannels;
         private final long SampleDuration;
-        private final SinusoidConverter sinusoidConverter;
         private long Time;
         private final WaveRenderListeners onRenderFinish;
 
-        public DrawWaves(Bitmap imageBitmap, short[][] sample, long Time,
+        public DrawWaves(Bitmap imageBitmap, short[][] sampleChannels, long Time,
                          long SampleDuration, WaveRenderListeners onRenderFinish) {
             this.imageBitmap = imageBitmap;
-            this.sample = sample;
+            this.sampleChannels = sampleChannels;
             this.SampleDuration = SampleDuration;
             this.Time = Time;
             this.onRenderFinish = onRenderFinish;
-
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-                this.sinusoidConverter = new SinusoidConverter(ForkJoinPool.commonPool());
-            } else {
-                this.sinusoidConverter = new SinusoidConverter(new ForkJoinPool());
-            }
         }
 
         @Override
         protected Bitmap compute() {
             Canvas canvas = new Canvas(imageBitmap);
-
             canvas.drawColor(Color.argb(255, 255, 255, 255));
             //Draw background
 
             DrawTime(canvas, Time, SampleDuration, Height / 20f);
 
-            //DrawWaveAmplitude(canvas, wavePiece[0], ((Height / 3f)), Color.GREEN);
-            //DrawWaveAmplitudeNegative(canvas, wavePiece[0], ((Height / 2.5f)), Color.GREEN);
+            DrawWave(canvas, sampleChannels[0], Height / 4f, Color.BLACK, Height * 3f);
 
-            long fftTime = System.nanoTime();
-            float[] NativeFFT = sinusoidConverter.fftNative(this.sample[0]);
-            Log.i("C++ fftTime", (System.nanoTime() - fftTime) / 1000000f + "ms");
-
-            //Log.i("C++ fft", Arrays.toString(NativeFFT));
-            //Log.i("GPU fft", Arrays.toString(fftGpu));
-
-            //Draw_fft(canvas, fftGpu, Height / 1.6f, Color.BLUE, Height / 10f);
-            Draw_fft(canvas, NativeFFT, Height / 1.2f, Color.RED, Height / 20f);
+            Draw_fft(canvas, fftGpu, Height / 1.5f, Color.BLUE, Height / 30f);
+            Draw_fft(canvas, fftNative, Height / 1.2f, Color.RED, Height / 20f);
 
             //Log.i("FFT length: ", "C:"+NativeFFT.length+" GPU:"+this.FFTWave.length);
 
             //DrawFFT_Test(canvas, wavePiece[0], Time, WavePieceDuration);
             //DrawWaveAmplitudeNegative(canvas,wavePiece[0],FFtWaveAnchor,Color.BLACK);
-            //DrawWave(canvas, wavePiece[0], Height / 5f, Color.BLACK);
 
             onRenderFinish.onFinish(imageBitmap);
             return imageBitmap;
@@ -380,25 +376,30 @@ class WaveRender {
     }
 
     @RequiresApi(api = Build.VERSION_CODES.LOLLIPOP)
-    public void render(Bitmap imageBitmap, short[][] sample, long Time, long PieceDuration,
+    public void render(Bitmap imageBitmap, short[][] SampleChannels, long Time, long SampleDuration,
                        WaveRenderListeners onRenderFinish) {
         this.Width = imageBitmap.getWidth();
         this.Height = imageBitmap.getHeight();
 
-        /*
         long fftTime = System.nanoTime();
-        calculatorFFTGpu.ProcessFFT(new GPU_FFTRequest(Util.toFloat(sample[0]), fftGpu -> {
-            Log.i("GPU fftTime", (System.nanoTime() - fftTime) / 1000000f + "ms");
-            this.fftGpu = fftGpu;
-            pool.execute(new DrawWaves(imageBitmap, sample, Time, PieceDuration, onRenderFinish));
+        calculatorFFT_native.ProcessFFT(new GPU_FFTRequest(SampleChannels[0], fftNative -> {
+            Log.i("C++ fftTime", (System.nanoTime() - fftTime) / 1000000f + "ms");
+            this.fftNative = fftNative;
+            long gpu_fftTime = System.nanoTime();
+            calculatorFFTGpu.ProcessFFT(new GPU_FFTRequest(SampleChannels[0], fftGpu -> {
+                Log.i("GPU fftTime", (System.nanoTime() - gpu_fftTime) / 1000000f + "ms");
+                this.fftGpu = fftGpu;
+                pool.execute(new DrawWaves(imageBitmap, SampleChannels, Time, SampleDuration, onRenderFinish));
+            }));
         }));
-        */
-
-        pool.execute(new DrawWaves(imageBitmap, sample, Time, PieceDuration, onRenderFinish));
     }
 
     public static boolean Clear() {
         return new File(Environment.getExternalStorageDirectory() + Folder).delete();
+    }
+
+    public void destroy(){
+        this.rs.destroy();
     }
 
 }

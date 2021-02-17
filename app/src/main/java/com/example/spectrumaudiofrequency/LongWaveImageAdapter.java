@@ -2,7 +2,6 @@ package com.example.spectrumaudiofrequency;
 
 import android.annotation.SuppressLint;
 import android.os.Build;
-import android.util.Log;
 import android.view.ViewGroup;
 import android.widget.EditText;
 import android.widget.ImageView;
@@ -44,11 +43,11 @@ public class LongWaveImageAdapter extends RecyclerView.Adapter<WaveViewHolder> {
         private Thread thread;
 
         @RequiresApi(api = Build.VERSION_CODES.LOLLIPOP)
-        public void start(WaveViewHolder holder, long Time, short[][] WavePieceArrayID, long WavePieceDuration) {
+        public void start(WaveViewHolder holder, long Time, short[][] SamplesChannels, long WavePieceDuration) {
             Frame = 0;
             waveRender.Frequency = 10f;
             if (thread != null) thread.interrupt();
-            thread = new Thread(() -> nextFrame(holder, Time, WavePieceArrayID, WavePieceDuration));
+            thread = new Thread(() -> nextFrame(holder, Time, SamplesChannels, WavePieceDuration));
             thread.start();
         }
 
@@ -60,29 +59,30 @@ public class LongWaveImageAdapter extends RecyclerView.Adapter<WaveViewHolder> {
         }
 
         @RequiresApi(api = Build.VERSION_CODES.LOLLIPOP)
-        private void nextFrame(WaveViewHolder holder, long Time, short[][] WavePiecesArray, long WavePieceDuration) {
+        private void nextFrame(WaveViewHolder holder, long Time, short[][] SamplesChannels, long WavePieceDuration) {
             waveRender.Frequency += 0.01f;
-            waveRender.render(holder.ImageBitmap, WavePiecesArray, Time, WavePieceDuration,
+            waveRender.render(holder.ImageBitmap, SamplesChannels, Time, WavePieceDuration,
                     (bitmap) -> holder.imageView.post(() -> {
                         holder.ImageBitmap = bitmap;
                         holder.updateImage();
                         Frame++;
                         if (this.Frame < 20000)
-                            nextFrame(holder, Time, WavePiecesArray, WavePieceDuration);
+                            nextFrame(holder, Time, SamplesChannels, WavePieceDuration);
                     }));
         }
     }
 
     @RequiresApi(api = Build.VERSION_CODES.LOLLIPOP)
-    private void setWavePieceImageOnHolder(WaveViewHolder holder, long Time, short[][] WavePiecesArray, long WavePieceDuration) {
+    private void setWavePieceImageOnHolder(WaveViewHolder holder, long Time,
+                                           short[][] SampleChannels, long WavePieceDuration) {
         holder.imageView.setImageURI(null);
-        waveRender.render(holder.ImageBitmap, WavePiecesArray, Time, WavePieceDuration,
+        waveRender.render(holder.ImageBitmap, SampleChannels, Time, WavePieceDuration,
                 (bitmap) -> holder.updateImage());
 
         FFTAnimation fftAnimation = new FFTAnimation();
 
         holder.imageView.setOnLongClickListener(v -> {
-            fftAnimation.start(holder, Time, WavePiecesArray, WavePieceDuration);
+            fftAnimation.start(holder, Time, SampleChannels, WavePieceDuration);
             return false;
         });
 
@@ -101,7 +101,7 @@ public class LongWaveImageAdapter extends RecyclerView.Adapter<WaveViewHolder> {
                 }
 
                 waveRender.Frequency = f;
-                waveRender.render(holder.ImageBitmap, WavePiecesArray, Time, WavePieceDuration,
+                waveRender.render(holder.ImageBitmap, SampleChannels, Time, WavePieceDuration,
                         (bitmap) -> holder.updateImage());
                 return false;
             });
@@ -118,7 +118,7 @@ public class LongWaveImageAdapter extends RecyclerView.Adapter<WaveViewHolder> {
 
         WaveImageView.setLayoutParams(layoutParams);
 
-        return new WaveViewHolder(WaveImageView, parent.getWidth() /Resolution, parent.getHeight() / Resolution);
+        return new WaveViewHolder(WaveImageView, parent.getWidth() / Resolution, parent.getHeight() / Resolution);
     }
 
     @RequiresApi(api = Build.VERSION_CODES.LOLLIPOP)
@@ -129,9 +129,10 @@ public class LongWaveImageAdapter extends RecyclerView.Adapter<WaveViewHolder> {
     @RequiresApi(api = Build.VERSION_CODES.LOLLIPOP)
     public void setPosition(WaveViewHolder waveViewHolder, int position) {
         long Time = position * getPeriod();
-        AudioDecoder.addRequest(new AudioDecoder.PeriodRequest(Time, getPeriod(), (AudioChannels, SampleDuration) -> {
-            setWavePieceImageOnHolder(waveViewHolder, Time, AudioChannels, SampleDuration);
-        }));
+        AudioDecoder.addRequest(new AudioDecoder.PeriodRequest(Time, getPeriod(),
+                (AudioChannels, SampleDuration) -> {
+                    setWavePieceImageOnHolder(waveViewHolder, Time, AudioChannels, SampleDuration);
+                }));
     }
 
     boolean inUpdate = false;
@@ -140,7 +141,7 @@ public class LongWaveImageAdapter extends RecyclerView.Adapter<WaveViewHolder> {
     private int RenderMediaTimeMS = 0;
 
     public int getRenderMediaTimeMS() {
-         return RenderMediaTimeMS;
+        return RenderMediaTimeMS;
     }
 
     @SuppressLint("SetTextI18n")
@@ -170,28 +171,6 @@ public class LongWaveImageAdapter extends RecyclerView.Adapter<WaveViewHolder> {
                     });
         }));
     }
-
-    /*
-    public void setPosition(int position) {
-        if (position > (LastPosition + WaveScale) - 1 || position < LastPosition) {
-            WavePiecesArrays = null;
-            LastPosition = position;
-        }
-
-        if (WavePiecesArrays == null) {
-            AudioDecoder.audioDecoderListeners = (AudioChannels, PresentationTime) -> {
-                this.WavePiecesArrays = Util.SplitArray(AudioChannels, WaveScale);
-                this.PresentationTime = PresentationTime;
-                setWavePieceImageOnHolder(waveViewHolder, 0);
-            };
-            AudioDecoder.setTime(position);
-            AudioDecoder.nextPiece();
-        } else {
-            int wavePieceArrayId = (position - LastPosition) - 1;
-            if (wavePieceArrayId < WavePiecesArrays.length && wavePieceArrayId > 0)
-                setWavePieceImageOnHolder(waveViewHolder, wavePieceArrayId);
-        }
-    }*/
 
     @RequiresApi(api = Build.VERSION_CODES.LOLLIPOP)
     @Override

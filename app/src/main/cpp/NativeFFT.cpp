@@ -8,11 +8,43 @@
 
 using namespace std;
 
-static float PRECISION = 10;
-const float II_PI = ((float) (-2.0 * M_PI));
+static double PRECISION = 10;
+const double II_PI = ((double) (-2.0 * M_PI));
 
-extern "C" JNIEXPORT jfloatArray JNICALL
-FloatArrayTOJjFloatArray(JNIEnv *env, const float FloatArray[], int size) {
+extern "C" JNIEXPORT jdoubleArray JNICALL
+DoubleArrayToJavaDoubleArray(JNIEnv *env, const double *DoubleArray, int size) {
+    jdoubleArray result;
+    result = env->NewDoubleArray(size);
+
+    if (result == nullptr)return nullptr; /* out of memory error thrown */
+
+    int i;
+    // fill a temp structure to use to populate the java int array
+    jdouble fill[size];
+    for (i = 0; i < size; i++) {
+        fill[i] = (jdouble) DoubleArray[i]; // put whatever logic you want to populate the values here
+    }
+    // move from the temp structure to the java structure
+    env->SetDoubleArrayRegion(result, 0, size, fill);
+    return result;
+}
+
+int JDoubleArrayToDoubleArray(JNIEnv *env, jdoubleArray array, double **P_doubleArray) {
+    int length = env->GetArrayLength(array);
+
+    jdouble *doubleArrayElements = env->GetDoubleArrayElements(array, nullptr);
+
+    double NewArray[length];
+
+    for (int i = 0; i < length; i++) NewArray[i] = (double) doubleArrayElements[i];
+
+    *P_doubleArray = NewArray;
+
+    return length;
+}
+
+extern "C" JNIEXPORT __unused  jfloatArray JNICALL
+FloatArrayToJavaFloatArray(JNIEnv *env, const float *FloatArray, int size) {
     jfloatArray result;
     result = env->NewFloatArray(size);
 
@@ -29,21 +61,21 @@ FloatArrayTOJjFloatArray(JNIEnv *env, const float FloatArray[], int size) {
     return result;
 }
 
-int JFloatArrayTOFloatArray(JNIEnv *env, jfloatArray array, float **P_floatArray) {
+__unused int JFloatArrayTOFloatArray(JNIEnv *env, jfloatArray array, float **P_floatArray) {
     int length = env->GetArrayLength(array);
 
     jfloat *floatArrayElements = env->GetFloatArrayElements(array, nullptr);
 
     float NewArray[length];
 
-    for (int i = 0; i < length; i++) NewArray[i] = (float) floatArrayElements[i];
+    for (int i = 0; i < length; i++) NewArray[i] = floatArrayElements[i];
 
     *P_floatArray = NewArray;
 
     return length;
 }
 
-extern "C" JNIEXPORT jshortArray JNICALL
+extern "C" JNIEXPORT __unused  jshortArray JNICALL
 ShortArrayTOJShortArray(JNIEnv *env, const short ShortArray[], int size) {
     jshortArray result;
     result = env->NewShortArray(size);
@@ -61,7 +93,7 @@ ShortArrayTOJShortArray(JNIEnv *env, const short ShortArray[], int size) {
     return result;
 }
 
-int JShortArrayTOShortArray(JNIEnv *env, jshortArray array, short **P_shortArray) {
+__unused int JShortArrayTOShortArray(JNIEnv *env, jshortArray array, short **P_shortArray) {
     int length = env->GetArrayLength(array);
 
     jshort *shortArrayElements = env->GetShortArrayElements(array, nullptr);
@@ -76,7 +108,7 @@ int JShortArrayTOShortArray(JNIEnv *env, jshortArray array, short **P_shortArray
 }
 
 
-static float **Angles;
+static double **Angles;
 static int AnglesLength = -1;
 static int SampleLength = -1;
 
@@ -86,66 +118,60 @@ void CalculateAnglesOfFrequenciesRange(int anglesLength, int sampleLength) {
         SampleLength = sampleLength;
         delete Angles;
 
-        Angles = new float *[anglesLength];
+        Angles = new double *[anglesLength];
+        for (int frequency = 0; frequency < anglesLength; frequency++) {
+            Angles[frequency] = new double[sampleLength];
 
-        for (int Frequency = 0; Frequency < anglesLength; Frequency++) {
-            Angles[Frequency] = new float[sampleLength];
-            float PointsDistance =
-                    (II_PI / (float) sampleLength) * (((float) Frequency) / PRECISION);
+            double pointsDistance = (II_PI / sampleLength) * (frequency / PRECISION);
             for (int angle_number = 0; angle_number < sampleLength; angle_number++) {
-                Angles[Frequency][angle_number] = cos((float) (angle_number + 1) * PointsDistance);
+                Angles[frequency][angle_number] = cos(angle_number * pointsDistance);
             }
         }
     }
 }
 
-float fft(const short Sample[], int sampleLength, int Frequency) {
-    auto F_sampleLength = (float) sampleLength;
-    float x_some = 0;
-
-    for (int i = 0; i < sampleLength; i++) {
-        auto radius = (float) Sample[i];
-        x_some += Angles[Frequency][i] * radius;
-    }
-
-    return (x_some) / F_sampleLength;
-}
-
-float *fft(const short *Sample, int start, int end, int sampleLength) {
+double *fft(const short *Sample, int start, int end, int sampleLength) {
     int fftLength = end - start;
 
-    auto *fftResult = new float[fftLength];
+    auto *fftResult = new double[fftLength];
 
-    for (int Frequency = 0; Frequency < fftLength; Frequency++)
-        fftResult[Frequency] = fft(Sample, sampleLength, start + Frequency);
+    for (int angle = 0; angle < fftLength; angle++) {
+        double x_some = 0;
+
+        for (int radius = 0; radius < sampleLength; radius++) {
+            x_some += Angles[angle+start][radius] * Sample[radius];
+        }
+
+        fftResult[angle] = x_some / fftLength;
+    }
 
     return fftResult;
 }
 
 
 extern "C"
-JNIEXPORT jfloatArray JNICALL
+JNIEXPORT jdoubleArray JNICALL
 Java_com_example_spectrumaudiofrequency_SinusoidConverter_fftNative(JNIEnv *env,
                                                                     __unused jclass clazz,
                                                                     jint start, jint end,
-                                                                    jshortArray wave_piece) {
-    short *floatArray = nullptr;
-    int floatArrayLength = JShortArrayTOShortArray(env, wave_piece, &floatArray);
+                                                                    jshortArray sample) {
+    short *shortArray = nullptr;
+    int shortArrayLength = JShortArrayTOShortArray(env, sample, &shortArray);
 
-    return FloatArrayTOJjFloatArray(env,
-            fft(floatArray, start, end, floatArrayLength),end - start);
+    return DoubleArrayToJavaDoubleArray(env, fft(shortArray, start, end, shortArrayLength),
+                                        end - start);
 }
 extern "C"
 JNIEXPORT void JNICALL
 Java_com_example_spectrumaudiofrequency_SinusoidConverter_CalculateAnglesOfFrequenciesRange(
-        JNIEnv *env,
-        jclass clazz,
+        __unused JNIEnv *env, __unused jclass clazz,
         jint anglesLength,
-        jint wave_piece_length) {
-    CalculateAnglesOfFrequenciesRange((int) anglesLength, (int) wave_piece_length);
+        jint sampleLength) {
+    CalculateAnglesOfFrequenciesRange(anglesLength, sampleLength);
 }extern "C"
 JNIEXPORT void JNICALL
-Java_com_example_spectrumaudiofrequency_SinusoidConverter_setPrecision(JNIEnv *env, jclass clazz,
-                                                                       jfloat precision) {
+Java_com_example_spectrumaudiofrequency_SinusoidConverter_setPrecision(__unused JNIEnv *env,
+                                                                       __unused jclass clazz,
+                                                                       jdouble precision) {
     PRECISION = precision;
 }

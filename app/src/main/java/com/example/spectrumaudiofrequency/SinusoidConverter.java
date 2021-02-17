@@ -1,7 +1,5 @@
 package com.example.spectrumaudiofrequency;
 
-import android.content.Context;
-
 import androidx.renderscript.Allocation;
 import androidx.renderscript.Element;
 import androidx.renderscript.RenderScript;
@@ -16,54 +14,40 @@ import static com.example.spectrumaudiofrequency.Util.ConcatenateArray;
 import static com.example.spectrumaudiofrequency.Util.getNumberOfCores;
 
 public class SinusoidConverter {
-    final static int PRECISION = 10;
-    static int SPECTRUM_ANALYSIS_RAGE = 100;//todo erro de memoria se for muito grande
-    private final ForkJoinPool forkJoinPool;
-
-    SinusoidConverter(ForkJoinPool forkJoinPool) {
-        this.forkJoinPool = forkJoinPool;
-    }
-
-    static float ToLogarithmicScale(short data) {
+    final static int PRECISION = 100;
+    static int SPECTRUM_ANALYSIS_RAGE = 400;//todo erro de memoria se for muito grande
+    static float ToLogarithmicScale(float data) {
         if (data == 0) return 0;
         return (float) (((data < 0) ? Math.log10(data * -1) * -1 : (Math.log10(data))) * 100);
     }
 
     private interface Calculate {
-        float[] CalculateFFT(int FrequencyRange, float[] Sample);
+        float[] CalculateFFT(int FrequencyRange, short[] Sample);
     }
 
-    static class CalculatorFFT_GPU implements Calculate {
-
-        @Override
-        public float[] CalculateFFT(int FrequencyRange, float[] Sample) {
-            return new float[0];
-        }
-
+    static abstract class CalculatorFFT_GPU implements Calculate {
         static class GPU_FFTRequest {
             interface ResultListener {
                 void onRespond(float[] result);
             }
 
             private final ResultListener resultListener;
-            float[] WavePeaceInput;
+            short[] SampleInput;
 
-            GPU_FFTRequest(float[] WavePeaceInput, ResultListener resultListener) {
-                this.WavePeaceInput = WavePeaceInput;
+            GPU_FFTRequest(short[] SampleInput, ResultListener resultListener) {
+                this.SampleInput = SampleInput;
                 this.resultListener = resultListener;
             }
         }
 
         private final ArrayList<GPU_FFTRequest> gpuFFTRequests = new ArrayList<>();
-        private final RenderScript rs;
-        private final ForkJoinPool forkJoinPool;
+        private final ForkJoinPool poll;
 
         private int SampleLength = -1;
         private int AnglesLength = -1;
 
-        CalculatorFFT_GPU(Context context, ForkJoinPool forkJoinPool) {
-            this.rs = RenderScript.create(context);
-            this.forkJoinPool = forkJoinPool;
+        CalculatorFFT_GPU(ForkJoinPool poll) {
+            this.poll = poll;
         }
 
         public void ProcessFFT(GPU_FFTRequest gpu_fftRequest) {
@@ -76,11 +60,10 @@ public class SinusoidConverter {
 
             GPU_FFTRequest gpu_fftRequest = gpuFFTRequests.get(0);
 
-            forkJoinPool.submit(() -> {
-                gpu_fftRequest.resultListener.onRespond(CalculateFFT(
-                        SPECTRUM_ANALYSIS_RAGE * PRECISION,
-                        gpu_fftRequest.WavePeaceInput));
-            });
+            float[] result = CalculateFFT(SPECTRUM_ANALYSIS_RAGE * PRECISION,
+                    gpu_fftRequest.SampleInput);
+
+            poll.submit(() -> gpu_fftRequest.resultListener.onRespond(result));
 
             gpuFFTRequests.remove(gpu_fftRequest);
 
@@ -90,44 +73,46 @@ public class SinusoidConverter {
 
     static class CalculatorFFT_GPU_Default extends CalculatorFFT_GPU implements Calculate {
         private final ScriptC_fftGpu gpu;
+        private final RenderScript rs;
 
-        CalculatorFFT_GPU_Default(Context context, ForkJoinPool forkJoinPool) {
-            super(context, forkJoinPool);
-            this.gpu = new ScriptC_fftGpu(super.rs);
+        CalculatorFFT_GPU_Default(RenderScript renderScript, ForkJoinPool forkJoinPool) {
+            super(forkJoinPool);
+            this.rs = renderScript;
+            this.gpu = new ScriptC_fftGpu(renderScript);
         }
 
-        void CalculateAngles(float[] Java_Sample, int AnglesLength) {
-            if (super.SampleLength == Java_Sample.length || super.AnglesLength == AnglesLength)
+        void CalculateAngles(int SampleLength, int AnglesLength) {
+            if (super.SampleLength == SampleLength || super.AnglesLength == AnglesLength)
                 return;
 
-            super.SampleLength = Java_Sample.length;
+            super.SampleLength = SampleLength;
             super.AnglesLength = AnglesLength;
 
-            this.gpu.set_F32_SampleLength((float) Java_Sample.length);
-            this.gpu.set_uint32_t_SampleLength(Java_Sample.length);
+            this.gpu.set_F32_SampleLength((float) SampleLength);
+            this.gpu.set_uint32_t_SampleLength(SampleLength);
             this.gpu.set_PRECISION(PRECISION);
             this.gpu.set_AnglesLength(AnglesLength);
 
-            Allocation angles = Allocation.createTyped(super.rs,
-                    Type.createXY(super.rs, Element.F32(super.rs), AnglesLength, super.SampleLength),
+            Allocation angles = Allocation.createTyped(rs,
+                    Type.createXY(rs, Element.F32(rs), AnglesLength, super.SampleLength),
                     Allocation.USAGE_SHARED);
             this.gpu.set_Angles(angles);
 
             this.gpu.forEach_CalculateAngles(angles, new Script.LaunchOptions()
                     .setX(0, AnglesLength).setY(0, 1));
 
-            angles.copyTo(new float[AnglesLength * Java_Sample.length]);
+            angles.copyTo(new float[AnglesLength * SampleLength]);
         }
 
         @Override
-        public float[] CalculateFFT(int FrequencyRange, float[] Sample) {
+        public float[] CalculateFFT(int FrequencyRange, short[] Sample) {
             if (Sample.length < 100) return new float[100];
 
-            CalculateAngles(Sample, FrequencyRange);
+            CalculateAngles(Sample.length, FrequencyRange);
 
-            Allocation AllocationFFT = Allocation.createSized(super.rs, Element.F32(super.rs),
+            Allocation AllocationFFT = Allocation.createSized(rs, Element.F32(rs),
                     FrequencyRange, Allocation.USAGE_SCRIPT);
-            Allocation alloc_sample = Allocation.createSized(super.rs, Element.F32(super.rs),
+            Allocation alloc_sample = Allocation.createSized(rs, Element.I16(rs),
                     Sample.length, Allocation.USAGE_SHARED);
 
             alloc_sample.copy1DRangeFrom(0, Sample.length, Sample);
@@ -143,26 +128,28 @@ public class SinusoidConverter {
 
     static class CalculatorFFT_GPU_Adapted extends CalculatorFFT_GPU implements Calculate {
         private final ScriptC_fftGpuAdapted fftGpuAdapted;
+        private final RenderScript rs;
 
-        CalculatorFFT_GPU_Adapted(Context context, ForkJoinPool forkJoinPool) {
-            super(context, forkJoinPool);
-            this.fftGpuAdapted = new ScriptC_fftGpuAdapted(super.rs);
+        CalculatorFFT_GPU_Adapted(RenderScript renderScript, ForkJoinPool forkJoinPool) {
+            super(forkJoinPool);
+            this.rs = renderScript;
+            this.fftGpuAdapted = new ScriptC_fftGpuAdapted(rs);
         }
 
-        void CalculateAngles(float[] Java_Sample, int AnglesLength) {
-            if (super.SampleLength == Java_Sample.length || super.AnglesLength == AnglesLength)
+        void CalculateAngles(int SampleLength, int AnglesLength) {
+            if (super.SampleLength == SampleLength || super.AnglesLength == AnglesLength)
                 return;
 
-            super.SampleLength = Java_Sample.length;
+            super.SampleLength = SampleLength;
             super.AnglesLength = AnglesLength;
 
-            int AnglesAllocationLength = AnglesLength * Java_Sample.length;
-            Allocation allocAngles = Allocation.createSized(super.rs, Element.F32(super.rs),
+            int AnglesAllocationLength = AnglesLength * SampleLength;
+            Allocation allocAngles = Allocation.createSized(rs, Element.F32(rs),
                     AnglesAllocationLength, Allocation.USAGE_SHARED);
 
-            this.fftGpuAdapted.set_F32_SampleLength((float) Java_Sample.length);
-            this.fftGpuAdapted.set_uint32_t_SampleLength(Java_Sample.length);
-            this.fftGpuAdapted.set_AnglesLength(Java_Sample.length);
+            this.fftGpuAdapted.set_F32_SampleLength((float) SampleLength);
+            this.fftGpuAdapted.set_uint32_t_SampleLength(SampleLength);
+            this.fftGpuAdapted.set_AnglesLength(SampleLength);
             this.fftGpuAdapted.set_PRECISION(PRECISION);
             this.fftGpuAdapted.set_AnglesLength(AnglesAllocationLength / AnglesLength);
             this.fftGpuAdapted.bind_Angles(allocAngles);
@@ -170,17 +157,17 @@ public class SinusoidConverter {
             this.fftGpuAdapted.forEach_CalculateAngles(allocAngles,
                     new Script.LaunchOptions().setX(0, AnglesLength));
 
-            allocAngles.copyTo(new float[AnglesLength * Java_Sample.length]);
+            allocAngles.copyTo(new float[AnglesLength * SampleLength]);
         }
 
         @Override
-        public float[] CalculateFFT(int FrequencyRange, float[] Sample) {
+        public float[] CalculateFFT(int FrequencyRange, short[] Sample) {
             if (Sample.length < 100) return new float[100];
 
-            Allocation AllocationFFT = Allocation.createSized(super.rs, Element.F32(super.rs), FrequencyRange);
-            CalculateAngles(Sample, FrequencyRange);
+            Allocation AllocationFFT = Allocation.createSized(rs, Element.F32(rs), FrequencyRange);
+            CalculateAngles(Sample.length, FrequencyRange);
 
-            Allocation alloc_Sample = Allocation.createSized(super.rs, Element.F32(super.rs), Sample.length
+            Allocation alloc_Sample = Allocation.createSized(rs, Element.I16(rs), Sample.length
                     , Allocation.USAGE_SHARED);
             alloc_Sample.copy1DRangeFrom(0, Sample.length, Sample);
             fftGpuAdapted.bind_Sample(alloc_Sample);
@@ -193,32 +180,43 @@ public class SinusoidConverter {
         }
     }
 
-    private static native void CalculateAnglesOfFrequenciesRange(int anglesLength, int WavePieceLength);
+    static class CalculatorFFT_Native extends CalculatorFFT_GPU implements Calculate {
 
-    public static native float[] fftNative(int start, int end, short[] Sample);
-
-    public static native void setPrecision(float Precision);
-
-    public float[] fftNative(short[] Sample) {
-        if (Sample.length < 100) return new float[100];
-        setPrecision((float) PRECISION);
-        CalculateAnglesOfFrequenciesRange(SPECTRUM_ANALYSIS_RAGE * PRECISION, Sample.length);
-        int Cores = getNumberOfCores();
-
-        int length = (SPECTRUM_ANALYSIS_RAGE * PRECISION) / Cores;
-
-        //noinspection unchecked
-        ForkJoinTask<float[]>[] fft_tasks = new ForkJoinTask[Cores];
-
-        for (int i = 0; i < fft_tasks.length; i++) {
-            int finalI = i;
-            fft_tasks[i] = forkJoinPool.submit(() ->
-                    fftNative(length * finalI, length * (finalI + 1), Sample));
+        CalculatorFFT_Native(ForkJoinPool poll) {
+            super(poll);
         }
 
-        float[][] CoresResults = new float[Cores][];
-        for (int i = 0; i < CoresResults.length; i++) CoresResults[i] = fft_tasks[i].join();
+        @Override
+        public float[] CalculateFFT(int FrequencyRange, short[] Sample) {
+            if (Sample.length < 100) return new float[100];
 
-        return ConcatenateArray(CoresResults);
+            setPrecision((double) PRECISION);
+            CalculateAnglesOfFrequenciesRange(SPECTRUM_ANALYSIS_RAGE * PRECISION, Sample.length);
+            int Cores = getNumberOfCores();
+
+            int length = (SPECTRUM_ANALYSIS_RAGE * PRECISION) / Cores;
+
+            //noinspection unchecked
+            ForkJoinTask<double[]>[] fft_tasks = new ForkJoinTask[Cores];
+
+            for (int i = 0; i < fft_tasks.length; i++) {
+                int finalI = i;
+                fft_tasks[i] = super.poll.submit(() ->
+                        fftNative(length * finalI, length * (finalI + 1), Sample));
+            }
+
+            double[][] CoresResults = new double[Cores][];
+            for (int i = 0; i < CoresResults.length; i++) CoresResults[i] = fft_tasks[i].join();
+
+            return Util.toFloat(ConcatenateArray(CoresResults));//todo deveriar retornar double
+        }
+
     }
+
+    private static native void CalculateAnglesOfFrequenciesRange(int anglesLength, int WavePieceLength);
+
+    private static native double[] fftNative(int start, int end, short[] Sample);
+
+    private static native void setPrecision(double Precision);
+
 }

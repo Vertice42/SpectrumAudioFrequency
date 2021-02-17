@@ -19,7 +19,7 @@
         tools:layout_editor_absoluteX="163dp" />
 
     <Button
-        android:id="@+id/observer"
+        android:id="@+id/startObserverButton"
         android:layout_width="147dp"
         android:layout_height="65dp"
         android:layout_marginEnd="64dp"

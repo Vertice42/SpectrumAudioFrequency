@@ -12,6 +12,7 @@ import androidx.annotation.RequiresApi;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.nio.FloatBuffer;
 import java.nio.ShortBuffer;
 import java.util.ArrayList;
 import java.util.Date;
@@ -32,19 +33,17 @@ class AudioDecoder {
     }
 
     public interface ProcessListener {
-        void OnProceed(short[][] WavePiece, long BufferDuration);
+        void OnProceed(short[][] SamplesChannels, long BufferDuration);
     }
 
     private final ArrayList<InputIdListener> InputIdListeners = new ArrayList<>();
     private final ArrayList<Integer> InputIds = new ArrayList<>();
 
     static class OutputPromise {
-        private final int InputId;
         private final long presentationTimeUs;
         public OutputIdAvailableListener outputIdAvailableListener;
 
-        OutputPromise(int InputId, long presentationTimeUs, OutputIdAvailableListener outputIdAvailableListener) {
-            this.InputId = InputId;
+        OutputPromise(long presentationTimeUs, OutputIdAvailableListener outputIdAvailableListener) {
             this.presentationTimeUs = presentationTimeUs;
             this.outputIdAvailableListener = outputIdAvailableListener;
         }
@@ -136,7 +135,7 @@ class AudioDecoder {
             long presentationTimeUs = extractor.getSampleTime();
 
             ReposeTime[InputId] = new Date().getTime();
-            OutputPromises.add(new OutputPromise(InputId, presentationTimeUs, outputIdAvailableListener));
+            OutputPromises.add(new OutputPromise(presentationTimeUs, outputIdAvailableListener));
 
             if (sampleSize < 0) {
                 Decoder.queueInputBuffer(InputId, 0, 0, presentationTimeUs, MediaCodec.BUFFER_FLAG_END_OF_STREAM);
@@ -149,24 +148,24 @@ class AudioDecoder {
     private void processOutput(int OutputId, ProcessListener processListener) {
 
         ByteBuffer outputBuffer = Decoder.getOutputBuffer(OutputId);
-        int numChannels = format.getInteger(MediaFormat.KEY_CHANNEL_COUNT);
+        int channelsNumber = format.getInteger(MediaFormat.KEY_CHANNEL_COUNT);
 
-        ShortBuffer shortBuffer =
-                outputBuffer.order(ByteOrder.nativeOrder()).asShortBuffer();
+        ShortBuffer buffer = outputBuffer.order(ByteOrder.nativeOrder()).asShortBuffer();
 
-        short[][] WavePiece = new short[numChannels][shortBuffer.remaining() / numChannels];
+        short[][] SamplesChannels = new short[channelsNumber][buffer.remaining() / channelsNumber];
 
-        for (int i = 0; i < WavePiece.length; ++i) {
-            for (int j = 0; j < WavePiece[i].length; j++) {
-                WavePiece[i][j] = shortBuffer.get(j * numChannels + i);
+        for (int i = 0; i < SamplesChannels.length; ++i) {
+            for (int j = 0; j < SamplesChannels[i].length; j++) {
+                SamplesChannels[i][j] = buffer.get(j * channelsNumber + i);
             }
         }
+        //separate channels
 
         Decoder.releaseOutputBuffer(OutputId, false);
 
-        int bufferDuration = format.getInteger(MediaFormat.KEY_SAMPLE_RATE) / numChannels;
+        int bufferDuration = format.getInteger(MediaFormat.KEY_SAMPLE_RATE) / channelsNumber;
 
-        processListener.OnProceed(WavePiece, bufferDuration);
+        processListener.OnProceed(SamplesChannels, bufferDuration);
     }
 
     void Process(ProcessListener processListener) {
@@ -213,24 +212,24 @@ class AudioDecoder {
         PeriodRequest periodRequest = PeriodRequests.get(0);
         setTime(periodRequest.Time);
 
-        getPeriod(periodRequest.RequiredPeriod, (ShortArrays, PresentationTimeUs) -> {
-            PeriodRequests.get(0).ProcessListener.OnProceed(ShortArrays, PresentationTimeUs);
+        getPeriod(periodRequest.RequiredPeriod, (floats, PresentationTimeUs) -> {
+            PeriodRequests.get(0).ProcessListener.OnProceed(floats, PresentationTimeUs);
             PeriodRequests.remove(0);
             NextPeriodRequest();
 
         }, 0, new short[0][0]);
     }
 
-    private void getPeriod(long Period, ProcessListener processListener, long ObtainedPeriod, final short[][] WavePeaces) {
+    private void getPeriod(long Period, ProcessListener processListener, long ObtainedPeriod, final short[][] SampleChannels) {
         AtomicLong obtainedPeriod = new AtomicLong(ObtainedPeriod);
-        Process((WavePiece, WavePeaceDuration) -> {
-            short[][] WavePieceConcatenated = Util.ConcatenateArray(WavePeaces, WavePiece);
+        Process((SamplesChannels, WavePeaceDuration) -> {
+            short[][] SampleConcatenated = Util.ConcatenateArray(SampleChannels, SamplesChannels);
 
             obtainedPeriod.addAndGet(WavePeaceDuration);
             if (obtainedPeriod.get() >= Period) {
-                processListener.OnProceed(WavePieceConcatenated, obtainedPeriod.get());
+                processListener.OnProceed(SampleConcatenated, obtainedPeriod.get());
             } else {
-                getPeriod(Period, processListener, obtainedPeriod.get(), WavePieceConcatenated);
+                getPeriod(Period, processListener, obtainedPeriod.get(), SampleConcatenated);
             }
         });
     }

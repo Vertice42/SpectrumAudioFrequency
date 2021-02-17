@@ -51,6 +51,7 @@ public class MainActivity extends AppCompatActivity {
 
     public AudioDecoder Decoder;
     public MediaPlayer mediaPlayer;
+    private WaveRender waveRender;
 
     public void RequestPermissions(Activity activity) {
         if (ContextCompat.checkSelfPermission(activity, Manifest.permission.READ_EXTERNAL_STORAGE) !=
@@ -65,25 +66,6 @@ public class MainActivity extends AppCompatActivity {
     public void StartWatchingAudio(long AudioDuration) {
         WaveAdapter.WaveLength = (int) AudioDuration / WaveAdapter.getPeriod();//todo update on zomm change
         WaveAdapter.notifyDataSetChanged();
-    }
-
-    static class Array2Don1D {
-        int X_length = 40;
-        int Y_length = 10;
-
-        int ArrayLength = Y_length * X_length;
-
-        int Length = ArrayLength / X_length;
-
-        static void write2DArray(int x, int y, float[] array, int Length, float value) {
-            array[Length * x + y] = value;
-        }
-
-        static float read2DArray(int x, int y, float[] array, int Length) {
-            return array[Length * x + y];
-        }
-
-        float[] Array1D = new float[ArrayLength];
     }
 
     @RequiresApi(api = Build.VERSION_CODES.LOLLIPOP)
@@ -106,13 +88,14 @@ public class MainActivity extends AppCompatActivity {
 
         RequestPermissions(this);
 
+        startObserverButton = this.findViewById(R.id.startObserverButton);
         WaveRecyclerView = this.findViewById(R.id.WaveRecyclerView);
-        MainView = this.findViewById(R.id.MainView);
-        startObserverButton = this.findViewById(R.id.observer);
-        playButton = this.findViewById(R.id.playButton);
-        ScaleInput = this.findViewById(R.id.scaleInput);
         FrequencyInput = this.findViewById(R.id.FrequencyInput);
         InfoTextView = this.findViewById(R.id.InfoTextView);
+        playButton = this.findViewById(R.id.playButton);
+        ScaleInput = this.findViewById(R.id.scaleInput);
+        MainView = this.findViewById(R.id.MainView);
+
 
         Decoder = new AudioDecoder(AUDIO_PATH);
         mediaPlayer = new MediaPlayer();
@@ -126,7 +109,7 @@ public class MainActivity extends AppCompatActivity {
         }
 
         WaveRecyclerView.post(() -> {
-            WaveRender waveRender = new WaveRender(this, Decoder.getDuration());
+            this.waveRender = new WaveRender(this, Decoder.getDuration());
             WaveAdapter = new LongWaveImageAdapter(Decoder, waveRender, this.FrequencyInput);
 
             ScaleInput.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
@@ -173,14 +156,15 @@ public class MainActivity extends AppCompatActivity {
                             timer.scheduleAtFixedRate(new TimerTask() {
                                 @Override
                                 public void run() {
-                                    if (mediaPlayer.isPlaying()) WaveAdapter.update((mediaPlayer.getCurrentPosition() * 1000+WaveAdapter.getRenderMediaTimeMS()));
+                                    if (mediaPlayer.isPlaying())
+                                        WaveAdapter.update((mediaPlayer.getCurrentPosition() * 1000 + WaveAdapter.getRenderMediaTimeMS()));
                                 }
                             }, 16, 1);
 
                         });
                         mediaPlayer.prepareAsync();
                     } else {
-                        if (mediaPlayer.getCurrentPosition() > mediaPlayer.getDuration()/1.5f)
+                        if (mediaPlayer.getCurrentPosition() > mediaPlayer.getDuration() / 1.5f)
                             mediaPlayer.reset();
 
                         mediaPlayer.start();
@@ -199,6 +183,7 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onDestroy() {
         super.onDestroy();
+        this.waveRender.destroy();
         Log.i("onDestroy", "WavesImagesAsClear" + WaveRender.Clear());
     }
 }
