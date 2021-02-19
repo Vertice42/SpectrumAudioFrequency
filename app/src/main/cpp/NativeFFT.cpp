@@ -18,14 +18,18 @@ DoubleArrayToJavaDoubleArray(JNIEnv *env, const double *DoubleArray, int size) {
 
     if (result == nullptr)return nullptr; /* out of memory error thrown */
 
+    /*
     int i;
     // fill a temp structure to use to populate the java int array
-    jdouble fill[size];
+    auto fill = new double[size];
     for (i = 0; i < size; i++) {
         fill[i] = (jdouble) DoubleArray[i]; // put whatever logic you want to populate the values here
     }
+    */
+    //todo conversão para jdouble pode ser necesaria
+
     // move from the temp structure to the java structure
-    env->SetDoubleArrayRegion(result, 0, size, fill);
+    env->SetDoubleArrayRegion(result, 0, size, DoubleArray);
     return result;
 }
 
@@ -93,14 +97,14 @@ ShortArrayTOJShortArray(JNIEnv *env, const short ShortArray[], int size) {
     return result;
 }
 
-__unused int JShortArrayTOShortArray(JNIEnv *env, jshortArray array, short **P_shortArray) {
+int JShortArrayTOShortArray(JNIEnv *env, jshortArray array, short **P_shortArray) {
     int length = env->GetArrayLength(array);
 
     jshort *shortArrayElements = env->GetShortArrayElements(array, nullptr);
 
-    short NewArray[length];
+    auto NewArray = new short[length];
 
-    for (int i = 0; i < length; i++) NewArray[i] = (short) shortArrayElements[i];
+    for (int i = 0; i < length; i++) NewArray[i] = shortArrayElements[i];
 
     *P_shortArray = NewArray;
 
@@ -123,8 +127,8 @@ void CalculateAnglesOfFrequenciesRange(int anglesLength, int sampleLength) {
             Angles[frequency] = new double[sampleLength];
 
             double pointsDistance = (II_PI / sampleLength) * (frequency / PRECISION);
-            for (int angle_number = 0; angle_number < sampleLength; angle_number++) {
-                Angles[frequency][angle_number] = cos(angle_number * pointsDistance);
+            for (int angle = 0; angle < sampleLength; angle++) {
+                Angles[frequency][angle] = sin((angle * pointsDistance));
             }
         }
     }
@@ -132,17 +136,16 @@ void CalculateAnglesOfFrequenciesRange(int anglesLength, int sampleLength) {
 
 double *fft(const short *Sample, int start, int end, int sampleLength) {
     int fftLength = end - start;
-
     auto *fftResult = new double[fftLength];
 
-    for (int angle = 0; angle < fftLength; angle++) {
+    int angles = start;
+    for (int x = 0; x < fftLength; x++) {
         double x_some = 0;
-
         for (int radius = 0; radius < sampleLength; radius++) {
-            x_some += Angles[angle+start][radius] * Sample[radius];
+            x_some += Angles[angles][radius] * Sample[radius];
         }
-
-        fftResult[angle] = x_some / fftLength;
+        angles++;
+        fftResult[x] = x_some / sampleLength;
     }
 
     return fftResult;

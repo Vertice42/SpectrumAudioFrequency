@@ -12,10 +12,12 @@ import android.util.Log;
 import androidx.annotation.RequiresApi;
 import androidx.renderscript.RenderScript;
 
-import com.example.spectrumaudiofrequency.SinusoidConverter.CalculatorFFT_GPU;
-import com.example.spectrumaudiofrequency.SinusoidConverter.CalculatorFFT_GPU.GPU_FFTRequest;
-import com.example.spectrumaudiofrequency.SinusoidConverter.CalculatorFFT_GPU_Adapted;
-import com.example.spectrumaudiofrequency.SinusoidConverter.CalculatorFFT_GPU_Default;
+import com.example.spectrumaudiofrequency.SinusoidConverter.CalculatorFFT;
+import com.example.spectrumaudiofrequency.SinusoidConverter.CalculatorFFT.GPU_FFTRequest;
+import com.example.spectrumaudiofrequency.SinusoidConverter.CalculatorFFT__Adapted;
+import com.example.spectrumaudiofrequency.SinusoidConverter.CalculatorFFT__Default;
+import com.example.spectrumaudiofrequency.SinusoidConverter.CalculatorFFT__Precise;
+import com.example.spectrumaudiofrequency.SinusoidConverter.CalculatorFFT_Native;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -47,8 +49,8 @@ class WaveRender {
     private float[] fftGpu;
     private float[] fftNative;
 
-    private final CalculatorFFT_GPU calculatorFFTGpu;
-    private final SinusoidConverter.CalculatorFFT_Native calculatorFFT_native;
+    private final CalculatorFFT calculatorFFTGpu;
+    private final CalculatorFFT calculatorFFT_native;
 
     WaveRender(Context context, long SpectrumSize) {
         this.SpectrumSize = SpectrumSize;
@@ -57,15 +59,21 @@ class WaveRender {
         } else {
             this.pool = new ForkJoinPool();
         }
-        
+
         this.rs = RenderScript.create(context);
 
-        calculatorFFT_native = new SinusoidConverter.CalculatorFFT_Native(pool);
+        calculatorFFT_native = new CalculatorFFT_Native(pool);
 
-        if (true) {
-            this.calculatorFFTGpu = new CalculatorFFT_GPU_Adapted(rs, pool);
-        } else {
-            this.calculatorFFTGpu = new CalculatorFFT_GPU_Default(rs, pool);
+        switch (0) {
+            case 0:
+                this.calculatorFFTGpu = new CalculatorFFT__Adapted(rs, pool);
+                break;
+            case 1:
+                this.calculatorFFTGpu = new CalculatorFFT__Precise(rs, pool);
+                break;
+            default:
+                this.calculatorFFTGpu = new CalculatorFFT__Default(rs, pool);
+
         }
     }
 
@@ -361,8 +369,8 @@ class WaveRender {
 
             DrawWave(canvas, sampleChannels[0], Height / 4f, Color.BLACK, Height * 3f);
 
-            Draw_fft(canvas, fftGpu, Height / 1.5f, Color.BLUE, Height / 30f);
-            Draw_fft(canvas, fftNative, Height / 1.2f, Color.RED, Height / 20f);
+            Draw_fft(canvas, fftGpu, Height / 1.5f, Color.BLUE, Height / 20f);
+            Draw_fft(canvas, fftNative, Height / 1.5f, Color.RED, Height / 20f);
 
             //Log.i("FFT length: ", "C:"+NativeFFT.length+" GPU:"+this.FFTWave.length);
 
@@ -398,7 +406,7 @@ class WaveRender {
         return new File(Environment.getExternalStorageDirectory() + Folder).delete();
     }
 
-    public void destroy(){
+    public void destroy() {
         this.rs.destroy();
     }
 

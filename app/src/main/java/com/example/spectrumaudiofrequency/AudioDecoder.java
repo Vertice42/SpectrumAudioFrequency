@@ -1,8 +1,10 @@
 package com.example.spectrumaudiofrequency;
 
+import android.content.Context;
 import android.media.MediaCodec;
 import android.media.MediaExtractor;
 import android.media.MediaFormat;
+import android.net.Uri;
 import android.os.Build;
 import android.util.Log;
 
@@ -12,7 +14,6 @@ import androidx.annotation.RequiresApi;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
-import java.nio.FloatBuffer;
 import java.nio.ShortBuffer;
 import java.util.ArrayList;
 import java.util.Date;
@@ -20,6 +21,9 @@ import java.util.concurrent.atomic.AtomicLong;
 
 @RequiresApi(api = Build.VERSION_CODES.LOLLIPOP)
 class AudioDecoder {
+    private Context context = null;
+    private Uri uri = null;
+    private String AudioPath;
     private MediaCodec Decoder;
     public MediaFormat format;
     public MediaExtractor extractor;
@@ -62,7 +66,18 @@ class AudioDecoder {
         return null;
     }
 
+    AudioDecoder(Context context, Uri uri) {
+        this.context = context;
+        this.uri = uri;
+        prepare();
+    }
+
     AudioDecoder(String AudioPath) {
+        this.AudioPath = AudioPath;
+        prepare();
+    }
+
+    private void prepare() {
         new Thread(() -> {
             try {
                 Decoder = MediaCodec.createDecoderByType(MediaFormat.MIMETYPE_AUDIO_MPEG);
@@ -72,7 +87,8 @@ class AudioDecoder {
 
             extractor = new MediaExtractor();
             try {
-                extractor.setDataSource(AudioPath);
+                if (AudioPath!= null) extractor.setDataSource(AudioPath);
+                else extractor.setDataSource(context,uri,null);
             } catch (IOException e) {
                 e.printStackTrace();//todo add error
             }

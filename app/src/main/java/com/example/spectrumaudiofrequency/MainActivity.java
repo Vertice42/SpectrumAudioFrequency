@@ -96,13 +96,15 @@ public class MainActivity extends AppCompatActivity {
         ScaleInput = this.findViewById(R.id.scaleInput);
         MainView = this.findViewById(R.id.MainView);
 
+        String pkgName = getApplicationContext().getPackageName();
+        Uri uri = Uri.parse("android.resource://" + pkgName + "/raw/"+R.raw.stardew_valleymp3);
 
-        Decoder = new AudioDecoder(AUDIO_PATH);
+        Decoder = new AudioDecoder(this, uri);
+
         mediaPlayer = new MediaPlayer();
-
         try {
             mediaPlayer.setAudioStreamType(AudioManager.STREAM_MUSIC);
-            mediaPlayer.setDataSource(getApplicationContext(), Uri.parse(AUDIO_PATH));
+            mediaPlayer.setDataSource(this, uri);
 
         } catch (IOException e) {
             e.printStackTrace();
