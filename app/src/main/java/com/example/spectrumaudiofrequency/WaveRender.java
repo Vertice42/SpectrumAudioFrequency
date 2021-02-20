@@ -13,11 +13,12 @@ import androidx.annotation.RequiresApi;
 import androidx.renderscript.RenderScript;
 
 import com.example.spectrumaudiofrequency.SinusoidConverter.CalculatorFFT;
-import com.example.spectrumaudiofrequency.SinusoidConverter.CalculatorFFT.GPU_FFTRequest;
+import com.example.spectrumaudiofrequency.SinusoidConverter.CalculatorFFT.GPUFFTTask;
 import com.example.spectrumaudiofrequency.SinusoidConverter.CalculatorFFT__Adapted;
 import com.example.spectrumaudiofrequency.SinusoidConverter.CalculatorFFT__Default;
 import com.example.spectrumaudiofrequency.SinusoidConverter.CalculatorFFT__Precise;
 import com.example.spectrumaudiofrequency.SinusoidConverter.CalculatorFFT_Native;
+import com.example.spectrumaudiofrequency.Util.CalculatePerformance;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -29,6 +30,7 @@ import java.util.concurrent.RecursiveTask;
 class WaveRender {
 
     private final RenderScript rs;
+    private final CalculatePerformance gnuFFT_PerformanceTask;
 
     interface WaveRenderListeners {
         void onFinish(Bitmap bitmap);
@@ -75,6 +77,8 @@ class WaveRender {
                 this.calculatorFFTGpu = new CalculatorFFT__Default(rs, pool);
 
         }
+
+        this.gnuFFT_PerformanceTask = new CalculatePerformance("gnuFFT_PerformanceTask",100);
     }
 
     public static String getImageFileName(long ImageID) {
@@ -113,12 +117,12 @@ class WaveRender {
 
         Paint paint = new Paint();
         paint.setStrokeWidth(1);
-        paint.setTextSize(20);
+        paint.setTextSize(10);
         paint.setColor(Color.BLACK);
 
         float i = 0;
         while (i < this.Width) {
-            canvas.drawText(((Time + i)) + "microns", i, Anchor, paint);
+            canvas.drawText(((Time + i)) + "microns", i, Anchor + Anchor / 10, paint);
             i += distance;
         }
     }
@@ -309,7 +313,7 @@ class WaveRender {
         float SpaceBetweenWaves = (float) Width / sample.length;
         //"spacing" determining the line spacing is by consequence the size of the sound wave
         Paint WavePaint = new Paint();
-        WavePaint.setStrokeWidth(2);
+        WavePaint.setStrokeWidth(1);
         WavePaint.setColor(color);
         WavePaint.setDither(false);
         WavePaint.setAntiAlias(AntiAlias);
@@ -367,10 +371,10 @@ class WaveRender {
 
             DrawTime(canvas, Time, SampleDuration, Height / 20f);
 
-            DrawWave(canvas, sampleChannels[0], Height / 4f, Color.BLACK, Height * 3f);
+            DrawWave(canvas, sampleChannels[0], Height / 4f, Color.BLACK, Height / 2f);
 
             Draw_fft(canvas, fftGpu, Height / 1.5f, Color.BLUE, Height / 20f);
-            Draw_fft(canvas, fftNative, Height / 1.5f, Color.RED, Height / 20f);
+            Draw_fft(canvas, fftNative, Height / 1.2f, Color.RED, Height / 20f);
 
             //Log.i("FFT length: ", "C:"+NativeFFT.length+" GPU:"+this.FFTWave.length);
 
@@ -389,17 +393,16 @@ class WaveRender {
         this.Width = imageBitmap.getWidth();
         this.Height = imageBitmap.getHeight();
 
-        long fftTime = System.nanoTime();
-        calculatorFFT_native.ProcessFFT(new GPU_FFTRequest(SampleChannels[0], fftNative -> {
-            Log.i("C++ fftTime", (System.nanoTime() - fftTime) / 1000000f + "ms");
-            this.fftNative = fftNative;
-            long gpu_fftTime = System.nanoTime();
-            calculatorFFTGpu.ProcessFFT(new GPU_FFTRequest(SampleChannels[0], fftGpu -> {
-                Log.i("GPU fftTime", (System.nanoTime() - gpu_fftTime) / 1000000f + "ms");
-                this.fftGpu = fftGpu;
-                pool.execute(new DrawWaves(imageBitmap, SampleChannels, Time, SampleDuration, onRenderFinish));
-            }));
-        }));
+        //todo redusir isso;
+        gnuFFT_PerformanceTask.start();
+        GPUFFTTask gpu_fftRequest = new GPUFFTTask(calculatorFFTGpu, SampleChannels[0]);
+        calculatorFFTGpu.Process(gpu_fftRequest);
+        this.fftGpu = gpu_fftRequest.task.join();
+        gnuFFT_PerformanceTask.logPerformance();
+
+        //todo redusir isso;
+
+        pool.execute(new DrawWaves(imageBitmap, SampleChannels, Time, SampleDuration, onRenderFinish));
     }
 
     public static boolean Clear() {

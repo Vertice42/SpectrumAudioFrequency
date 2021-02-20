@@ -3,7 +3,6 @@ package com.example.spectrumaudiofrequency;
 import android.annotation.SuppressLint;
 import android.os.Build;
 import android.view.ViewGroup;
-import android.widget.EditText;
 import android.widget.ImageView;
 
 import androidx.annotation.NonNull;
@@ -22,54 +21,18 @@ public class LongWaveImageAdapter extends RecyclerView.Adapter<WaveViewHolder> {
 
     public int Zoom = 1;
 
-    private static final int Resolution = 3;
+    private static final int ImageResolution = 1;
     private static final int Period = 24000;
 
     int getPeriod() {
         return Period * Zoom;
     }
 
-    private final EditText FrequencyInput;
     private WaveViewHolder holderObserved;
 
-    LongWaveImageAdapter(AudioDecoder audioDecoder, WaveRender waveRender, EditText FrequencyInput) {
+    LongWaveImageAdapter(AudioDecoder audioDecoder, WaveRender waveRender) {
         this.AudioDecoder = audioDecoder;
         this.waveRender = waveRender;
-        this.FrequencyInput = FrequencyInput;
-    }
-
-    protected class FFTAnimation {
-        private int Frame = 0;
-        private Thread thread;
-
-        @RequiresApi(api = Build.VERSION_CODES.LOLLIPOP)
-        public void start(WaveViewHolder holder, long Time, short[][] SamplesChannels, long WavePieceDuration) {
-            Frame = 0;
-            waveRender.Frequency = 10f;
-            if (thread != null) thread.interrupt();
-            thread = new Thread(() -> nextFrame(holder, Time, SamplesChannels, WavePieceDuration));
-            thread.start();
-        }
-
-        public void stop() {
-            if (thread != null) {
-                thread.interrupt();
-                thread = null;
-            }
-        }
-
-        @RequiresApi(api = Build.VERSION_CODES.LOLLIPOP)
-        private void nextFrame(WaveViewHolder holder, long Time, short[][] SamplesChannels, long WavePieceDuration) {
-            waveRender.Frequency += 0.01f;
-            waveRender.render(holder.ImageBitmap, SamplesChannels, Time, WavePieceDuration,
-                    (bitmap) -> holder.imageView.post(() -> {
-                        holder.ImageBitmap = bitmap;
-                        holder.updateImage();
-                        Frame++;
-                        if (this.Frame < 20000)
-                            nextFrame(holder, Time, SamplesChannels, WavePieceDuration);
-                    }));
-        }
     }
 
     @RequiresApi(api = Build.VERSION_CODES.LOLLIPOP)
@@ -78,35 +41,6 @@ public class LongWaveImageAdapter extends RecyclerView.Adapter<WaveViewHolder> {
         holder.imageView.setImageURI(null);
         waveRender.render(holder.ImageBitmap, SampleChannels, Time, WavePieceDuration,
                 (bitmap) -> holder.updateImage());
-
-        FFTAnimation fftAnimation = new FFTAnimation();
-
-        holder.imageView.setOnLongClickListener(v -> {
-            fftAnimation.start(holder, Time, SampleChannels, WavePieceDuration);
-            return false;
-        });
-
-        holder.imageView.setOnClickListener((view) -> {
-            fftAnimation.stop();
-            FrequencyInput.setOnEditorActionListener((v, actionId, event) -> {
-
-                if (event == null) return false;
-
-                String sF = FrequencyInput.getText().toString();
-                float f = 1;
-
-                if (!sF.equals("")) {
-                    f = Float.parseFloat(sF);
-                    if (f < 0) f = 1f;
-                }
-
-                waveRender.Frequency = f;
-                waveRender.render(holder.ImageBitmap, SampleChannels, Time, WavePieceDuration,
-                        (bitmap) -> holder.updateImage());
-                return false;
-            });
-
-        });
     }
 
     @NonNull
@@ -118,12 +52,7 @@ public class LongWaveImageAdapter extends RecyclerView.Adapter<WaveViewHolder> {
 
         WaveImageView.setLayoutParams(layoutParams);
 
-        return new WaveViewHolder(WaveImageView, parent.getWidth() / Resolution, parent.getHeight() / Resolution);
-    }
-
-    @RequiresApi(api = Build.VERSION_CODES.LOLLIPOP)
-    public void setPosition(int position) {
-        setPosition(this.holderObserved, position);
+        return new WaveViewHolder(WaveImageView, parent.getWidth() / ImageResolution, parent.getHeight() / ImageResolution);
     }
 
     @RequiresApi(api = Build.VERSION_CODES.LOLLIPOP)

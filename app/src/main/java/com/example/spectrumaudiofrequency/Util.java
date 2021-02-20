@@ -5,8 +5,6 @@ import android.util.Log;
 
 import java.io.File;
 import java.io.FileFilter;
-import java.lang.reflect.Array;
-import java.math.BigDecimal;
 import java.util.regex.Pattern;
 
 public class Util {
@@ -137,6 +135,57 @@ public class Util {
         } else {
             // Use saurabh64's answer
             return getNumCoresOldPhones();
+        }
+    }
+
+    public static class CalculatePerformance {
+        private final String Name;
+        private int ResetCont = 10;
+        private long ProcessingTime;
+        private long Media;
+        private long Time;
+
+        private long ProcessingTimeSome;
+        private int count = 0;
+
+        CalculatePerformance(String Name) {
+            this.Name = Name;
+        }
+
+        CalculatePerformance(String Name, int ResetCont) {
+            this.Name = Name;
+            this.ResetCont = ResetCont;
+        }
+
+        void start() {
+            Time = System.nanoTime();
+        }
+
+        private void calculate() {
+            if (count > ResetCont){
+                ProcessingTimeSome = 0;
+                count = 0;
+            }
+
+            long ProcessingTime = System.nanoTime() - Time;
+            ProcessingTimeSome += ProcessingTime;
+            this.ProcessingTime = ProcessingTime;
+            count++;
+
+            Media = ProcessingTimeSome / count;
+        }
+
+        private float getProcessingTime() {
+            return ProcessingTime / 1000000f;
+        }
+
+        private float getMedia() {
+            return Media / 1000000f;
+        }
+
+        void logPerformance() {
+            calculate();
+            Log.i(Name, "ProcessingTime: " + getProcessingTime() + " Media: " + getMedia());
         }
     }
 }

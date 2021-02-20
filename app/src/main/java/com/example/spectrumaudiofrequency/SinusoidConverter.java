@@ -7,9 +7,9 @@ import androidx.renderscript.Script;
 import androidx.renderscript.Type;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.ForkJoinTask;
+import java.util.concurrent.RecursiveTask;
 
 import static com.example.spectrumaudiofrequency.Util.ConcatenateArray;
 import static com.example.spectrumaudiofrequency.Util.getNumberOfCores;
@@ -17,6 +17,7 @@ import static com.example.spectrumaudiofrequency.Util.getNumberOfCores;
 public class SinusoidConverter {
     final static int PRECISION = 10;
     static int SPECTRUM_ANALYSIS_RAGE = 400;//todo erro de memoria se for muito grande
+
     static float ToLogarithmicScale(float data) {
         if (data == 0) return 0;
         return (float) (((data < 0) ? Math.log10(data * -1) * -1 : (Math.log10(data))) * 100);
@@ -27,49 +28,52 @@ public class SinusoidConverter {
     }
 
     static abstract class CalculatorFFT implements Calculate {
-        static class GPU_FFTRequest {
-            interface ResultListener {
-                void onRespond(float[] result);
-            }
+        static class GPUFFTTask {
 
-            private final ResultListener resultListener;
-            short[] SampleInput;
+            public final ForkJoinTask<float[]> task;
+            public short[] SampleInput;
 
-            GPU_FFTRequest(short[] SampleInput, ResultListener resultListener) {
+            GPUFFTTask(CalculatorFFT CalculatorFFT, short[] SampleInput) {
                 this.SampleInput = SampleInput;
-                this.resultListener = resultListener;
+                task = new RecursiveTask<float[]>() {
+                    @Override
+                    protected float[] compute() {
+                        return CalculatorFFT.CalculateFFT(SPECTRUM_ANALYSIS_RAGE * PRECISION, SampleInput);
+                    }
+                };
             }
+
+
         }
 
-        private final ArrayList<GPU_FFTRequest> gpuFFTRequests = new ArrayList<>();
+        private final ArrayList<GPUFFTTask> tasks = new ArrayList<>();
+
         private final ForkJoinPool poll;
 
         private int SampleLength = -1;
         private int AnglesLength = -1;
 
-         CalculatorFFT(ForkJoinPool poll) {
+        CalculatorFFT(ForkJoinPool poll) {
             this.poll = poll;
         }
 
-        public void ProcessFFT(GPU_FFTRequest gpu_fftRequest) {
-            gpuFFTRequests.add(gpu_fftRequest);
-            if (gpuFFTRequests.size() == 1) NextRequest();
+        public void Process(GPUFFTTask task) {
+            tasks.add(task);
+            if (tasks.size() == 1) NextRequest();
         }
 
         private void NextRequest() {
-            if (gpuFFTRequests.size() == 0) return;
+            if (tasks.size() == 0) return;
 
-            GPU_FFTRequest gpu_fftRequest = gpuFFTRequests.get(0);
+            GPUFFTTask gpuFftTask = tasks.get(0);
 
-            float[] result = CalculateFFT(SPECTRUM_ANALYSIS_RAGE * PRECISION,
-                    gpu_fftRequest.SampleInput);
+            poll.execute(gpuFftTask.task);
 
-            poll.submit(() -> gpu_fftRequest.resultListener.onRespond(result));
-
-            gpuFFTRequests.remove(gpu_fftRequest);
+            tasks.remove(gpuFftTask);
 
             NextRequest();
         }
+
     }
 
     static class CalculatorFFT__Default extends CalculatorFFT implements Calculate {

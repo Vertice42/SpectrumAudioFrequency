@@ -138,13 +138,11 @@ double *fft(const short *Sample, int start, int end, int sampleLength) {
     int fftLength = end - start;
     auto *fftResult = new double[fftLength];
 
-    int angles = start;
     for (int x = 0; x < fftLength; x++) {
         double x_some = 0;
         for (int radius = 0; radius < sampleLength; radius++) {
-            x_some += Angles[angles][radius] * Sample[radius];
+            x_some += Angles[x+start][radius] * Sample[radius];
         }
-        angles++;
         fftResult[x] = x_some / sampleLength;
     }
 

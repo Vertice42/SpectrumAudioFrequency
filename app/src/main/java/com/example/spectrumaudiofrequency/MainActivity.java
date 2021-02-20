@@ -34,7 +34,6 @@ public class MainActivity extends AppCompatActivity {
         System.loadLibrary("native-lib");
     }
 
-    public static final String AUDIO_PATH = Environment.getExternalStorageDirectory() + "/Download/0.mp3";
     public static int MANAGE_EXTERNAL_STORAGE_REQUEST = 120;
 
     public ConstraintLayout MainView;
@@ -97,7 +96,7 @@ public class MainActivity extends AppCompatActivity {
         MainView = this.findViewById(R.id.MainView);
 
         String pkgName = getApplicationContext().getPackageName();
-        Uri uri = Uri.parse("android.resource://" + pkgName + "/raw/"+R.raw.stardew_valleymp3);
+        Uri uri = Uri.parse("android.resource://" + pkgName + "/raw/"+R.raw.hollow);
 
         Decoder = new AudioDecoder(this, uri);
 
@@ -112,7 +111,7 @@ public class MainActivity extends AppCompatActivity {
 
         WaveRecyclerView.post(() -> {
             this.waveRender = new WaveRender(this, Decoder.getDuration());
-            WaveAdapter = new LongWaveImageAdapter(Decoder, waveRender, this.FrequencyInput);
+            WaveAdapter = new LongWaveImageAdapter(Decoder, waveRender);
 
             ScaleInput.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
                 @Override
