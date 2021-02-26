@@ -1,6 +1,6 @@
 package com.example.spectrumaudiofrequency;
 
-import android.content.Context;
+import android.app.Activity;
 import android.media.MediaCodec;
 import android.media.MediaExtractor;
 import android.media.MediaFormat;
@@ -16,59 +16,63 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.ShortBuffer;
 import java.util.ArrayList;
-import java.util.Date;
+import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.atomic.AtomicLong;
+
+import static android.media.MediaExtractor.SEEK_TO_NEXT_SYNC;
 
 @RequiresApi(api = Build.VERSION_CODES.LOLLIPOP)
 class AudioDecoder {
-    private Context context = null;
+    private ForkJoinPool Poll;
+    private Activity activity = null;
     private Uri uri = null;
     private String AudioPath;
     private MediaCodec Decoder;
     public MediaFormat format;
     public MediaExtractor extractor;
+    public int bufferDuration;
 
-    private interface InputIdListener {
-        void onInputIdAvailable(int InputId);
-    }
-
-    private interface OutputIdAvailableListener {
-        void onOutputIdAvailable(int OutputId);
+    private interface IdListener {
+        void onIdAvailable(int Id);
     }
 
     public interface ProcessListener {
         void OnProceed(short[][] SamplesChannels, long BufferDuration);
     }
 
-    private final ArrayList<InputIdListener> InputIdListeners = new ArrayList<>();
+    private final ArrayList<IdListener> idListeners = new ArrayList<>();
     private final ArrayList<Integer> InputIds = new ArrayList<>();
 
     static class OutputPromise {
-        private final long presentationTimeUs;
-        public OutputIdAvailableListener outputIdAvailableListener;
+        public int id;
+        public IdListener idListener;
 
-        OutputPromise(long presentationTimeUs, OutputIdAvailableListener outputIdAvailableListener) {
-            this.presentationTimeUs = presentationTimeUs;
-            this.outputIdAvailableListener = outputIdAvailableListener;
+        OutputPromise(int id, IdListener idListener) {
+            this.id = id;
+            this.idListener = idListener;
         }
     }
 
     private final ArrayList<OutputPromise> OutputPromises = new ArrayList<>();
 
-    OutputPromise getOutputPromise(long presentationTimeUs) {
+    OutputPromise getOutputPromise(int id) {
         for (OutputPromise outputPromise : OutputPromises) {
-            if (outputPromise.presentationTimeUs == presentationTimeUs) {
+            if (outputPromise.id == id) {
                 OutputPromises.remove(outputPromise);
                 return outputPromise;
             }
         }
-        //throw new Exception();
         return null;
     }
 
-    AudioDecoder(Context context, Uri uri) {
-        this.context = context;
+    AudioDecoder(Activity activity, Uri uri) {
+        this.activity = activity;
         this.uri = uri;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            this.Poll = ForkJoinPool.commonPool();
+        } else {
+            this.Poll = new ForkJoinPool();
+        }
         prepare();
     }
 
@@ -78,7 +82,7 @@ class AudioDecoder {
     }
 
     private void prepare() {
-        new Thread(() -> {
+        this.Poll.execute(() -> {
             try {
                 Decoder = MediaCodec.createDecoderByType(MediaFormat.MIMETYPE_AUDIO_MPEG);
             } catch (IOException e) {
@@ -87,8 +91,8 @@ class AudioDecoder {
 
             extractor = new MediaExtractor();
             try {
-                if (AudioPath!= null) extractor.setDataSource(AudioPath);
-                else extractor.setDataSource(context,uri,null);
+                if (AudioPath != null) extractor.setDataSource(AudioPath);
+                else extractor.setDataSource(activity, uri, null);
             } catch (IOException e) {
                 e.printStackTrace();//todo add error
             }
@@ -100,20 +104,21 @@ class AudioDecoder {
 
                 @Override
                 public void onInputBufferAvailable(@NonNull final MediaCodec mediaCodec, final int inputBufferId) {
-                    if (InputIdListeners.size() != 0) {
-                        InputIdListener inputIdListener = InputIdListeners.get(0);
-                        InputIdListeners.remove(inputIdListener);
-                        inputIdListener.onInputIdAvailable(0);
+                    if (idListeners.size() != 0) {
+                        IdListener idListener = idListeners.get(0);
+                        idListeners.remove(idListener);
+                        idListener.onIdAvailable(0);
                     } else {
                         InputIds.add(inputBufferId);
                     }
+
                 }
 
                 @Override
                 public void onOutputBufferAvailable(@NonNull final MediaCodec mediaCodec, final int outputBufferId,
                                                     @NonNull final MediaCodec.BufferInfo bufferInfo) {
-                    OutputPromise outputPromise = getOutputPromise(bufferInfo.presentationTimeUs);
-                    outputPromise.outputIdAvailableListener.onOutputIdAvailable(outputBufferId);
+                    OutputPromise outputPromise = getOutputPromise(outputBufferId);
+                    outputPromise.idListener.onIdAvailable(outputBufferId);
                 }
 
                 @Override
@@ -128,30 +133,27 @@ class AudioDecoder {
             });
             Decoder.configure(format, null, null, 0);
             Decoder.start();
-        }).start();
+        });
     }
 
-    private void getInputId(InputIdListener inputIdListener) {
+    private void getInputId(IdListener idListener) {
         if (InputIds.size() > 0) {
             int InputId = InputIds.get(0);
             InputIds.remove(0);
 
-            inputIdListener.onInputIdAvailable(InputId);
+            idListener.onIdAvailable(InputId);
         } else {
-            InputIdListeners.add(inputIdListener);
+            idListeners.add(idListener);
         }
     }
 
-    long[] ReposeTime = new long[20];
-
-    private void startProcessing(OutputIdAvailableListener outputIdAvailableListener) {
+    private void putDataOnInput(IdListener idListener) {
         getInputId(InputId -> {
             ByteBuffer buffer = Decoder.getInputBuffer(InputId);
             int sampleSize = extractor.readSampleData(buffer, 0);
             long presentationTimeUs = extractor.getSampleTime();
 
-            ReposeTime[InputId] = new Date().getTime();
-            OutputPromises.add(new OutputPromise(presentationTimeUs, outputIdAvailableListener));
+            OutputPromises.add(new OutputPromise(InputId, idListener));
 
             if (sampleSize < 0) {
                 Decoder.queueInputBuffer(InputId, 0, 0, presentationTimeUs, MediaCodec.BUFFER_FLAG_END_OF_STREAM);
@@ -161,7 +163,17 @@ class AudioDecoder {
         });
     }
 
-    private void processOutput(int OutputId, ProcessListener processListener) {
+    static class DecoderResult {
+        short[][] SamplesChannels;
+        long BufferDuration;
+
+        DecoderResult(short[][] SamplesChannels, long BufferDuration) {
+            this.SamplesChannels = SamplesChannels;
+            this.BufferDuration = BufferDuration;
+        }
+    }
+
+    private DecoderResult processOutput(int OutputId) {
 
         ByteBuffer outputBuffer = Decoder.getOutputBuffer(OutputId);
         int channelsNumber = format.getInteger(MediaFormat.KEY_CHANNEL_COUNT);
@@ -179,13 +191,9 @@ class AudioDecoder {
 
         Decoder.releaseOutputBuffer(OutputId, false);
 
-        int bufferDuration = format.getInteger(MediaFormat.KEY_SAMPLE_RATE) / channelsNumber;
+        bufferDuration = format.getInteger(MediaFormat.KEY_SAMPLE_RATE) / channelsNumber;
 
-        processListener.OnProceed(SamplesChannels, bufferDuration);
-    }
-
-    void Process(ProcessListener processListener) {
-        startProcessing(OutputId -> processOutput(OutputId, processListener));
+        return new DecoderResult(SamplesChannels, bufferDuration);
     }
 
     /**
@@ -198,24 +206,30 @@ class AudioDecoder {
         return Duration;
     }
 
-    private void setTime(long NewTime) {
-        extractor.seekTo(NewTime, MediaExtractor.SEEK_TO_NEXT_SYNC);
+    private long timeOfExtractor = 0;
+
+    private void setTimeOfExtractor(long NewTime) {
+        if (NewTime - timeOfExtractor > bufferDuration)
+            extractor.seekTo(NewTime, SEEK_TO_NEXT_SYNC);
+        else extractor.advance();
+
+        timeOfExtractor = NewTime;
     }
 
     public static class PeriodRequest {
         long Time;
-        long RequiredPeriod;
+        long RequiredPeriodTime;
 
         ProcessListener ProcessListener;
 
-        PeriodRequest(long Time, long RequiredPeriod, ProcessListener ProcessListener) {
+        PeriodRequest(long Time, long RequiredPeriodTime, ProcessListener ProcessListener) {
             this.Time = Time;
-            this.RequiredPeriod = RequiredPeriod;
+            this.RequiredPeriodTime = RequiredPeriodTime;
             this.ProcessListener = ProcessListener;
         }
     }
 
-    ArrayList<PeriodRequest> PeriodRequests = new ArrayList<>();
+    private final ArrayList<PeriodRequest> PeriodRequests = new ArrayList<>();
 
     public void addRequest(PeriodRequest periodRequest) {
         PeriodRequests.add(periodRequest);
@@ -226,26 +240,26 @@ class AudioDecoder {
         if (PeriodRequests.size() == 0) return;
 
         PeriodRequest periodRequest = PeriodRequests.get(0);
-        setTime(periodRequest.Time);
+        setTimeOfExtractor(periodRequest.Time);
 
-        getPeriod(periodRequest.RequiredPeriod, (floats, PresentationTimeUs) -> {
-            PeriodRequests.get(0).ProcessListener.OnProceed(floats, PresentationTimeUs);
-            PeriodRequests.remove(0);
-            NextPeriodRequest();
+        getSample(periodRequest, 0, new short[0][0]);
 
-        }, 0, new short[0][0]);
+        PeriodRequests.remove(periodRequest);
     }
 
-    private void getPeriod(long Period, ProcessListener processListener, long ObtainedPeriod, final short[][] SampleChannels) {
+    private void getSample(PeriodRequest periodRequest, long ObtainedPeriod, final short[][] SamplesChannels) {
         AtomicLong obtainedPeriod = new AtomicLong(ObtainedPeriod);
-        Process((SamplesChannels, WavePeaceDuration) -> {
-            short[][] SampleConcatenated = Util.ConcatenateArray(SampleChannels, SamplesChannels);
 
-            obtainedPeriod.addAndGet(WavePeaceDuration);
-            if (obtainedPeriod.get() >= Period) {
-                processListener.OnProceed(SampleConcatenated, obtainedPeriod.get());
+        putDataOnInput(ID -> {
+            DecoderResult result = processOutput(ID);
+            obtainedPeriod.addAndGet(result.BufferDuration);
+
+            if (obtainedPeriod.get() >= periodRequest.RequiredPeriodTime) {
+                Poll.submit(() -> periodRequest.ProcessListener.OnProceed
+                        (result.SamplesChannels, obtainedPeriod.get()));
             } else {
-                getPeriod(Period, processListener, obtainedPeriod.get(), SampleConcatenated);
+                getSample(periodRequest, obtainedPeriod.get(),
+                        Util.ConcatenateArray(SamplesChannels, result.SamplesChannels));
             }
         });
     }
