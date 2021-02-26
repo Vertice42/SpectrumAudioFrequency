@@ -9,10 +9,9 @@ import android.media.MediaPlayer;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
-import android.os.Environment;
 import android.util.Log;
+import android.view.View;
 import android.widget.Button;
-import android.widget.EditText;
 import android.widget.SeekBar;
 import android.widget.TextView;
 
@@ -28,6 +27,9 @@ import java.io.IOException;
 import java.util.Timer;
 import java.util.TimerTask;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Consumer;
 
 public class MainActivity extends AppCompatActivity {
     static {
@@ -41,7 +43,6 @@ public class MainActivity extends AppCompatActivity {
     public Button startObserverButton;
     public Button playButton;
     public SeekBar ScaleInput;
-    public EditText FrequencyInput;
 
     @SuppressLint("StaticFieldLeak")
     public static TextView InfoTextView;
@@ -51,6 +52,7 @@ public class MainActivity extends AppCompatActivity {
     public AudioDecoder Decoder;
     public MediaPlayer mediaPlayer;
     private WaveRender waveRender;
+    private View.OnClickListener Play;
 
     public void RequestPermissions(Activity activity) {
         if (ContextCompat.checkSelfPermission(activity, Manifest.permission.READ_EXTERNAL_STORAGE) !=
@@ -89,14 +91,13 @@ public class MainActivity extends AppCompatActivity {
 
         startObserverButton = this.findViewById(R.id.startObserverButton);
         WaveRecyclerView = this.findViewById(R.id.WaveRecyclerView);
-        FrequencyInput = this.findViewById(R.id.FrequencyInput);
         InfoTextView = this.findViewById(R.id.InfoTextView);
         playButton = this.findViewById(R.id.playButton);
         ScaleInput = this.findViewById(R.id.scaleInput);
         MainView = this.findViewById(R.id.MainView);
 
         String pkgName = getApplicationContext().getPackageName();
-        Uri uri = Uri.parse("android.resource://" + pkgName + "/raw/"+R.raw.hollow);
+        Uri uri = Uri.parse("android.resource://" + pkgName + "/raw/" + R.raw.hollow);
 
         Decoder = new AudioDecoder(this, uri);
 
@@ -131,7 +132,6 @@ public class MainActivity extends AppCompatActivity {
                 }
             });
 
-
             WaveRecyclerView.setHasFixedSize(false);
             WaveRecyclerView.setLayoutManager(new LinearLayoutManager(this,
                     LinearLayoutManager.HORIZONTAL, false));
@@ -146,7 +146,8 @@ public class MainActivity extends AppCompatActivity {
 
             final boolean[] isPlay = {false};
             AtomicBoolean IsPapered = new AtomicBoolean(false);
-            playButton.setOnClickListener((v -> {
+
+            View.OnClickListener PlayWithMusic = v -> {
                 if (!isPlay[0] && !mediaPlayer.isPlaying()) {
                     if (!IsPapered.get()) {
                         mediaPlayer.setOnPreparedListener((mp) -> {
@@ -157,10 +158,10 @@ public class MainActivity extends AppCompatActivity {
                             timer.scheduleAtFixedRate(new TimerTask() {
                                 @Override
                                 public void run() {
-                                    if (mediaPlayer.isPlaying())
-                                        WaveAdapter.update((mediaPlayer.getCurrentPosition() * 1000 + WaveAdapter.getRenderMediaTimeMS()));
+                                    // if (mediaPlayer.isPlaying())
+                                    WaveAdapter.update((mediaPlayer.getCurrentPosition() * 1000 + WaveAdapter.getRenderMediaTimeMS()));
                                 }
-                            }, 16, 1);
+                            }, 0, 16);
 
                         });
                         mediaPlayer.prepareAsync();
@@ -176,9 +177,28 @@ public class MainActivity extends AppCompatActivity {
                 }
 
                 isPlay[0] = !isPlay[0];
-            }));
-        });
+            };
 
+            this.Play = null;
+            Play = v -> {
+                Timer timer = new Timer();
+                AtomicInteger time = new AtomicInteger();
+
+                timer.scheduleAtFixedRate(new TimerTask() {
+                    @Override
+                    public void run() {
+                        WaveAdapter.update(time.addAndGet(Decoder.bufferDuration/1000));
+                    }
+                }, 0, 100);
+                playButton.setOnClickListener(v1 -> {
+                    timer.cancel();
+                    playButton.setOnClickListener(Play);
+                });
+            };
+
+            playButton.setOnClickListener(Play);
+
+        });
     }
 
     @Override

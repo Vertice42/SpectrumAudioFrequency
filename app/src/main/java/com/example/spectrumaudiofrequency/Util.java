@@ -3,6 +3,8 @@ package com.example.spectrumaudiofrequency;
 import android.os.Build;
 import android.util.Log;
 
+import org.jetbrains.annotations.NotNull;
+
 import java.io.File;
 import java.io.FileFilter;
 import java.util.regex.Pattern;
@@ -139,10 +141,44 @@ public class Util {
     }
 
     public static class CalculatePerformance {
+        static class Performance {
+            String Name;
+            long ProcessingTimeNano;
+            long MediaNano;
+
+            Performance(String Name, long ProcessingTimeNano, long Media) {
+                this.Name = Name;
+                this.ProcessingTimeNano = ProcessingTimeNano;
+                this.MediaNano = Media;
+            }
+
+            public float getProcessingTime() {
+                return ProcessingTimeNano / 1000000f;
+            }
+
+            public float getMediaNano() {
+                return MediaNano / 1000000f;
+            }
+
+            public String toString(String extra) {
+                return Name + ": " + getProcessingTime() + "ms | Media: " + getMediaNano() + "ms | " + extra;
+            }
+
+            public @NotNull String toString() {
+                return toString("");
+            }
+
+            void logPerformance(String extra) {
+                Log.i(Name, toString(extra));
+            }
+
+            void logPerformance() {
+                logPerformance("");
+            }
+        }
+
         private final String Name;
-        private int ResetCont = 10;
-        private long ProcessingTime;
-        private long Media;
+        private int ResetCont = 100;
         private long Time;
 
         private long ProcessingTimeSome;
@@ -161,31 +197,19 @@ public class Util {
             Time = System.nanoTime();
         }
 
-        private void calculate() {
-            if (count > ResetCont){
+        public Performance stop() {
+            if (count > ResetCont) {
                 ProcessingTimeSome = 0;
                 count = 0;
             }
 
             long ProcessingTime = System.nanoTime() - Time;
             ProcessingTimeSome += ProcessingTime;
-            this.ProcessingTime = ProcessingTime;
             count++;
 
-            Media = ProcessingTimeSome / count;
-        }
+            long Media = ProcessingTimeSome / count;
 
-        private float getProcessingTime() {
-            return ProcessingTime / 1000000f;
-        }
-
-        private float getMedia() {
-            return Media / 1000000f;
-        }
-
-        void logPerformance() {
-            calculate();
-            Log.i(Name, "ProcessingTime: " + getProcessingTime() + " Media: " + getMedia());
+            return new Performance(Name,ProcessingTime, Media);
         }
     }
 }

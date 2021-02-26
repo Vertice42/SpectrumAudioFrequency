@@ -6,6 +6,8 @@ import androidx.renderscript.RenderScript;
 import androidx.renderscript.Script;
 import androidx.renderscript.Type;
 
+import org.jetbrains.annotations.NotNull;
+
 import java.util.ArrayList;
 import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.ForkJoinTask;
@@ -28,12 +30,16 @@ public class SinusoidConverter {
     }
 
     static abstract class CalculatorFFT implements Calculate {
-        static class GPUFFTTask {
+        static boolean CalculatePerformanceEnable = false;
+        private Util.CalculatePerformance gnuFFT_PerformanceTask;
+
+        //todo add asink metodo;
+        static class fftRequest {
 
             public final ForkJoinTask<float[]> task;
             public short[] SampleInput;
 
-            GPUFFTTask(CalculatorFFT CalculatorFFT, short[] SampleInput) {
+            fftRequest(CalculatorFFT CalculatorFFT, short[] SampleInput) {
                 this.SampleInput = SampleInput;
                 task = new RecursiveTask<float[]>() {
                     @Override
@@ -42,11 +48,9 @@ public class SinusoidConverter {
                     }
                 };
             }
-
-
         }
 
-        private final ArrayList<GPUFFTTask> tasks = new ArrayList<>();
+        private final ArrayList<fftRequest> fftRequests = new ArrayList<>();
 
         private final ForkJoinPool poll;
 
@@ -57,19 +61,38 @@ public class SinusoidConverter {
             this.poll = poll;
         }
 
-        public void Process(GPUFFTTask task) {
-            tasks.add(task);
-            if (tasks.size() == 1) NextRequest();
+        public float[] Process(short[] SampleChannels) {
+            fftRequest gpu_fftRequest = new fftRequest(this, SampleChannels);
+            Process(gpu_fftRequest);
+            return gpu_fftRequest.task.join();
+        }
+
+        private void Process(fftRequest task) {
+            fftRequests.add(task);
+            if (fftRequests.size() == 1) NextRequest();
+        }
+
+
+        private void RunWithPerformanceCalculation(ForkJoinTask<float[]> task) {
+            if (this.gnuFFT_PerformanceTask == null)
+                this.gnuFFT_PerformanceTask = new Util.CalculatePerformance("gnuFFT_PerformanceTask", 100);
+            gnuFFT_PerformanceTask.start();
+            poll.execute(task);
+            gnuFFT_PerformanceTask.stop().logPerformance();
+        }
+
+        private void Run(ForkJoinTask<float[]> task) {
+            poll.execute(task);
         }
 
         private void NextRequest() {
-            if (tasks.size() == 0) return;
+            if (fftRequests.size() == 0) return;
 
-            GPUFFTTask gpuFftTask = tasks.get(0);
-
-            poll.execute(gpuFftTask.task);
-
-            tasks.remove(gpuFftTask);
+            fftRequest gpuFFTRequest = this.fftRequests.get(0);
+            if (CalculatorFFT.CalculatePerformanceEnable)
+                RunWithPerformanceCalculation(gpuFFTRequest.task);
+            else Run(gpuFFTRequest.task);
+            this.fftRequests.remove(gpuFFTRequest);
 
             NextRequest();
         }
@@ -274,4 +297,24 @@ public class SinusoidConverter {
 
     private static native void setPrecision(double Precision);
 
+    /**
+     * Decrease the Sample by averaging the values.
+     * If the new length is greater than or equal to the old one,
+     * returns the sample without modification.
+     * */
+    static short[] SimplifySinusoid(short @NotNull [] Sample, int NewLength) {
+        if (NewLength >= Sample.length) return Sample;
+
+        short[] result = new short[NewLength];
+        int divider = Sample.length / NewLength;
+
+        for (int i = 0; i < result.length; i++) {
+            short media = 0;
+            for (int j = 0; j < divider; j++) media += Sample[i * divider + j];
+            media /= divider;
+
+            result[i] = media;
+        }
+        return result;
+    }
 }
