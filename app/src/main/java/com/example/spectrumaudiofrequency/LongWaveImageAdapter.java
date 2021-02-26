@@ -2,6 +2,7 @@ package com.example.spectrumaudiofrequency;
 
 import android.annotation.SuppressLint;
 import android.os.Build;
+import android.util.Log;
 import android.view.ViewGroup;
 import android.widget.ImageView;
 
@@ -9,11 +10,16 @@ import androidx.annotation.NonNull;
 import androidx.annotation.RequiresApi;
 import androidx.recyclerview.widget.RecyclerView;
 
-import java.util.Date;
+import com.example.spectrumaudiofrequency.AudioDecoder.PeriodRequest;
+import com.example.spectrumaudiofrequency.Util.CalculatePerformance.Performance;
+
+import java.util.Arrays;
 
 import static com.example.spectrumaudiofrequency.MainActivity.InfoTextView;
 
 public class LongWaveImageAdapter extends RecyclerView.Adapter<WaveViewHolder> {
+    private final Util.CalculatePerformance RequestPerformance;
+    private final Util.CalculatePerformance RenderPerformance;
     public int WaveLength = 0;
 
     public AudioDecoder AudioDecoder;
@@ -22,7 +28,7 @@ public class LongWaveImageAdapter extends RecyclerView.Adapter<WaveViewHolder> {
     public int Zoom = 1;
 
     private static final int ImageResolution = 1;
-    private static final int Period = 24000;
+    private static final int Period = 24000;//Nanosecond
 
     int getPeriod() {
         return Period * Zoom;
@@ -33,12 +39,15 @@ public class LongWaveImageAdapter extends RecyclerView.Adapter<WaveViewHolder> {
     LongWaveImageAdapter(AudioDecoder audioDecoder, WaveRender waveRender) {
         this.AudioDecoder = audioDecoder;
         this.waveRender = waveRender;
+
+        this.RequestPerformance = new Util.CalculatePerformance("RequestPerformance");
+        this.RenderPerformance = new Util.CalculatePerformance("RenderPerformance");
     }
 
     @RequiresApi(api = Build.VERSION_CODES.LOLLIPOP)
     private void setWavePieceImageOnHolder(WaveViewHolder holder, long Time,
                                            short[][] SampleChannels, long WavePieceDuration) {
-        holder.imageView.setImageURI(null);
+        holder.imageView.setImageBitmap(null);
         waveRender.render(holder.ImageBitmap, SampleChannels, Time, WavePieceDuration,
                 (bitmap) -> holder.updateImage());
     }
@@ -51,52 +60,44 @@ public class LongWaveImageAdapter extends RecyclerView.Adapter<WaveViewHolder> {
                 RecyclerView.LayoutParams.MATCH_PARENT, RecyclerView.LayoutParams.MATCH_PARENT);
 
         WaveImageView.setLayoutParams(layoutParams);
-
         return new WaveViewHolder(WaveImageView, parent.getWidth() / ImageResolution, parent.getHeight() / ImageResolution);
     }
 
     @RequiresApi(api = Build.VERSION_CODES.LOLLIPOP)
     public void setPosition(WaveViewHolder waveViewHolder, int position) {
         long Time = position * getPeriod();
-        AudioDecoder.addRequest(new AudioDecoder.PeriodRequest(Time, getPeriod(),
-                (AudioChannels, SampleDuration) -> {
-                    setWavePieceImageOnHolder(waveViewHolder, Time, AudioChannels, SampleDuration);
-                }));
+        AudioDecoder.addRequest(new PeriodRequest(Time, getPeriod(),
+                (AudioChannels, SampleDuration) ->
+                        setWavePieceImageOnHolder(waveViewHolder, Time, AudioChannels, SampleDuration)));
     }
 
     boolean inUpdate = false;
-    int times = 0;
-    int time = 0;
-    private int RenderMediaTimeMS = 0;
+    private int RenderMediaTimeMS = 1;
 
     public int getRenderMediaTimeMS() {
         return RenderMediaTimeMS;
     }
+
 
     @SuppressLint("SetTextI18n")
     @RequiresApi(api = Build.VERSION_CODES.LOLLIPOP)
     public void update(int Time) {
         if (inUpdate) return;
         inUpdate = true;
-        long RequestStartTime = new Date().getTime();
-        AudioDecoder.addRequest(new AudioDecoder.PeriodRequest(Time, getPeriod(), (AudioChannels, SampleDuration) -> {
-            long RenderStartTime = new Date().getTime();
-            long RequestTime = new Date().getTime() - RequestStartTime;
 
-            waveRender.render(this.holderObserved.ImageBitmap, AudioChannels, Time, SampleDuration,
+        RequestPerformance.start();
+        AudioDecoder.addRequest(new PeriodRequest(Time, getPeriod(), (AudioChannels, SampleDuration) -> {
+            Performance requestPerformanceResult = RequestPerformance.stop();
+            requestPerformanceResult.logPerformance();
+
+            RenderPerformance.start();
+            waveRender.render(holderObserved.ImageBitmap, AudioChannels, Time, SampleDuration,
                     (bitmap) -> {
-                        this.holderObserved.ImageBitmap = bitmap;
-                        this.holderObserved.updateImage();
+                        holderObserved.ImageBitmap = bitmap;
+                        holderObserved.updateImage();
                         inUpdate = false;
-                        if (times > 1000) {
-                            times = 0;
-                            time = 0;
-                        }
-                        time += (new Date().getTime() - RenderStartTime) + RequestTime;
-                        times++;
-                        RenderMediaTimeMS = time / times;
-                        InfoTextView.setText("Time: " + Time + " RenderTime: " + (new Date().getTime() - RenderStartTime) + "ms"
-                                + " RequestTime: " + RequestTime + "ms" + " Media:" + RenderMediaTimeMS + "ms");
+
+                        InfoTextView.setText(requestPerformanceResult.toString() + RenderPerformance.stop().toString());
                     });
         }));
     }
@@ -104,8 +105,8 @@ public class LongWaveImageAdapter extends RecyclerView.Adapter<WaveViewHolder> {
     @RequiresApi(api = Build.VERSION_CODES.LOLLIPOP)
     @Override
     public void onBindViewHolder(@NonNull WaveViewHolder holder, int position) {
-        setPosition(holder, position);
         this.holderObserved = holder;
+        setPosition(holder, position);
     }
 
     @Override
