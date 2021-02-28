@@ -2,7 +2,6 @@ package com.example.spectrumaudiofrequency;
 
 import android.annotation.SuppressLint;
 import android.os.Build;
-import android.util.Log;
 import android.view.ViewGroup;
 import android.widget.ImageView;
 
@@ -12,8 +11,6 @@ import androidx.recyclerview.widget.RecyclerView;
 
 import com.example.spectrumaudiofrequency.AudioDecoder.PeriodRequest;
 import com.example.spectrumaudiofrequency.Util.CalculatePerformance.Performance;
-
-import java.util.Arrays;
 
 import static com.example.spectrumaudiofrequency.MainActivity.InfoTextView;
 
@@ -66,9 +63,8 @@ public class LongWaveImageAdapter extends RecyclerView.Adapter<WaveViewHolder> {
     @RequiresApi(api = Build.VERSION_CODES.LOLLIPOP)
     public void setPosition(WaveViewHolder waveViewHolder, int position) {
         long Time = position * getPeriod();
-        AudioDecoder.addRequest(new PeriodRequest(Time, getPeriod(),
-                (AudioChannels, SampleDuration) ->
-                        setWavePieceImageOnHolder(waveViewHolder, Time, AudioChannels, SampleDuration)));
+        AudioDecoder.addRequest(new PeriodRequest(Time, getPeriod(), decoderResult ->
+                setWavePieceImageOnHolder(waveViewHolder, Time, decoderResult.SamplesChannels, decoderResult.BufferDuration)));
     }
 
     boolean inUpdate = false;
@@ -86,13 +82,14 @@ public class LongWaveImageAdapter extends RecyclerView.Adapter<WaveViewHolder> {
         inUpdate = true;
 
         RequestPerformance.start();
-        AudioDecoder.addRequest(new PeriodRequest(Time, getPeriod(), (AudioChannels, SampleDuration) -> {
+        AudioDecoder.addRequest(new PeriodRequest(Time, getPeriod(), decoderResult -> {
             Performance requestPerformanceResult = RequestPerformance.stop();
             requestPerformanceResult.logPerformance();
 
             RenderPerformance.start();
-            waveRender.render(holderObserved.ImageBitmap, AudioChannels, Time, SampleDuration,
-                    (bitmap) -> {
+            waveRender.render(holderObserved.ImageBitmap, decoderResult.SamplesChannels, Time,
+                    decoderResult.BufferDuration, (bitmap) -> {
+
                         holderObserved.ImageBitmap = bitmap;
                         holderObserved.updateImage();
                         inUpdate = false;
