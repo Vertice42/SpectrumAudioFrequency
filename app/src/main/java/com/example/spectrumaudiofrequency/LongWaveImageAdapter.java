@@ -13,6 +13,7 @@ import com.example.spectrumaudiofrequency.AudioDecoder.PeriodRequest;
 import com.example.spectrumaudiofrequency.Util.CalculatePerformance.Performance;
 
 import static com.example.spectrumaudiofrequency.MainActivity.InfoTextView;
+import static com.example.spectrumaudiofrequency.Util.CalculatePerformance.SomePerformances;
 
 public class LongWaveImageAdapter extends RecyclerView.Adapter<WaveViewHolder> {
     private final Util.CalculatePerformance RequestPerformance;
@@ -44,7 +45,6 @@ public class LongWaveImageAdapter extends RecyclerView.Adapter<WaveViewHolder> {
     @RequiresApi(api = Build.VERSION_CODES.LOLLIPOP)
     private void setWavePieceImageOnHolder(WaveViewHolder holder, long Time,
                                            short[][] SampleChannels, long WavePieceDuration) {
-        holder.imageView.setImageBitmap(null);
         waveRender.render(holder.ImageBitmap, SampleChannels, Time, WavePieceDuration,
                 (bitmap) -> holder.updateImage());
     }
@@ -64,16 +64,10 @@ public class LongWaveImageAdapter extends RecyclerView.Adapter<WaveViewHolder> {
     public void setPosition(WaveViewHolder waveViewHolder, int position) {
         long Time = position * getPeriod();
         AudioDecoder.addRequest(new PeriodRequest(Time, getPeriod(), decoderResult ->
-                setWavePieceImageOnHolder(waveViewHolder, Time, decoderResult.SamplesChannels, decoderResult.BufferDuration)));
+                setWavePieceImageOnHolder(waveViewHolder, Time, decoderResult.SamplesChannels, decoderResult.SampleDuration)));
     }
 
     boolean inUpdate = false;
-    private int RenderMediaTimeMS = 1;
-
-    public int getRenderMediaTimeMS() {
-        return RenderMediaTimeMS;
-    }
-
 
     @SuppressLint("SetTextI18n")
     @RequiresApi(api = Build.VERSION_CODES.LOLLIPOP)
@@ -83,18 +77,21 @@ public class LongWaveImageAdapter extends RecyclerView.Adapter<WaveViewHolder> {
 
         RequestPerformance.start();
         AudioDecoder.addRequest(new PeriodRequest(Time, getPeriod(), decoderResult -> {
-            Performance requestPerformanceResult = RequestPerformance.stop();
-            requestPerformanceResult.logPerformance();
+            Performance requestPerformance = RequestPerformance.stop();
 
             RenderPerformance.start();
             waveRender.render(holderObserved.ImageBitmap, decoderResult.SamplesChannels, Time,
-                    decoderResult.BufferDuration, (bitmap) -> {
+                    decoderResult.SampleDuration, (bitmap) -> {
 
                         holderObserved.ImageBitmap = bitmap;
                         holderObserved.updateImage();
                         inUpdate = false;
 
-                        InfoTextView.setText(requestPerformanceResult.toString() + RenderPerformance.stop().toString());
+                        Performance renderPerformance = RenderPerformance.stop();
+
+                        InfoTextView.setText(SomePerformances("Total", new Performance[]
+                                {requestPerformance, renderPerformance}).toString() +
+                                requestPerformance.toString() + renderPerformance.toString());
                     });
         }));
     }

@@ -10,7 +10,6 @@ import android.os.Build;
 import android.os.Environment;
 import android.util.Log;
 
-import androidx.annotation.RequiresApi;
 import androidx.renderscript.RenderScript;
 
 import com.example.spectrumaudiofrequency.SinusoidConverter.CalculatorFFT;
@@ -18,19 +17,19 @@ import com.example.spectrumaudiofrequency.SinusoidConverter.CalculatorFFT__Adapt
 import com.example.spectrumaudiofrequency.SinusoidConverter.CalculatorFFT__Default;
 import com.example.spectrumaudiofrequency.SinusoidConverter.CalculatorFFT__Precise;
 import com.example.spectrumaudiofrequency.SinusoidConverter.CalculatorFFT_Native;
-import com.example.spectrumaudiofrequency.Util.CalculatePerformance;
+import com.example.spectrumaudiofrequency.SoundAnalyzer.AudioPeakAnalyzer.Peak;
 
 import java.io.File;
 import java.io.FileOutputStream;
 
 import java.util.Date;
 import java.util.concurrent.ForkJoinPool;
-import java.util.concurrent.RecursiveTask;
 
 class WaveRender {
 
     private final RenderScript rs;
-    private final CalculatePerformance gnuFFT_PerformanceTask;
+    private long SampleDuration;
+    private long Time;
 
     interface WaveRenderListeners {
         void onFinish(Bitmap bitmap);
@@ -38,6 +37,8 @@ class WaveRender {
 
     private static final String Folder = "WavePieces";
     private final ForkJoinPool pool;
+
+    public Peak[] Peaks = new Peak[0];
 
     public long SpectrumSize;
 
@@ -49,6 +50,9 @@ class WaveRender {
     public boolean AntiAlias = true;
 
     private final CalculatorFFT calculatorFFTGpu;
+
+    private Bitmap imageBitmap;
+    private short[][] sampleChannels;
 
     WaveRender(Context context, long SpectrumSize) {
         this.SpectrumSize = SpectrumSize;
@@ -74,10 +78,6 @@ class WaveRender {
                 this.calculatorFFTGpu = new CalculatorFFT__Default(rs, pool);
 
         }
-
-        this.gnuFFT_PerformanceTask = new CalculatePerformance("gnuFFT_PerformanceTask", 100);
-
-
     }
 
     public static String getImageFileName(long ImageID) {
@@ -413,56 +413,35 @@ class WaveRender {
         }
     }
 
-    public class DrawWaves extends RecursiveTask<Bitmap> {
+    public void DrawAll(WaveRenderListeners onRenderFinish) {
+        Canvas canvas = new Canvas(imageBitmap);
+        canvas.drawColor(Color.WHITE);
+        //Draw background
 
-        private final Bitmap imageBitmap;
-        private final short[][] sampleChannels;
-        private final long SampleDuration;
-        private final long Time;
-        private final WaveRenderListeners onRenderFinish;
+        //DrawTime(canvas, Time, SampleDuration, Height / 20f);
 
-        public DrawWaves(Bitmap imageBitmap, short[][] sampleChannels, long Time,
-                         long SampleDuration, WaveRenderListeners onRenderFinish) {
-            this.imageBitmap = imageBitmap;
-            this.sampleChannels = sampleChannels;
-            this.SampleDuration = SampleDuration;
-            this.Time = Time;
-            this.onRenderFinish = onRenderFinish;
-        }
+        //DrawSinusoid(canvas, sampleChannels[0], Height / 4f,Color.GREEN, Height / 2f);
 
-        @Override
-        protected Bitmap compute() {
-            Canvas canvas = new Canvas(imageBitmap);
-            canvas.drawColor(Color.argb(255, 255, 255, 255));
-            //Draw background
+        //DrawWave(canvas, SinusoidConverter.SimplifySinusoid(sampleChannels[0], Width), Height / 3f, Color.BLACK, Height / 2f);
 
-            DrawTime(canvas, Time, SampleDuration, Height / 20f);
+        float[] process = calculatorFFTGpu.Process(sampleChannels[0]);
+        Draw_fft(canvas, SinusoidConverter.SimplifySinusoid(process, Width), Height / 1.5f, Color.BLUE, Height / 20f);
 
-            DrawSinusoid(canvas, sampleChannels[0],
-                    Height / 4f, Color.GREEN, Height / 2f);
-
-            DrawWave(canvas, SinusoidConverter.SimplifySinusoid(sampleChannels[0], Width),
-                    Height / 3f, Color.BLACK, Height / 2f);
-
-            Draw_fft(canvas, calculatorFFTGpu.Process(sampleChannels[0]),
-                    Height / 1.5f, Color.BLUE, Height / 20f);
-
-
-            //DrawFFT_Test(canvas, wavePiece[0], Time, WavePieceDuration);
-            //DrawWaveAmplitudeNegative(canvas,wavePiece[0],FFtWaveAnchor,Color.BLACK);
-
-            onRenderFinish.onFinish(imageBitmap);
-            return imageBitmap;
-        }
-
+        onRenderFinish.onFinish(imageBitmap);
     }
 
     public void render(Bitmap imageBitmap, short[][] SampleChannels, long Time, long SampleDuration,
                        WaveRenderListeners onRenderFinish) {
+
+        this.imageBitmap = imageBitmap;
+        this.sampleChannels = SampleChannels;
+        this.SampleDuration = SampleDuration;
+        this.Time = Time;
+
         this.Width = imageBitmap.getWidth();
         this.Height = imageBitmap.getHeight();
 
-        pool.execute(new DrawWaves(imageBitmap, SampleChannels, Time, SampleDuration, onRenderFinish));
+        pool.execute(() -> DrawAll(onRenderFinish));
     }
 
     public static boolean Clear() {

@@ -317,4 +317,20 @@ public class SinusoidConverter {
         }
         return result;
     }
+
+    static float[] SimplifySinusoid(float @NotNull [] Sample, int NewLength) {
+        if (NewLength >= Sample.length) return Sample;
+
+        float[] result = new float[NewLength];
+        int divider = Sample.length / NewLength;
+
+        for (int i = 0; i < result.length; i++) {
+            float media = 0;
+            for (int j = 0; j < divider; j++) media += Sample[i * divider + j];
+            media /= divider;
+
+            result[i] = media;
+        }
+        return result;
+    }
 }

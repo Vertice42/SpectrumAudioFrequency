@@ -177,6 +177,16 @@ public class Util {
             }
         }
 
+        static Performance SomePerformances(String name, Performance[] performances) {
+            long MediaNano = 0;
+            long ProcessingTimeNano = 0;
+            for (Performance performance : performances) {
+                MediaNano += performance.MediaNano;
+                ProcessingTimeNano += performance.ProcessingTimeNano;
+            }
+            return new Performance(name, ProcessingTimeNano, MediaNano);
+        }
+
         private final String Name;
         private int ResetCont = 100;
         private long Time;
@@ -209,7 +219,7 @@ public class Util {
 
             long Media = ProcessingTimeSome / count;
 
-            return new Performance(Name,ProcessingTime, Media);
+            return new Performance(Name, ProcessingTime, Media);
         }
     }
 }

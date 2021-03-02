@@ -17,20 +17,24 @@ import java.nio.ByteOrder;
 import java.nio.ShortBuffer;
 import java.util.ArrayList;
 import java.util.concurrent.ForkJoinPool;
+import java.util.concurrent.ForkJoinTask;
 
 import static android.media.MediaExtractor.SEEK_TO_NEXT_SYNC;
 
 @RequiresApi(api = Build.VERSION_CODES.LOLLIPOP)
 class AudioDecoder {
+
     private ForkJoinPool Poll;
     private Activity activity;
     private Uri uri;
     private String AudioPath;
     private MediaCodec Decoder;
 
-    public MediaFormat format;
-    public MediaExtractor extractor;
-    public int bufferDuration;
+    private MediaFormat format;
+    private MediaExtractor extractor;
+
+    public int SampleDuration;
+    private int ChannelsNumber;
 
     private interface IdListener {
         void onIdAvailable(int Id);
@@ -55,11 +59,11 @@ class AudioDecoder {
 
     public static class DecoderResult {
         short[][] SamplesChannels;
-        long BufferDuration;
+        long SampleDuration;
 
-        DecoderResult(short[][] SamplesChannels, long BufferDuration) {
+        DecoderResult(short[][] SamplesChannels, long SampleDuration) {
             this.SamplesChannels = SamplesChannels;
-            this.BufferDuration = BufferDuration;
+            this.SampleDuration = SampleDuration;
         }
     }
 
@@ -96,36 +100,14 @@ class AudioDecoder {
         } else {
             this.Poll = new ForkJoinPool();
         }
-        prepare();
     }
 
     AudioDecoder(String AudioPath) {
         this.AudioPath = AudioPath;
-        prepare();
     }
 
-    private long Duration;
-
-    /**
-     * get Media Duration of File on MicroSeconds
-     */
-    long getDuration() {
-        if (format != null) Duration = format.getLong(MediaFormat.KEY_DURATION);
-        return Duration;
-    }
-
-    private long timeOfExtractor = 0;
-
-    private void setTimeOfExtractor(long NewTime) {
-        if (NewTime - timeOfExtractor > bufferDuration)
-            extractor.seekTo(NewTime, SEEK_TO_NEXT_SYNC);
-        else extractor.advance();
-
-        timeOfExtractor = NewTime;
-    }
-
-    private void prepare() {
-        this.Poll.execute(() -> {
+    public ForkJoinTask<?> prepare() {
+        return this.Poll.submit(() -> {
             try {
                 Decoder = MediaCodec.createDecoderByType(MediaFormat.MIMETYPE_AUDIO_MPEG);
             } catch (IOException e) {
@@ -141,6 +123,10 @@ class AudioDecoder {
             }
 
             format = extractor.getTrackFormat(0);
+
+            ChannelsNumber = format.getInteger(MediaFormat.KEY_CHANNEL_COUNT);
+            SampleDuration = format.getInteger(MediaFormat.KEY_SAMPLE_RATE) / ChannelsNumber;
+
             extractor.selectTrack(0);
 
             Decoder.setCallback(new MediaCodec.Callback() {
@@ -179,6 +165,27 @@ class AudioDecoder {
         });
     }
 
+    private long Duration;
+
+    /**
+     * get Media Duration of File on MicroSeconds
+     */
+    long getDuration() {
+        if (format != null) Duration = format.getLong(MediaFormat.KEY_DURATION);
+        return Duration;
+    }
+
+    private long timeOfExtractor = 0;
+
+    private void setTimeOfExtractor(long NewTime) {
+        if (NewTime - timeOfExtractor > SampleDuration)
+            extractor.seekTo(NewTime, SEEK_TO_NEXT_SYNC);
+        else extractor.advance();
+
+        timeOfExtractor = NewTime;
+    }
+
+
     private void getInputId(IdListener idListener) {
         if (InputIds.size() > 0) {
             int InputId = InputIds.get(0);
@@ -193,24 +200,21 @@ class AudioDecoder {
     private DecoderResult processOutput(int OutputId) {
 
         ByteBuffer outputBuffer = Decoder.getOutputBuffer(OutputId);
-        int channelsNumber = format.getInteger(MediaFormat.KEY_CHANNEL_COUNT);
 
         ShortBuffer buffer = outputBuffer.order(ByteOrder.nativeOrder()).asShortBuffer();
 
-        short[][] SamplesChannels = new short[channelsNumber][buffer.remaining() / channelsNumber];
+        short[][] SamplesChannels = new short[ChannelsNumber][buffer.remaining() / ChannelsNumber];
 
         for (int i = 0; i < SamplesChannels.length; ++i) {
             for (int j = 0; j < SamplesChannels[i].length; j++) {
-                SamplesChannels[i][j] = buffer.get(j * channelsNumber + i);
+                SamplesChannels[i][j] = buffer.get(j * ChannelsNumber + i);
             }
         }
         //separate channels
 
         Decoder.releaseOutputBuffer(OutputId, false);
 
-        bufferDuration = format.getInteger(MediaFormat.KEY_SAMPLE_RATE) / channelsNumber;
-
-        return new DecoderResult(SamplesChannels, bufferDuration);
+        return new DecoderResult(SamplesChannels, SampleDuration);
     }
 
     private void processRequest(int InputId, PeriodRequest periodRequest) {
