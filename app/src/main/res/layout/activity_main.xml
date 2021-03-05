@@ -24,10 +24,10 @@
         android:layout_height="26dp"
         app:layout_constraintBottom_toBottomOf="@+id/WaveRecyclerView"
         app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintHorizontal_bias="0.523"
+        app:layout_constraintHorizontal_bias="0.773"
         app:layout_constraintStart_toStartOf="@+id/WaveRecyclerView"
         app:layout_constraintTop_toTopOf="@+id/WaveRecyclerView"
-        app:layout_constraintVertical_bias="0.69" />
+        app:layout_constraintVertical_bias="0.871" />
 
     <TextView
         android:id="@+id/InfoTextView"
@@ -61,21 +61,50 @@
             android:layout_height="match_parent"
             android:text="play" />
 
+        <Button
+            android:id="@+id/goButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="go" />
+
+        <Button
+            android:id="@+id/ReanalyzeButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="reanalyze" />
+
     </LinearLayout>
 
-    <ProgressBar
-        android:id="@+id/AnalysisProgressBar"
-        style="?android:attr/progressBarStyleHorizontal"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:indeterminate="false"
-        android:max="100"
-        android:progress="0"
-        android:progressDrawable="@android:drawable/presence_online"
-        android:progressTint="#FF0000"
+    <LinearLayout
+        android:id="@+id/ProgressLayout"
+        android:layout_width="607dp"
+        android:layout_height="309dp"
+        android:gravity="center"
+        android:orientation="vertical"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent" />
+        app:layout_constraintTop_toTopOf="parent">
+
+        <TextView
+            android:id="@+id/ProgressText"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="0%"
+            android:textColor="@android:color/background_dark"
+            android:textSize="36sp" />
+
+        <ProgressBar
+            android:id="@+id/AnalysisProgressBar"
+            style="?android:attr/progressBarStyleHorizontal"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:indeterminate="false"
+            android:max="100"
+            android:progress="0" />
+
+    </LinearLayout>
 
 </androidx.constraintlayout.widget.ConstraintLayout>

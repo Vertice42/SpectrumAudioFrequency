@@ -68,14 +68,14 @@ class AudioDecoder {
     }
 
     public static class PeriodRequest {
-        long Time;
-        long RequiredPeriodTime;
+        long RequiredTime;
+        long RequiredSampleDuration;
 
         ProcessListener ProcessListener;
 
-        PeriodRequest(long Time, long RequiredPeriodTime, ProcessListener ProcessListener) {
-            this.Time = Time;
-            this.RequiredPeriodTime = RequiredPeriodTime;
+        PeriodRequest(long RequiredTime, long RequiredSampleDuration, ProcessListener ProcessListener) {
+            this.RequiredTime = RequiredTime;
+            this.RequiredSampleDuration = RequiredSampleDuration;
             this.ProcessListener = ProcessListener;
         }
     }
@@ -136,18 +136,19 @@ class AudioDecoder {
                     if (InputIDListeners.size() != 0) {
                         IdListener idListener = InputIDListeners.get(0);
                         InputIDListeners.remove(idListener);
-                        idListener.onIdAvailable(0);
+                        idListener.onIdAvailable(inputBufferId);
                     } else {
                         InputIds.add(inputBufferId);
                     }
-
                 }
 
                 @Override
                 public void onOutputBufferAvailable(@NonNull final MediaCodec mediaCodec, final int outputBufferId,
                                                     @NonNull final MediaCodec.BufferInfo bufferInfo) {
+
                     DecoderResult decoderResult = processOutput(outputBufferId);
-                    Poll.execute(() -> getOutputPromise(outputBufferId).periodRequest.ProcessListener.OnProceed(decoderResult));
+                    OutputPromise outputPromise = getOutputPromise(outputBufferId);
+                    Poll.execute(() -> outputPromise.periodRequest.ProcessListener.OnProceed(decoderResult));
                 }
 
                 @Override
@@ -177,20 +178,18 @@ class AudioDecoder {
 
     private long timeOfExtractor = 0;
 
-    private void setTimeOfExtractor(long NewTime) {
-        if (NewTime - timeOfExtractor > SampleDuration)
+    public void setTimeOfExtractor(long NewTime) {
+        //if (NewTime - timeOfExtractor > SampleDuration)
             extractor.seekTo(NewTime, SEEK_TO_NEXT_SYNC);
-        else extractor.advance();
+        //else extractor.advance();
 
         timeOfExtractor = NewTime;
     }
-
 
     private void getInputId(IdListener idListener) {
         if (InputIds.size() > 0) {
             int InputId = InputIds.get(0);
             InputIds.remove(0);
-
             idListener.onIdAvailable(InputId);
         } else {
             InputIDListeners.add(idListener);
@@ -200,16 +199,18 @@ class AudioDecoder {
     private DecoderResult processOutput(int OutputId) {
 
         ByteBuffer outputBuffer = Decoder.getOutputBuffer(OutputId);
+        short[][] SamplesChannels;
 
         ShortBuffer buffer = outputBuffer.order(ByteOrder.nativeOrder()).asShortBuffer();
 
-        short[][] SamplesChannels = new short[ChannelsNumber][buffer.remaining() / ChannelsNumber];
+        SamplesChannels = new short[ChannelsNumber][buffer.remaining() / ChannelsNumber];
 
         for (int i = 0; i < SamplesChannels.length; ++i) {
             for (int j = 0; j < SamplesChannels[i].length; j++) {
                 SamplesChannels[i][j] = buffer.get(j * ChannelsNumber + i);
             }
         }
+
         //separate channels
 
         Decoder.releaseOutputBuffer(OutputId, false);
@@ -219,16 +220,13 @@ class AudioDecoder {
 
     private void processRequest(int InputId, PeriodRequest periodRequest) {
         ByteBuffer buffer = Decoder.getInputBuffer(InputId);
-        setTimeOfExtractor(periodRequest.RequiredPeriodTime);
+        setTimeOfExtractor(periodRequest.RequiredTime);
         int sampleSize = extractor.readSampleData(buffer, 0);
         long presentationTimeUs = extractor.getSampleTime();
 
+        if (sampleSize < 0) sampleSize = 2;
         ProcessPromises.add(new OutputPromise(InputId, periodRequest));
-        if (sampleSize < 0) {
-            Decoder.queueInputBuffer(InputId, 0, 0, presentationTimeUs, MediaCodec.BUFFER_FLAG_END_OF_STREAM);
-        } else {
-            Decoder.queueInputBuffer(InputId, 0, sampleSize, presentationTimeUs, 0);
-        }
+        Decoder.queueInputBuffer(InputId, 0, sampleSize, presentationTimeUs, 0);
 
     }
 

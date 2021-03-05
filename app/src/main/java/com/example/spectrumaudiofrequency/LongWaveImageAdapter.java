@@ -26,11 +26,6 @@ public class LongWaveImageAdapter extends RecyclerView.Adapter<WaveViewHolder> {
     public int Zoom = 1;
 
     private static final int ImageResolution = 1;
-    private static final int Period = 24000;//Nanosecond
-
-    int getPeriod() {
-        return Period * Zoom;
-    }
 
     private WaveViewHolder holderObserved;
 
@@ -61,10 +56,14 @@ public class LongWaveImageAdapter extends RecyclerView.Adapter<WaveViewHolder> {
     }
 
     @RequiresApi(api = Build.VERSION_CODES.LOLLIPOP)
-    public void setPosition(WaveViewHolder waveViewHolder, int position) {
-        long Time = position * getPeriod();
-        AudioDecoder.addRequest(new PeriodRequest(Time, getPeriod(), decoderResult ->
+    public void setPosition(WaveViewHolder waveViewHolder, long Time) {
+        AudioDecoder.addRequest(new PeriodRequest(Time, AudioDecoder.SampleDuration, decoderResult ->
                 setWavePieceImageOnHolder(waveViewHolder, Time, decoderResult.SamplesChannels, decoderResult.SampleDuration)));
+    }
+
+    @RequiresApi(api = Build.VERSION_CODES.LOLLIPOP)
+    public void setPosition(int position) {
+        setPosition(this.holderObserved, position);
     }
 
     boolean inUpdate = false;
@@ -76,7 +75,7 @@ public class LongWaveImageAdapter extends RecyclerView.Adapter<WaveViewHolder> {
         inUpdate = true;
 
         RequestPerformance.start();
-        AudioDecoder.addRequest(new PeriodRequest(Time, getPeriod(), decoderResult -> {
+        AudioDecoder.addRequest(new PeriodRequest(Time, AudioDecoder.SampleDuration, decoderResult -> {
             Performance requestPerformance = RequestPerformance.stop();
 
             RenderPerformance.start();
@@ -100,7 +99,7 @@ public class LongWaveImageAdapter extends RecyclerView.Adapter<WaveViewHolder> {
     @Override
     public void onBindViewHolder(@NonNull WaveViewHolder holder, int position) {
         this.holderObserved = holder;
-        setPosition(holder, position);
+        setPosition(holder, position * AudioDecoder.SampleDuration);
     }
 
     @Override

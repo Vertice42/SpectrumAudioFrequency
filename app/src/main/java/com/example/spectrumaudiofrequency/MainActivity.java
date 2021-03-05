@@ -12,6 +12,7 @@ import android.os.Bundle;
 import android.util.Log;
 import android.view.View;
 import android.widget.Button;
+import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.SeekBar;
 import android.widget.TextView;
@@ -24,10 +25,16 @@ import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
 import java.io.IOException;
+import java.util.Arrays;
 import java.util.Timer;
 import java.util.TimerTask;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+
+import static com.example.spectrumaudiofrequency.SoundAnalyzer.AudioPeakAnalyzer.Peak.JsonStringToPeakArray;
+import static com.example.spectrumaudiofrequency.SoundAnalyzer.AudioPeakAnalyzer.Peak.PeakArrayToJsonString;
+import static com.example.spectrumaudiofrequency.Util.ReadJsonFile;
+import static com.example.spectrumaudiofrequency.Util.SaveJsonFile;
 
 public class MainActivity extends AppCompatActivity {
     static {
@@ -49,6 +56,11 @@ public class MainActivity extends AppCompatActivity {
     private WaveRender waveRender;
     private View.OnClickListener Play;
     private ProgressBar AnalysisProgressBar;
+    private TextView ProgressText;
+    private LinearLayout ProgressLayout;
+    private Button ReanalyzeButton;
+    private Button goButton;
+    private int Peak;
 
     public void RequestPermissions(Activity activity) {
         if (ContextCompat.checkSelfPermission(activity, Manifest.permission.READ_EXTERNAL_STORAGE) !=
@@ -58,6 +70,27 @@ public class MainActivity extends AppCompatActivity {
                             Manifest.permission.READ_EXTERNAL_STORAGE},
                     MANAGE_EXTERNAL_STORAGE_REQUEST);
         }
+    }
+
+    private static boolean onAnalysis = false;
+
+    public void AnalyzeAudio(String AudioName) {
+        if (onAnalysis) return;
+        onAnalysis = true;
+
+        ProgressLayout.setVisibility(View.VISIBLE);
+
+        SoundAnalyzer soundAnalyzer = new SoundAnalyzer(Decoder, 200);
+        soundAnalyzer.setOnProgressChange(progress -> AnalysisProgressBar.post(() -> {
+            ProgressText.setText((progress + "%"));
+            AnalysisProgressBar.setProgress((int) (progress));
+        }));
+        soundAnalyzer.start(peaks -> {
+            ProgressLayout.post(() -> ProgressLayout.setVisibility(View.GONE));
+            waveRender.Peaks = peaks;
+            SaveJsonFile(this, AudioName, PeakArrayToJsonString(peaks));
+            onAnalysis = false;
+        });
     }
 
     @RequiresApi(api = Build.VERSION_CODES.LOLLIPOP)
@@ -70,41 +103,53 @@ public class MainActivity extends AppCompatActivity {
 
         RequestPermissions(this);
 
+        ProgressLayout = this.findViewById(R.id.ProgressLayout);
         AnalysisProgressBar = this.findViewById(R.id.AnalysisProgressBar);
+        ProgressText = this.findViewById(R.id.ProgressText);
+        goButton = this.findViewById(R.id.goButton);
+
         WaveRecyclerView = this.findViewById(R.id.WaveRecyclerView);
         InfoTextView = this.findViewById(R.id.InfoTextView);
         playButton = this.findViewById(R.id.playButton);
+        ReanalyzeButton = this.findViewById(R.id.ReanalyzeButton);
         SeekBar scaleInput = this.findViewById(R.id.scaleInput);
 
         String pkgName = getApplicationContext().getPackageName();
-        Uri uri = Uri.parse("android.resource://" + pkgName + "/raw/" + R.raw.hollow);
+        int id = R.raw.hollow;
+        Uri uri = Uri.parse("android.resource://" + pkgName + "/raw/" + id);
 
         Decoder = new AudioDecoder(this, uri);
         Decoder.prepare().join();
 
-        WaveRecyclerView.post(() -> {
-            waveRender = new WaveRender(this, Decoder.getDuration());
-            WaveAdapter = new LongWaveImageAdapter(Decoder, waveRender);
+        waveRender = new WaveRender(this, Decoder.getDuration());
+        WaveAdapter = new LongWaveImageAdapter(Decoder, this.waveRender);
 
-            WaveRecyclerView.setHasFixedSize(false);
-            WaveRecyclerView.setLayoutManager(new LinearLayoutManager
-                    (this, LinearLayoutManager.HORIZONTAL, false));
-            WaveRecyclerView.setAdapter(WaveAdapter);
+        WaveRecyclerView.setHasFixedSize(false);
+        WaveRecyclerView.setLayoutManager(new LinearLayoutManager
+                (this, LinearLayoutManager.HORIZONTAL, false));
+        WaveRecyclerView.setAdapter(WaveAdapter);
 
-            WaveAdapter.WaveLength = (int) Decoder.getDuration() / WaveAdapter.getPeriod();
-            WaveAdapter.notifyDataSetChanged();
+        WaveAdapter.WaveLength = (int) Decoder.getDuration() / Decoder.SampleDuration;
+        WaveAdapter.notifyDataSetChanged();
+
+
+        String FileName = String.valueOf(id);
+
+        if (ReadJsonFile(this, FileName).equals("")) {//todo change to true validation
+            AnalyzeAudio(FileName);
+        } else {
+            ProgressLayout.setVisibility(View.GONE);
+            waveRender.Peaks = JsonStringToPeakArray(ReadJsonFile(this, FileName));
+        }
+
+        ReanalyzeButton.setOnClickListener(v -> AnalyzeAudio(FileName));
+
+
+        goButton.setOnClickListener(v -> {
+            if (Peak >= waveRender.Peaks.length) Peak = 0;
+            WaveAdapter.setPosition((int) (waveRender.Peaks[Peak].time + Decoder.SampleDuration / 2));
+            Peak++;
         });
-
-        SoundAnalyzer soundAnalyzer = new SoundAnalyzer(Decoder);
-        soundAnalyzer.setOnProgressChange(progress ->
-        {
-            AnalysisProgressBar.post(() -> {
-                AnalysisProgressBar.setProgress((int) (progress));
-                if (progress == 100f) AnalysisProgressBar.setVisibility(View.GONE);
-            });
-
-        });
-        soundAnalyzer.start(peaks -> waveRender.Peaks = peaks);
 
         scaleInput.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
             @Override
