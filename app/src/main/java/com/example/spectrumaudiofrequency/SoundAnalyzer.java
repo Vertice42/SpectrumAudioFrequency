@@ -1,6 +1,7 @@
 package com.example.spectrumaudiofrequency;
 
 import android.os.Build;
+import android.util.Log;
 
 import com.example.spectrumaudiofrequency.AudioDecoder.ProcessListener;
 import com.example.spectrumaudiofrequency.SoundAnalyzer.AudioPeakAnalyzer.Peak;
@@ -15,10 +16,12 @@ import java.util.concurrent.ForkJoinPool;
 
 public class SoundAnalyzer {
     private final ForkJoinPool Poll;
+    private final AudioDecoder Decoder;
+
     private SoundAnalyzerProgressListener progressListener;
     private ProcessListener processListener;
+
     private int Time;
-    private final AudioDecoder Decoder;
     private int iterations;
     private int iterationsMax;
     private final int SpikesCollectionSize;
@@ -104,15 +107,16 @@ public class SoundAnalyzer {
             this.Duration = Duration;
         }
 
-        void analyzeData(short[] Data, long startDataTime, long endDataTime) {
+        void analyzeData(short[] Data, long startDataTime, long DataDuration) {
             if (Data.length < 10) return;
-            double datumDuration = (double) (endDataTime - startDataTime) / Data.length;
+            double datumDuration = DataDuration / (double) Data.length;
 
-            int index = (int) (startDataTime / (this.Duration / (this.peaks.length - 1f)));
+            int index = (int) (startDataTime / (this.Duration / this.peaks.length));
+
             for (int i = 0; i < Data.length; i++) {
                 if (Math.abs(Data[i]) > Math.abs(this.peaks[index].datum))
                     this.peaks[index].update(Data[i],
-                            startDataTime + (long) (datumDuration * i));
+                            startDataTime + (long) (i * datumDuration));
             }
         }
     }
@@ -137,17 +141,21 @@ public class SoundAnalyzer {
         this.Time = 0;
         AudioPeakAnalyzer audioPeakAnalyzer = new AudioPeakAnalyzer(this.SpikesCollectionSize, Decoder.getDuration());
         this.processListener = decoderResult -> {
+
+            if (Time != decoderResult.SampleTime)
+                Log.e("Time is !==", Time + "!=" + decoderResult.SampleTime);
+
+            audioPeakAnalyzer.analyzeData(decoderResult.SamplesChannels[0], Time, decoderResult.SampleDuration);
+
             Time += Decoder.SampleDuration;
             if (Time >= Decoder.getDuration() - Decoder.SampleDuration) {
-
-                Arrays.sort(audioPeakAnalyzer.peaks, (o1, o2) -> o2.datum - o1.datum);
+                //Arrays.sort(audioPeakAnalyzer.peaks, (o1, o2) -> o2.datum - o1.datum);
                 soundAnalyzerListener.OnFinishedAnalysis(audioPeakAnalyzer.peaks);
                 Decoder.setTimeOfExtractor(1);
 
             } else {
-                audioPeakAnalyzer.analyzeData(decoderResult.SamplesChannels[0], Time, Time + Decoder.SampleDuration);
-                Decoder.addRequest(new AudioDecoder.PeriodRequest(Time, Decoder.SampleDuration, processListener));
-
+                Decoder.addRequest(new AudioDecoder.PeriodRequest
+                        (Time, Decoder.SampleDuration, processListener));
 
                 iterations++;
                 if (iterations > iterationsMax) {

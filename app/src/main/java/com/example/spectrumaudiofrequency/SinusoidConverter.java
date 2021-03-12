@@ -8,6 +8,7 @@ import androidx.renderscript.Type;
 
 import org.jetbrains.annotations.NotNull;
 
+import java.lang.reflect.Array;
 import java.util.ArrayList;
 import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.ForkJoinTask;
@@ -301,7 +302,7 @@ public class SinusoidConverter {
      * Decrease the Sample by averaging the values.
      * If the new length is greater than or equal to the old one,
      * returns the sample without modification.
-     * */
+     */
     static short[] SimplifySinusoid(short @NotNull [] Sample, int NewLength) {
         if (NewLength >= Sample.length) return Sample;
 
@@ -322,15 +323,56 @@ public class SinusoidConverter {
         if (NewLength >= Sample.length) return Sample;
 
         float[] result = new float[NewLength];
-        int divider = Sample.length / NewLength;
+        int simplificationLength = Sample.length / NewLength;
 
         for (int i = 0; i < result.length; i++) {
             float media = 0;
-            for (int j = 0; j < divider; j++) media += Sample[i * divider + j];
-            media /= divider;
+
+            for (int j = 0; j < simplificationLength; j++)
+                media += Sample[i * simplificationLength + j];
+
+            media /= simplificationLength;
 
             result[i] = media;
         }
         return result;
+    }
+
+    static void SimplifySinusoid(ArrayList<Short> result, short @NotNull [] Sample, int NewLength) {
+
+        int simplificationLength = Sample.length / NewLength;
+
+        for (int i = 0; i < NewLength; i++) {
+            short media = 0;
+
+            for (int j = 0; j < simplificationLength; j++)
+                media += Sample[i * simplificationLength + j];
+
+            media /= simplificationLength;
+
+            result.add(media);
+        }
+    }
+
+    static class SuperSimplifySinusoid {
+        ArrayList<Short> result = new ArrayList<>();
+        private final int NewSampleLength;
+
+        public short[] getResult() {
+            short[] shorts = new short[result.size()];
+            for (int i = 0; i < shorts.length; i++) {
+                shorts[i] = result.get(i);
+            }
+            return shorts;
+        }
+
+        SuperSimplifySinusoid(int NewSampleLength) {
+            this.NewSampleLength = NewSampleLength;
+        }
+
+
+        void Simplify(short[] Samples) {
+            SimplifySinusoid(result, Samples, NewSampleLength);
+        }
     }
 }

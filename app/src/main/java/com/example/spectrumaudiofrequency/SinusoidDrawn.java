@@ -22,8 +22,6 @@ import com.example.spectrumaudiofrequency.SoundAnalyzer.AudioPeakAnalyzer.Peak;
 import java.io.File;
 import java.io.FileOutputStream;
 
-import java.time.Duration;
-import java.util.Arrays;
 import java.util.Date;
 import java.util.concurrent.ForkJoinPool;
 
@@ -31,15 +29,14 @@ import static com.example.spectrumaudiofrequency.SinusoidConverter.SimplifySinus
 
 class WaveRender {
 
-    private final RenderScript rs;
-    private long SampleDuration;
-    private long Time;
-
     interface WaveRenderListeners {
         void onFinish(Bitmap bitmap);
     }
 
     private static final String Folder = "WavePieces";
+
+    private final RenderScript rs;
+
     private final ForkJoinPool pool;
 
     public Peak[] Peaks = new Peak[0];
@@ -54,9 +51,6 @@ class WaveRender {
     public boolean AntiAlias = true;
 
     private final CalculatorFFT calculatorFFTGpu;
-
-    private Bitmap imageBitmap;
-    private short[][] sampleChannels;
 
     WaveRender(Context context, long SpectrumSize) {
         this.SpectrumSize = SpectrumSize;
@@ -113,52 +107,63 @@ class WaveRender {
     }
 
     private void DrawTime(Canvas canvas, long Time, long PieceDuration, float Anchor) {
-        float distance = ((float) PieceDuration / this.Width) * 10f;
+        int DrawNumber = 4;
+
+        float timeDistance = PieceDuration / (float) DrawNumber;
+        float pixelDistance = Width / (float) DrawNumber;
 
         Paint paint = new Paint();
         paint.setStrokeWidth(1);
         paint.setTextSize(10);
         paint.setColor(Color.BLACK);
 
-        long i = 0;
-        while (i < this.Width) {
-            canvas.drawText(((Time + i)) + "mic", i, Anchor + Anchor / 10, paint);
-            i += distance;
+        for (int i = 0; i < DrawNumber; i++) {
+            canvas.drawText(((Time + i * timeDistance)) + "mic", i * pixelDistance, Anchor + Anchor / 10, paint);
         }
     }
 
-    private void DrawAnalyzer(Canvas canvas, long Time, long SampleDuration, float Anchor, float Press) {
-        double pixelTime = ((double) Width) / SampleDuration;
+    private void DrawAnalyzer(Canvas canvas, short[] Sample, long Time, long SampleDuration, float Anchor, float Press) {
+        double pixelTime = (Width / (double) SampleDuration);
 
         Peak peakToDraw = null;
         for (Peak peak : this.Peaks) {
             if (peak.time >= Time && peak.time <= Time + SampleDuration) {
                 peakToDraw = peak;
+                break;
             }
         }
 
         if (peakToDraw == null) return;
 
-        float Position = (float) ((Time - peakToDraw.time) * pixelTime);
+        float Position = (float) ((peakToDraw.time - Time) * pixelTime);
 
         Paint textPaint = new Paint();
-        textPaint.setStrokeWidth(1);
+        textPaint.setStrokeWidth(20);
         textPaint.setTextSize(10);
         textPaint.setColor(Color.BLACK);
-        canvas.drawText(Time + (Position * pixelTime) + "m", Position, Anchor, textPaint);
+        canvas.drawText(peakToDraw.time + "mic", Position, Anchor+Anchor/10, textPaint);
         canvas.drawText("datum: " + peakToDraw.datum, Position, Anchor + Anchor / 2, textPaint);
 
-        Paint linePaint = new Paint();
-        linePaint.setColor(Color.RED);
-        linePaint.setStrokeWidth(3);
+        Paint pointPaint = new Paint();
+        pointPaint.setColor(Color.RED);
+        pointPaint.setStrokeWidth(10);
 
         float amplitude = Anchor + peakToDraw.datum / Press;
 
-        canvas.drawLine(Position, amplitude, Position + 2, amplitude, linePaint);
+        boolean exit = false;
+        for (short value : Sample) {
+            if (value == peakToDraw.datum) {
+                exit = true;
+                break;
+            }
+        }
 
+        if (exit) Log.e("not exit on Sample", "" + peakToDraw.datum);
+
+        canvas.drawPoint(Position, amplitude, pointPaint);
     }
 
-    private void Draw_fft(Canvas canvas, float[] fft, float Anchor, int color, float Press) {
+    private void DrawFFT(Canvas canvas, float[] fft, float Anchor, int color, float Press) {
         float SpaceBetweenWaves = (float) Width / fft.length;
         //"spacing" determining the line spacing is by consequence the size of the sound wave
         Paint WavePaint = new Paint();
@@ -444,37 +449,30 @@ class WaveRender {
         }
     }
 
-    public void DrawAll(WaveRenderListeners onRenderFinish) {
-        Canvas canvas = new Canvas(imageBitmap);
-        canvas.drawColor(Color.WHITE);
-        //Draw background
-
-        DrawTime(canvas, Time, SampleDuration, Height / 20f);
-
-        DrawAnalyzer(canvas, Time, SampleDuration, Height / 2f, Height / 2f);
-
-        DrawSinusoid(canvas, sampleChannels[0], Height / 2f, Color.GREEN, Height / 2f);
-
-        //DrawWave(canvas, SimplifySinusoid(sampleChannels[0], Width), Height / 3f, Color.BLACK, Height / 2f);
-
-        Draw_fft(canvas, SimplifySinusoid(calculatorFFTGpu.Process(sampleChannels[0]), Width),
-                Height / 1.5f, Color.BLUE, Height / 20f);
-
-        onRenderFinish.onFinish(imageBitmap);
-    }
-
-    public void render(Bitmap imageBitmap, short[][] SampleChannels, long Time, long SampleDuration,
+    public void render(Bitmap imageBitmap, short[][] SampleChannels, final long Time, long SampleDuration,
                        WaveRenderListeners onRenderFinish) {
-
-        this.imageBitmap = imageBitmap;
-        this.sampleChannels = SampleChannels;
-        this.SampleDuration = SampleDuration;
-        this.Time = Time;
-
         this.Width = imageBitmap.getWidth();
         this.Height = imageBitmap.getHeight();
 
-        pool.execute(() -> DrawAll(onRenderFinish));
+        pool.execute(() -> {
+            Canvas canvas = new Canvas(imageBitmap);
+            canvas.drawColor(Color.WHITE);
+            //Draw background
+
+            DrawTime(canvas, Time, SampleDuration, Height / 20f);
+
+            if (SampleChannels[0].length > 10) {
+                DrawAnalyzer(canvas, SampleChannels[0], Time, SampleDuration, Height / 2f, Height / 2f);
+
+                DrawSinusoid(canvas, SampleChannels[0], Height / 2f, Color.GREEN, Height / 2f);
+
+                //DrawWave(canvas, SimplifySinusoid(sampleChannels[0], Width), Height / 3f, Color.BLACK, Height / 2f);
+
+                DrawFFT(canvas, SimplifySinusoid(calculatorFFTGpu.Process(SampleChannels[0]), Width),
+                        Height / 1.5f, Color.BLUE, Height / 20f);
+            }
+            onRenderFinish.onFinish(imageBitmap);
+        });
     }
 
     public static boolean Clear() {

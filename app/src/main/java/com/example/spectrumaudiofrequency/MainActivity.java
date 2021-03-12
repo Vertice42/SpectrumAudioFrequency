@@ -31,6 +31,7 @@ import java.util.TimerTask;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import static androidx.recyclerview.widget.LinearLayoutManager.HORIZONTAL;
 import static com.example.spectrumaudiofrequency.SoundAnalyzer.AudioPeakAnalyzer.Peak.JsonStringToPeakArray;
 import static com.example.spectrumaudiofrequency.SoundAnalyzer.AudioPeakAnalyzer.Peak.PeakArrayToJsonString;
 import static com.example.spectrumaudiofrequency.Util.ReadJsonFile;
@@ -60,7 +61,7 @@ public class MainActivity extends AppCompatActivity {
     private LinearLayout ProgressLayout;
     private Button ReanalyzeButton;
     private Button goButton;
-    private int Peak;
+    private int Peak = 0;
 
     public void RequestPermissions(Activity activity) {
         if (ContextCompat.checkSelfPermission(activity, Manifest.permission.READ_EXTERNAL_STORAGE) !=
@@ -80,7 +81,7 @@ public class MainActivity extends AppCompatActivity {
 
         ProgressLayout.setVisibility(View.VISIBLE);
 
-        SoundAnalyzer soundAnalyzer = new SoundAnalyzer(Decoder, 200);
+        SoundAnalyzer soundAnalyzer = new SoundAnalyzer(Decoder, 20);
         soundAnalyzer.setOnProgressChange(progress -> AnalysisProgressBar.post(() -> {
             ProgressText.setText((progress + "%"));
             AnalysisProgressBar.setProgress((int) (progress));
@@ -115,7 +116,7 @@ public class MainActivity extends AppCompatActivity {
         SeekBar scaleInput = this.findViewById(R.id.scaleInput);
 
         String pkgName = getApplicationContext().getPackageName();
-        int id = R.raw.hollow;
+        int id = R.raw.choose;
         Uri uri = Uri.parse("android.resource://" + pkgName + "/raw/" + id);
 
         Decoder = new AudioDecoder(this, uri);
@@ -125,13 +126,10 @@ public class MainActivity extends AppCompatActivity {
         WaveAdapter = new LongWaveImageAdapter(Decoder, this.waveRender);
 
         WaveRecyclerView.setHasFixedSize(false);
-        WaveRecyclerView.setLayoutManager(new LinearLayoutManager
-                (this, LinearLayoutManager.HORIZONTAL, false));
+        LinearLayoutManager linearLayoutManagerOfWaveRecyclerView
+                = new LinearLayoutManager(this, HORIZONTAL, false);
+        WaveRecyclerView.setLayoutManager(linearLayoutManagerOfWaveRecyclerView);
         WaveRecyclerView.setAdapter(WaveAdapter);
-
-        WaveAdapter.WaveLength = (int) Decoder.getDuration() / Decoder.SampleDuration;
-        WaveAdapter.notifyDataSetChanged();
-
 
         String FileName = String.valueOf(id);
 
@@ -147,7 +145,10 @@ public class MainActivity extends AppCompatActivity {
 
         goButton.setOnClickListener(v -> {
             if (Peak >= waveRender.Peaks.length) Peak = 0;
-            WaveAdapter.setPosition((int) (waveRender.Peaks[Peak].time + Decoder.SampleDuration / 2));
+
+            int position = (int) ((waveRender.Peaks[Peak].time-Decoder.SampleDuration) / Decoder.SampleDuration);
+
+            linearLayoutManagerOfWaveRecyclerView.scrollToPositionWithOffset(position,0);
             Peak++;
         });
 
@@ -155,7 +156,7 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void onProgressChanged(SeekBar seekBar, int newScale, boolean fromUser) {
                 if (newScale < 1) newScale = 1;
-                WaveAdapter.Zoom = newScale;
+                WaveAdapter.setZoom(newScale);
             }
 
             @Override
