@@ -24,8 +24,9 @@ import androidx.core.content.ContextCompat;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
+import com.example.spectrumaudiofrequency.MediaDecoder.AudioDecoder;
+
 import java.io.IOException;
-import java.util.Arrays;
 import java.util.Timer;
 import java.util.TimerTask;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -122,7 +123,7 @@ public class MainActivity extends AppCompatActivity {
         Decoder = new AudioDecoder(this, uri);
         Decoder.prepare().join();
 
-        waveRender = new WaveRender(this, Decoder.getDuration());
+        waveRender = new WaveRender(this, Decoder.MediaDuration);
         WaveAdapter = new LongWaveImageAdapter(Decoder, this.waveRender);
 
         WaveRecyclerView.setHasFixedSize(false);

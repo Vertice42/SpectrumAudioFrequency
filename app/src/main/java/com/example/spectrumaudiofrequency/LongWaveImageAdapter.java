@@ -10,25 +10,22 @@ import androidx.annotation.NonNull;
 import androidx.annotation.RequiresApi;
 import androidx.recyclerview.widget.RecyclerView;
 
-import com.example.spectrumaudiofrequency.AudioDecoder.PeriodRequest;
+import com.example.spectrumaudiofrequency.MediaDecoder.AudioDecoder;
+import com.example.spectrumaudiofrequency.MediaDecoder.AudioDecoder.PeriodRequest;
 import com.example.spectrumaudiofrequency.SinusoidConverter.SuperSimplifySinusoid;
 import com.example.spectrumaudiofrequency.Util.CalculatePerformance.Performance;
-
-import java.util.Arrays;
 
 import static com.example.spectrumaudiofrequency.MainActivity.InfoTextView;
 import static com.example.spectrumaudiofrequency.Util.CalculatePerformance.SomePerformances;
 
 public class LongWaveImageAdapter extends RecyclerView.Adapter<WaveViewHolder> {
-    private final Util.CalculatePerformance RequestPerformance;
-    private final Util.CalculatePerformance RenderPerformance;
-
-
-    public AudioDecoder AudioDecoder;
+    public com.example.spectrumaudiofrequency.MediaDecoder.AudioDecoder AudioDecoder;
     public WaveRender waveRender;
 
     public int WaveLength = 0;
 
+    private final Util.CalculatePerformance RequestPerformance;
+    private final Util.CalculatePerformance RenderPerformance;
     private static final int ImageResolution = 1;
 
     private WaveViewHolder holderObserved;
@@ -69,35 +66,44 @@ public class LongWaveImageAdapter extends RecyclerView.Adapter<WaveViewHolder> {
         return new WaveViewHolder(WaveImageView, parent.getWidth() / ImageResolution, parent.getHeight() / ImageResolution);
     }
 
-    interface getAudioPeriodsListener {
+    interface getAudioPeriodsSimplifiedListener {
         void onResult(short[][] result);
     }
 
-    void getAudioPeriodsSimpled(SuperSimplifySinusoid superSimplifySinusoid, long Time,
-                                int ObtainedPeriods, int NumberOfPeriods,
-                                getAudioPeriodsListener processListener) {
-        AudioDecoder.addRequest(new PeriodRequest(Time, AudioDecoder.SampleDuration, decoderResult -> {
-            superSimplifySinusoid.Simplify(decoderResult.SamplesChannels[0]);
+    void getAudioPeriodsSimplified(SuperSimplifySinusoid superSimplifySinusoid, long Time,
+                                   int ObtainedPeriods, int NumberOfPeriods,
+                                   getAudioPeriodsSimplifiedListener processListener) {
+        AudioDecoder.addRequest(new PeriodRequest(Time, AudioDecoder.SampleDuration,
+                decoderResult -> {
+                    superSimplifySinusoid.Simplify(decoderResult.SamplesChannels);
 
-            if (ObtainedPeriods > NumberOfPeriods) {
-                //todo converter os dois canais
-                short[][] shorts = new short[2][0];
-                shorts[0] = superSimplifySinusoid.getResult();
-                processListener.onResult(shorts);
-
-            } else {
-                getAudioPeriodsSimpled(superSimplifySinusoid,
-                        Time + AudioDecoder.SampleDuration,
-                        ObtainedPeriods + 1, NumberOfPeriods, processListener);
-            }
-        }));
+                    if (ObtainedPeriods > NumberOfPeriods) {
+                        processListener.onResult(superSimplifySinusoid.getSinusoidChannelSimplify());
+                    } else {
+                        getAudioPeriodsSimplified(superSimplifySinusoid,
+                                Time + AudioDecoder.SampleDuration,
+                                ObtainedPeriods + 1, NumberOfPeriods, processListener);
+                    }
+                }));
     }
 
-    void getAudioPeriodsSimpled(long Time, int NumberOfPeriods, getAudioPeriodsListener processListener) {
+    void getAudioPeriodsSimplified(long Time, int NumberOfPeriods,
+                                   getAudioPeriodsSimplifiedListener processListener) {
 
-        getAudioPeriodsSimpled(new SuperSimplifySinusoid
-                        (AudioDecoder.SampleSize / AudioDecoder.ChannelsNumber),
-                Time, 0, NumberOfPeriods, processListener);
+        AudioDecoder.addRequest(new PeriodRequest(Time, AudioDecoder.SampleDuration,
+                decoderResult -> {
+                    SuperSimplifySinusoid simplifySinusoid = new SuperSimplifySinusoid
+                            (AudioDecoder.SampleSize / AudioDecoder.ChannelsNumber);
+                    simplifySinusoid.Simplify(decoderResult.SamplesChannels);
+
+                    if (NumberOfPeriods == 1) {
+                        processListener.onResult(simplifySinusoid.getSinusoidChannelSimplify());
+                    } else {
+                        getAudioPeriodsSimplified(simplifySinusoid,
+                                Time + AudioDecoder.SampleDuration,
+                                1, NumberOfPeriods, processListener);
+                    }
+                }));
     }
 
     @RequiresApi(api = Build.VERSION_CODES.LOLLIPOP)
@@ -110,8 +116,7 @@ public class LongWaveImageAdapter extends RecyclerView.Adapter<WaveViewHolder> {
                 setWavePieceImageOnHolder(waveViewHolder, Time, decoderResult.SamplesChannels, decoderResult.SampleDuration);
             }));
         } else {
-            getAudioPeriodsSimpled(Time, Zoom, result -> {
-                Log.i("SuperSimplifySinusoid", Arrays.toString(result[0]));
+            getAudioPeriodsSimplified(Time, Zoom, result -> {
                 setWavePieceImageOnHolder(waveViewHolder, Time, result,
                         AudioDecoder.SampleDuration * Zoom);
             });
@@ -165,7 +170,7 @@ public class LongWaveImageAdapter extends RecyclerView.Adapter<WaveViewHolder> {
     }
 
     void UpdateLength() {
-        this.WaveLength = (int) (AudioDecoder.getDuration() / Zoom) / AudioDecoder.SampleDuration;
+        this.WaveLength = (int) (AudioDecoder.MediaDuration / Zoom) / AudioDecoder.SampleDuration;
         this.notifyDataSetChanged();
     }
 }

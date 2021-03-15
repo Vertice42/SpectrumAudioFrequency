@@ -1,5 +1,8 @@
 package com.example.spectrumaudiofrequency;
 
+import android.content.Context;
+import android.net.Uri;
+
 import org.junit.Test;
 
 import static org.junit.Assert.*;
@@ -9,9 +12,12 @@ import static org.junit.Assert.*;
  *
  * @see <a href="http://d.android.com/tools/testing">Testing documentation</a>
  */
-public class ExampleUnitTest {
+public class AudioDecoderTests {
+
+
     @Test
     public void addition_isCorrect() {
-        assertEquals(4, 2 + 2);
+        assertEquals(4, 2 + 1);
+
     }
 }

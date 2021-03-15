@@ -3,7 +3,8 @@ package com.example.spectrumaudiofrequency;
 import android.os.Build;
 import android.util.Log;
 
-import com.example.spectrumaudiofrequency.AudioDecoder.ProcessListener;
+import com.example.spectrumaudiofrequency.MediaDecoder.AudioDecoder;
+import com.example.spectrumaudiofrequency.MediaDecoder.AudioDecoder.ProcessListener;
 import com.example.spectrumaudiofrequency.SoundAnalyzer.AudioPeakAnalyzer.Peak;
 
 import org.jetbrains.annotations.NotNull;
@@ -11,7 +12,6 @@ import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
-import java.util.Arrays;
 import java.util.concurrent.ForkJoinPool;
 
 public class SoundAnalyzer {
@@ -137,9 +137,9 @@ public class SoundAnalyzer {
 
     void start(SoundAnalyzerListener soundAnalyzerListener) {
         this.iterations = 0;
-        this.iterationsMax = (int) ((Decoder.getDuration() / Decoder.SampleDuration) / Decoder.getDuration()) + 1;
+        this.iterationsMax = (int) ((Decoder.MediaDuration / Decoder.SampleDuration) / Decoder.MediaDuration) + 1;
         this.Time = 0;
-        AudioPeakAnalyzer audioPeakAnalyzer = new AudioPeakAnalyzer(this.SpikesCollectionSize, Decoder.getDuration());
+        AudioPeakAnalyzer audioPeakAnalyzer = new AudioPeakAnalyzer(this.SpikesCollectionSize, Decoder.MediaDuration);
         this.processListener = decoderResult -> {
 
             if (Time != decoderResult.SampleTime)
@@ -148,11 +148,9 @@ public class SoundAnalyzer {
             audioPeakAnalyzer.analyzeData(decoderResult.SamplesChannels[0], Time, decoderResult.SampleDuration);
 
             Time += Decoder.SampleDuration;
-            if (Time >= Decoder.getDuration() - Decoder.SampleDuration) {
+            if (Time >= Decoder.MediaDuration - Decoder.SampleDuration) {
                 //Arrays.sort(audioPeakAnalyzer.peaks, (o1, o2) -> o2.datum - o1.datum);
                 soundAnalyzerListener.OnFinishedAnalysis(audioPeakAnalyzer.peaks);
-                Decoder.setTimeOfExtractor(1);
-
             } else {
                 Decoder.addRequest(new AudioDecoder.PeriodRequest
                         (Time, Decoder.SampleDuration, processListener));
@@ -160,7 +158,7 @@ public class SoundAnalyzer {
                 iterations++;
                 if (iterations > iterationsMax) {
                     iterations = 0;
-                    float progress = ((float) Time / (float) Decoder.getDuration()) * 100f;
+                    float progress = ((float) Time / (float) Decoder.MediaDuration) * 100f;
                     if (progress > 98.5f) iterationsMax = 1;
 
                     Poll.execute(() -> progressListener.OnProgressChange(progress));

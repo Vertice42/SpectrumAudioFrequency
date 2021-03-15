@@ -8,7 +8,6 @@ import androidx.renderscript.Type;
 
 import org.jetbrains.annotations.NotNull;
 
-import java.lang.reflect.Array;
 import java.util.ArrayList;
 import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.ForkJoinTask;
@@ -338,41 +337,40 @@ public class SinusoidConverter {
         return result;
     }
 
-    static void SimplifySinusoid(ArrayList<Short> result, short @NotNull [] Sample, int NewLength) {
-
-        int simplificationLength = Sample.length / NewLength;
-
-        for (int i = 0; i < NewLength; i++) {
-            short media = 0;
-
-            for (int j = 0; j < simplificationLength; j++)
-                media += Sample[i * simplificationLength + j];
-
-            media /= simplificationLength;
-
-            result.add(media);
-        }
-    }
-
     static class SuperSimplifySinusoid {
-        ArrayList<Short> result = new ArrayList<>();
+        ArrayList<ArrayList<Short>> SinusoidChannelSimplify = new ArrayList<>();
         private final int NewSampleLength;
-
-        public short[] getResult() {
-            short[] shorts = new short[result.size()];
-            for (int i = 0; i < shorts.length; i++) {
-                shorts[i] = result.get(i);
-            }
-            return shorts;
-        }
 
         SuperSimplifySinusoid(int NewSampleLength) {
             this.NewSampleLength = NewSampleLength;
         }
 
+        public short[][] getSinusoidChannelSimplify() {
+            short[][] SinusoidChannels = new short[SinusoidChannelSimplify.size()][];
 
-        void Simplify(short[] Samples) {
-            SimplifySinusoid(result, Samples, NewSampleLength);
+            for (int i = 0; i < SinusoidChannels.length; i++) {
+                ArrayList<Short> list = SinusoidChannelSimplify.get(i);
+                SinusoidChannels[i] = new short[list.size()];
+                for (int j = 0; j < SinusoidChannels[i].length; j++) {
+                    SinusoidChannels[i][j] = SinusoidChannelSimplify.get(i).get(j);
+                }
+            }
+            return SinusoidChannels;
+        }
+
+        void Simplify(short[][] SampleChannels) {
+            for (int channel = 0; channel < SampleChannels.length; channel++) {
+                SinusoidChannelSimplify.add(new ArrayList<>());
+                int simplificationLength = SampleChannels[channel].length / NewSampleLength;
+                short media = 0;
+                for (int i = 0; i < NewSampleLength; i++) {
+                    for (int j = 0; j < simplificationLength; j++)
+                        media += SampleChannels[channel][i * simplificationLength + j];
+
+                    media /= simplificationLength;
+                    SinusoidChannelSimplify.get(channel).add(media);
+                }
+            }
         }
     }
 }
