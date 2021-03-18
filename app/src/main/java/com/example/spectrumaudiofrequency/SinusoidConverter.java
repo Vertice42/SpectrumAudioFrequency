@@ -366,7 +366,6 @@ public class SinusoidConverter {
                 for (int i = 0; i < NewSampleLength; i++) {
                     for (int j = 0; j < simplificationLength; j++)
                         media += SampleChannels[channel][i * simplificationLength + j];
-
                     media /= simplificationLength;
                     SinusoidChannelSimplify.get(channel).add(media);
                 }

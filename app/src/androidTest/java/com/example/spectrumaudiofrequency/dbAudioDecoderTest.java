@@ -30,7 +30,7 @@ public class dbAudioDecoderTest {
         byte[] bytesToTest = new byte[200];
         new Random().nextBytes(bytesToTest);
 
-        int SamplePeace = 20;
+        int SamplePeace = 55;
 
         dbManager.addSamplePiece(SamplePeace, bytesToTest);
         byte[] dbSamplePiece = dbManager.getSamplePiece(SamplePeace);

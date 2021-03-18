@@ -1,7 +1,6 @@
 package com.example.spectrumaudiofrequency;
 
 import android.content.Context;
-import android.net.Uri;
 import android.util.Log;
 
 import androidx.test.ext.junit.runners.AndroidJUnit4;
@@ -60,7 +59,7 @@ public class AudioDecoderTest {
             audioDecoder.addRequest(new AudioDecoder.PeriodRequest(Time,
                     decoderResult -> {
                         ResponsesNumber.getAndIncrement();
-                        TestResult[finalI] = (decoderResult.SamplesChannels.length > 100);
+                        TestResult[finalI] = (decoderResult.BytesSamplesChannels.length > 100);
 
                         if (ResponsesNumber.get() >= RequestNumber) signal.countDown();
                     }));

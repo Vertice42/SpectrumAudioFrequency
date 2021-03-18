@@ -282,7 +282,6 @@ public class dbAudioDecoderManager extends SQLiteOpenHelper {
     private Cursor getCursorSamplePiece(int SamplePiece){
         String selection = SamplesTable.SAMPLE_PIECE + " = ?";
         String[] selectionArgs = {SamplePiece + ""};
-        String sortOrder = SamplesTable.SAMPLE_PIECE + " DESC";
 
         return sqLiteDatabase.query(
                 MediaName,          // The table to query
@@ -291,7 +290,7 @@ public class dbAudioDecoderManager extends SQLiteOpenHelper {
                 selectionArgs,          // The values for the WHERE clause
                 null,          // don't group the rows
                 null,            // don't filter by row groups
-                sortOrder                // The sort order
+                null                // The sort order
         );
     }
 
@@ -320,10 +319,10 @@ public class dbAudioDecoderManager extends SQLiteOpenHelper {
         return exist;
     }
 
-    public void addSamplePiece(int SampleTime, byte[] bytes) {
-        if (!SampleAlreadyExistOnDataBase(SampleTime)) {//todo ineficiaen al checar exit a cada nova interção
+    public void addSamplePiece(int PieceSampleTime, byte[] bytes) {
+        if (!SampleAlreadyExistOnDataBase(PieceSampleTime)) {//todo ineficiaen al checar exit a cada nova interção
             ContentValues values = new ContentValues();
-            values.put(SamplesTable.SAMPLE_PIECE, SampleTime);
+            values.put(SamplesTable.SAMPLE_PIECE, PieceSampleTime);
             values.put(SamplesTable.SAMPLE_DATA, bytes);
             sqLiteDatabase.insert(MediaName, null, values);
         }

@@ -15,7 +15,6 @@ import androidx.annotation.RequiresApi;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
-import java.nio.ShortBuffer;
 import java.util.ArrayList;
 import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.ForkJoinTask;
@@ -44,11 +43,11 @@ class AudioDecoder {
     }
 
     public static class DecoderResult {
-        public byte[] SamplesChannels;
+        public byte[] BytesSamplesChannels;
         public final long SampleTime;
 
-        DecoderResult(byte[] SamplesChannels, long sampleTime) {
-            this.SamplesChannels = SamplesChannels;
+        DecoderResult(byte[] BytesSamplesChannels, long sampleTime) {
+            this.BytesSamplesChannels = BytesSamplesChannels;
             SampleTime = sampleTime;
         }
     }
@@ -226,12 +225,12 @@ class AudioDecoder {
 
             process = (int) ((extractorTime / MediaDuration) * 100);
             OutputPromises.add(new PeriodRequest(extractorTime, decoderResult -> {
+                dbAudioDecoderManager.addSamplePiece((int)
+                        (decoderResult.SampleTime / SampleDuration), decoderResult.BytesSamplesChannels);
+
                 if (RequestsPromises.size() > 0) {
                     for (int i = 0; i < RequestsPromises.size(); i++) {
                         PeriodRequest request = RequestsPromises.get(i);
-
-                        dbAudioDecoderManager.addSamplePiece((int)
-                                (decoderResult.SampleTime / SampleDuration), decoderResult.SamplesChannels);
 
                         if (request.RequiredTime == decoderResult.SampleTime) {
                             request.ProcessListener.OnProceed(decoderResult);
@@ -245,8 +244,10 @@ class AudioDecoder {
                             break;
                         }
                     }
-                    next();
                 }
+
+                extractor.advance();
+                next();
             }));
             Decoder.queueInputBuffer(InputID, 0, sampleSize, extractorTime, 0);
         });
@@ -297,6 +298,8 @@ class AudioDecoder {
             }
         }
 
+        if (SamplesChannels[0].length < 1) SamplesChannels = new short[2][200];
+
         this.SampleSize = SamplesChannels[0].length;//todo ???
         return SamplesChannels;
     }
@@ -327,12 +330,12 @@ class AudioDecoder {
             byte[] bytes = dbAudioDecoderManager.getSamplePiece(SamplePeace);
 
             if (bytes != null) {
-                periodRequest.ProcessListener.OnProceed(new DecoderResult(bytes,SamplePeace));
-                return;
+                periodRequest.ProcessListener.OnProceed(new DecoderResult(bytes, SamplePeace * SampleDuration));
             } else {
                 RequestsPromises.add(periodRequest);
             }
+        } else {
+            getInputId(InputID -> putRequest(InputID, periodRequest));
         }
-        getInputId(InputID -> putRequest(InputID, periodRequest));
     }
 }
