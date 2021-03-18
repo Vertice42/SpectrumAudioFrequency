@@ -2,17 +2,17 @@ package com.example.spectrumaudiofrequency;
 
 import android.content.Context;
 import android.net.Uri;
+import android.util.Log;
 
 import androidx.test.ext.junit.runners.AndroidJUnit4;
 import androidx.test.platform.app.InstrumentationRegistry;
 
 import com.example.spectrumaudiofrequency.MediaDecoder.AudioDecoder;
-import com.example.spectrumaudiofrequency.MediaDecoder.dbAudioDecoder;
 
-import org.junit.Assert;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
+import java.util.Arrays;
 import java.util.Random;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -28,15 +28,10 @@ import static org.junit.Assert.fail;
 public class AudioDecoderTest {
 
     private final AudioDecoder audioDecoder;
-    private final Context context;
 
     public AudioDecoderTest() {
-        context = InstrumentationRegistry.getInstrumentation().getTargetContext();
-        String pkgName = context.getPackageName();
-        int id = R.raw.choose;
-        Uri uri = Uri.parse("android.resource://" + pkgName + "/raw/" + id);
-
-        audioDecoder = new AudioDecoder(context, uri);
+        Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();
+        audioDecoder = new AudioDecoder(context, R.raw.choose, true);
         audioDecoder.prepare().join();
 
         try {
@@ -50,7 +45,7 @@ public class AudioDecoderTest {
     public void addRequest() throws InterruptedException {
         final CountDownLatch signal = new CountDownLatch(1);
 
-        int RequestNumber = 500;
+        int RequestNumber = 4;
 
         boolean[] TestResult = new boolean[RequestNumber];
         AtomicInteger ResponsesNumber = new AtomicInteger();
@@ -62,10 +57,10 @@ public class AudioDecoderTest {
                     (audioDecoder.MediaDuration / audioDecoder.SampleDuration))
                     * audioDecoder.SampleDuration);
 
-            audioDecoder.addRequest(new AudioDecoder.PeriodRequest(Time, audioDecoder.SampleDuration,
+            audioDecoder.addRequest(new AudioDecoder.PeriodRequest(Time,
                     decoderResult -> {
                         ResponsesNumber.getAndIncrement();
-                        TestResult[finalI] = (decoderResult.SamplesChannels[0].length > 100);
+                        TestResult[finalI] = (decoderResult.SamplesChannels.length > 100);
 
                         if (ResponsesNumber.get() >= RequestNumber) signal.countDown();
                     }));
@@ -73,6 +68,9 @@ public class AudioDecoderTest {
 
         signal.await();
 
-        for (boolean result : TestResult) if (!result) fail();
+        for (boolean result : TestResult) if (!result) {
+            Log.e("TestResult", Arrays.toString(TestResult));
+            fail();
+        }
     }
 }

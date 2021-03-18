@@ -2,6 +2,7 @@
   <dictionary name="ADM">
     <words>
       <w>spectrumaudiofrequency</w>
+      <w>sqlite</w>
     </words>
   </dictionary>
 </component>

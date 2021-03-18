@@ -22,36 +22,38 @@ import java.util.concurrent.ForkJoinTask;
 
 import static android.media.MediaExtractor.SEEK_TO_CLOSEST_SYNC;
 import static android.media.MediaExtractor.SEEK_TO_PREVIOUS_SYNC;
+import static com.example.spectrumaudiofrequency.Util.getFileName;
+import static com.example.spectrumaudiofrequency.Util.getUriFromResourceId;
 
 @RequiresApi(api = Build.VERSION_CODES.LOLLIPOP)
 public
 class AudioDecoder {
+    private final boolean SaveCacheEnable;
+    private dbAudioDecoderManager dbAudioDecoderManager;
+    private final String MediaName;
+
     public static class PeriodRequest {
         long RequiredTime;
-        long RequiredSampleDuration;
 
         ProcessListener ProcessListener;
 
-        public PeriodRequest(long RequiredTime, long RequiredSampleDuration, ProcessListener ProcessListener) {
+        public PeriodRequest(long RequiredTime, ProcessListener ProcessListener) {
             this.RequiredTime = RequiredTime;
-            this.RequiredSampleDuration = RequiredSampleDuration;
             this.ProcessListener = ProcessListener;
         }
     }
 
     public static class DecoderResult {
-        public short[][] SamplesChannels;
-        public long SampleDuration;
-        public long SampleTime;
+        public byte[] SamplesChannels;
+        public final long SampleTime;
 
-        DecoderResult(short[][] SamplesChannels, long SampleTime, long SampleDuration) {
+        DecoderResult(byte[] SamplesChannels, long sampleTime) {
             this.SamplesChannels = SamplesChannels;
-            this.SampleDuration = SampleDuration;
-            this.SampleTime = SampleTime;
+            SampleTime = sampleTime;
         }
     }
 
-    private ForkJoinPool Poll;
+    private final ForkJoinPool Poll;
 
     private MediaCodec Decoder;
     private MediaFormat format;
@@ -59,12 +61,14 @@ class AudioDecoder {
 
     private Context context;
     private Uri uri;
-    private String AudioPath;
+    private String AudioPath = null;
 
     public long MediaDuration;
     public int SampleDuration;
     public int ChannelsNumber;
     public int SampleSize;
+
+    public int process = 0;
 
     private interface IdListener {
         void onIdAvailable(int Id);
@@ -77,21 +81,28 @@ class AudioDecoder {
     private final ArrayList<Integer> InputIds = new ArrayList<>();
     private final ArrayList<IdListener> InputIDListeners = new ArrayList<>();
     private final ArrayList<PeriodRequest> RequestsPromises = new ArrayList<>();
+    private final ArrayList<PeriodRequest> OutputPromises = new ArrayList<>();
 
-    private PeriodRequest getRequestPromise(long RequiredTime) {
-        for (int i = 0; i < RequestsPromises.size(); i++) {
-            if (RequestsPromises.get(i).RequiredTime == RequiredTime) {
-                PeriodRequest periodRequest = RequestsPromises.get(i);
-                RequestsPromises.remove(i);
+    private PeriodRequest getOutputPromise(long RequiredTime) {
+        for (int i = 0; i < OutputPromises.size(); i++) {
+            if (OutputPromises.get(i).RequiredTime == RequiredTime) {
+                PeriodRequest periodRequest = OutputPromises.get(i);
+                OutputPromises.remove(i);
                 return periodRequest;
             }
         }
         return null;
     }
 
-    public AudioDecoder(Context context, Uri uri) {
+    public AudioDecoder(Context context, int ResourceId, boolean SaveCacheEnable) {
         this.context = context;
-        this.uri = uri;
+
+        this.uri = getUriFromResourceId(context, ResourceId);
+        this.MediaName = getFileName(context.getResources().getResourceName(ResourceId));
+
+        Log.e("MediaName", MediaName);
+        this.SaveCacheEnable = SaveCacheEnable;
+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
             this.Poll = ForkJoinPool.commonPool();
         } else {
@@ -99,11 +110,20 @@ class AudioDecoder {
         }
     }
 
-    AudioDecoder(String AudioPath) {
+    AudioDecoder(String AudioPath, boolean saveCacheEnable) {
+        SaveCacheEnable = saveCacheEnable;
         this.AudioPath = AudioPath;
+        this.MediaName = getFileName(AudioPath);
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            this.Poll = ForkJoinPool.commonPool();
+        } else {
+            this.Poll = new ForkJoinPool();
+        }
     }
 
     public ForkJoinTask<?> prepare() {
+
         return this.Poll.submit(() -> {
             try {
                 Decoder = MediaCodec.createDecoderByType(MediaFormat.MIMETYPE_AUDIO_MPEG);
@@ -146,24 +166,37 @@ class AudioDecoder {
                                                     final int outputBufferId,
                                                     @NonNull final BufferInfo bufferInfo) {
 
-                    PeriodRequest requestPromise = getRequestPromise(bufferInfo.presentationTimeUs);
-                    DecoderResult decoderResult = processOutput(outputBufferId);
-
-                    if (requestPromise == null) {//todo é possivel otput buffer esta avalible mas não ter nenhuma promessa pendente ?
+                    PeriodRequest promise = getOutputPromise(bufferInfo.presentationTimeUs);
+                    if (promise == null) {//todo é possivel otput buffer esta avalible mas não ter nenhuma promessa pendente ?
                         //todo provavelmente o extrator compartolhado entre em requisisioes
                         Log.e("OnOutputAvailable", "not are premises bur has a output ?");
                         return;
                     }
-                    if (decoderResult.SamplesChannels[0].length < 1) {
-                        Poll.execute(() -> addRequest(requestPromise));
-                    } else
-                        Poll.execute(() -> {
-                            requestPromise.ProcessListener.OnProceed(decoderResult);
-                        });
+
+                    ByteBuffer outputBuffer = Decoder.getOutputBuffer(outputBufferId);
+
+                    byte[] bytes = new byte[outputBuffer.remaining()];
+                    outputBuffer.get(bytes);
+
+                    DecoderResult decoderResult = new DecoderResult(bytes, bufferInfo.presentationTimeUs);
+
+                    if (SaveCacheEnable) {
+                        promise.ProcessListener.OnProceed(decoderResult);
+                    } else {
+                        boolean sampleInvalid = bytes.length < 1;
+                        if (sampleInvalid) {
+                            Poll.execute(() -> promise.ProcessListener.OnProceed(decoderResult));
+                        } else {
+                            addRequest(promise);
+                        }
+                    }
+
+                    Decoder.releaseOutputBuffer(outputBufferId, false);
                 }
 
                 @Override
-                public void onError(@NonNull final MediaCodec mediaCodec, @NonNull final MediaCodec.CodecException e) {
+                public void onError(@NonNull final MediaCodec mediaCodec,
+                                    @NonNull final MediaCodec.CodecException e) {
                     Log.e("MediaCodecERROR", "onError: ", e);
                 }
 
@@ -174,7 +207,53 @@ class AudioDecoder {
             });
             Decoder.configure(format, null, null, 0);
             Decoder.start();
+
+            if (SaveCacheEnable) {
+                this.dbAudioDecoderManager = new dbAudioDecoderManager(context, MediaName);
+                if (!dbAudioDecoderManager.MediaIsDecoded(MediaName)) startDecoding();
+            }
         });
+    }
+
+    private void next() {
+        getInputId(InputID -> {
+            int sampleSize = extractor.readSampleData(Decoder.getInputBuffer(InputID), 0);
+            if (sampleSize < 0) {
+                dbAudioDecoderManager.setDecoded(MediaName);
+                return;
+            }
+            long extractorTime = extractor.getSampleTime();
+
+            process = (int) ((extractorTime / MediaDuration) * 100);
+            OutputPromises.add(new PeriodRequest(extractorTime, decoderResult -> {
+                if (RequestsPromises.size() > 0) {
+                    for (int i = 0; i < RequestsPromises.size(); i++) {
+                        PeriodRequest request = RequestsPromises.get(i);
+
+                        dbAudioDecoderManager.addSamplePiece((int)
+                                (decoderResult.SampleTime / SampleDuration), decoderResult.SamplesChannels);
+
+                        if (request.RequiredTime == decoderResult.SampleTime) {
+                            request.ProcessListener.OnProceed(decoderResult);
+                            RequestsPromises.remove(request);
+                            break;
+                        }
+
+                        if (request.RequiredTime < decoderResult.SampleTime) {
+                            RequestsPromises.remove(request);
+                            addRequest(request);
+                            break;
+                        }
+                    }
+                    next();
+                }
+            }));
+            Decoder.queueInputBuffer(InputID, 0, sampleSize, extractorTime, 0);
+        });
+    }
+
+    private void startDecoding() {
+        next();
     }
 
     public void setTimeOnExtractor(PeriodRequest periodRequest) {
@@ -206,34 +285,29 @@ class AudioDecoder {
         }
     }
 
-    private DecoderResult processOutput(int OutputId) {
+    public short[][] bytesToSampleChannels(byte[] bytes) {
+        short[] shorts = new short[bytes.length / 2];
+        ByteBuffer.wrap(bytes).order(ByteOrder.nativeOrder()).asShortBuffer().get(shorts);
 
-        ByteBuffer outputBuffer = Decoder.getOutputBuffer(OutputId);
         short[][] SamplesChannels;
-
-        ShortBuffer buffer = outputBuffer.order(ByteOrder.nativeOrder()).asShortBuffer();
-
-        SamplesChannels = new short[ChannelsNumber][buffer.remaining() / ChannelsNumber];
+        SamplesChannels = new short[ChannelsNumber][shorts.length / ChannelsNumber];
         for (int i = 0; i < SamplesChannels.length; ++i) {
             for (int j = 0; j < SamplesChannels[i].length; j++) {
-                SamplesChannels[i][j] = buffer.get(j * ChannelsNumber + i);
+                SamplesChannels[i][j] = shorts[j * ChannelsNumber + i];
             }
         }
 
-        this.SampleSize = SamplesChannels[0].length;
-        //separate channels
-
-        Decoder.releaseOutputBuffer(OutputId, false);
-
-        return new DecoderResult(SamplesChannels, extractor.getSampleTime(), SampleDuration);
+        this.SampleSize = SamplesChannels[0].length;//todo ???
+        return SamplesChannels;
     }
 
     private void putRequest(int InputId, PeriodRequest periodRequest) {
         setTimeOnExtractor(periodRequest);
+
         int sampleSize = extractor.readSampleData(Decoder.getInputBuffer(InputId), 0);
 
         if (sampleSize < 0) sampleSize = 1;
-        RequestsPromises.add(periodRequest);
+        OutputPromises.add(periodRequest);
         Decoder.queueInputBuffer(InputId, 0, sampleSize, extractor.getSampleTime(), 0);
     }
 
@@ -248,6 +322,17 @@ class AudioDecoder {
     }
 
     public void addRequest(PeriodRequest periodRequest) {
+        if (SaveCacheEnable) {
+            int SamplePeace = (int) (periodRequest.RequiredTime / SampleDuration);
+            byte[] bytes = dbAudioDecoderManager.getSamplePiece(SamplePeace);
+
+            if (bytes != null) {
+                periodRequest.ProcessListener.OnProceed(new DecoderResult(bytes,SamplePeace));
+                return;
+            } else {
+                RequestsPromises.add(periodRequest);
+            }
+        }
         getInputId(InputID -> putRequest(InputID, periodRequest));
     }
 }

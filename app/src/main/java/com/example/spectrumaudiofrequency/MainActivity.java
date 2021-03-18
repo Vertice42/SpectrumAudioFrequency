@@ -6,7 +6,6 @@ import android.app.Activity;
 import android.content.pm.PackageManager;
 import android.media.AudioManager;
 import android.media.MediaPlayer;
-import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.util.Log;
@@ -37,6 +36,7 @@ import static com.example.spectrumaudiofrequency.SoundAnalyzer.AudioPeakAnalyzer
 import static com.example.spectrumaudiofrequency.SoundAnalyzer.AudioPeakAnalyzer.Peak.PeakArrayToJsonString;
 import static com.example.spectrumaudiofrequency.Util.ReadJsonFile;
 import static com.example.spectrumaudiofrequency.Util.SaveJsonFile;
+import static com.example.spectrumaudiofrequency.Util.getUriFromResourceId;
 
 public class MainActivity extends AppCompatActivity {
     static {
@@ -116,11 +116,7 @@ public class MainActivity extends AppCompatActivity {
         ReanalyzeButton = this.findViewById(R.id.ReanalyzeButton);
         SeekBar scaleInput = this.findViewById(R.id.scaleInput);
 
-        String pkgName = getApplicationContext().getPackageName();
-        int id = R.raw.choose;
-        Uri uri = Uri.parse("android.resource://" + pkgName + "/raw/" + id);
-
-        Decoder = new AudioDecoder(this, uri);
+        Decoder = new AudioDecoder(this, R.raw.choose, true);
         Decoder.prepare().join();
 
         waveRender = new WaveRender(this, Decoder.MediaDuration);
@@ -132,8 +128,9 @@ public class MainActivity extends AppCompatActivity {
         WaveRecyclerView.setLayoutManager(linearLayoutManagerOfWaveRecyclerView);
         WaveRecyclerView.setAdapter(WaveAdapter);
 
-        String FileName = String.valueOf(id);
+        int AudioResourceChoseId = R.raw.choose;
 
+        String FileName = String.valueOf(AudioResourceChoseId);
         if (ReadJsonFile(this, FileName).equals("")) {//todo change to true validation
             AnalyzeAudio(FileName);
         } else {
@@ -147,9 +144,9 @@ public class MainActivity extends AppCompatActivity {
         goButton.setOnClickListener(v -> {
             if (Peak >= waveRender.Peaks.length) Peak = 0;
 
-            int position = (int) ((waveRender.Peaks[Peak].time-Decoder.SampleDuration) / Decoder.SampleDuration);
+            int position = (int) ((waveRender.Peaks[Peak].time - Decoder.SampleDuration) / Decoder.SampleDuration);
 
-            linearLayoutManagerOfWaveRecyclerView.scrollToPositionWithOffset(position,0);
+            linearLayoutManagerOfWaveRecyclerView.scrollToPositionWithOffset(position, 0);
             Peak++;
         });
 
@@ -174,7 +171,7 @@ public class MainActivity extends AppCompatActivity {
         mediaPlayer = new MediaPlayer();
         try {
             mediaPlayer.setAudioStreamType(AudioManager.STREAM_MUSIC);
-            mediaPlayer.setDataSource(this, uri);
+            mediaPlayer.setDataSource(this, getUriFromResourceId(this,AudioResourceChoseId));
 
         } catch (IOException e) {
             e.printStackTrace();

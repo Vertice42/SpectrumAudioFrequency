@@ -1,8 +1,6 @@
 package com.example.spectrumaudiofrequency;
 
-import android.content.Context;
-import android.net.Uri;
-
+import org.junit.Assert;
 import org.junit.Test;
 
 import static org.junit.Assert.*;
@@ -12,12 +10,12 @@ import static org.junit.Assert.*;
  *
  * @see <a href="http://d.android.com/tools/testing">Testing documentation</a>
  */
-public class AudioDecoderTests {
-
-
+public class UtilTests {
     @Test
-    public void addition_isCorrect() {
-        assertEquals(4, 2 + 1);
+    public void getFileName() {
+        String path = "/storage/sdcard0/DCIM/Camera/1414240995236.jpg";
+        String FileNameExpected = "1414240995236.jpg";
 
+        Assert.assertEquals(Util.getFileName(path), FileNameExpected);
     }
 }

@@ -16,7 +16,7 @@ import java.util.concurrent.ForkJoinPool;
 
 public class SoundAnalyzer {
     private final ForkJoinPool Poll;
-    private final AudioDecoder Decoder;
+    private final AudioDecoder AudioDecoder;
 
     private SoundAnalyzerProgressListener progressListener;
     private ProcessListener processListener;
@@ -121,8 +121,8 @@ public class SoundAnalyzer {
         }
     }
 
-    public SoundAnalyzer(AudioDecoder decoder, int SpikesCollectionSize) {
-        this.Decoder = decoder;
+    public SoundAnalyzer(AudioDecoder audioDecoder, int SpikesCollectionSize) {
+        this.AudioDecoder = audioDecoder;
         this.SpikesCollectionSize = SpikesCollectionSize;
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
             this.Poll = ForkJoinPool.commonPool();
@@ -137,28 +137,30 @@ public class SoundAnalyzer {
 
     void start(SoundAnalyzerListener soundAnalyzerListener) {
         this.iterations = 0;
-        this.iterationsMax = (int) ((Decoder.MediaDuration / Decoder.SampleDuration) / Decoder.MediaDuration) + 1;
+        this.iterationsMax = (int) ((AudioDecoder.MediaDuration / AudioDecoder.SampleDuration) / AudioDecoder.MediaDuration) + 1;
         this.Time = 0;
-        AudioPeakAnalyzer audioPeakAnalyzer = new AudioPeakAnalyzer(this.SpikesCollectionSize, Decoder.MediaDuration);
+        AudioPeakAnalyzer audioPeakAnalyzer = new AudioPeakAnalyzer(this.SpikesCollectionSize, AudioDecoder.MediaDuration);
         this.processListener = decoderResult -> {
 
             if (Time != decoderResult.SampleTime)
                 Log.e("Time is !==", Time + "!=" + decoderResult.SampleTime);
 
-            audioPeakAnalyzer.analyzeData(decoderResult.SamplesChannels[0], Time, decoderResult.SampleDuration);
+            short[][] sampleChannels = AudioDecoder.bytesToSampleChannels(decoderResult.SamplesChannels);
 
-            Time += Decoder.SampleDuration;
-            if (Time >= Decoder.MediaDuration - Decoder.SampleDuration) {
+            audioPeakAnalyzer.analyzeData(sampleChannels[0], Time, AudioDecoder.SampleDuration);
+
+            Time += AudioDecoder.SampleDuration;
+            if (Time >= AudioDecoder.MediaDuration - AudioDecoder.SampleDuration) {
                 //Arrays.sort(audioPeakAnalyzer.peaks, (o1, o2) -> o2.datum - o1.datum);
                 soundAnalyzerListener.OnFinishedAnalysis(audioPeakAnalyzer.peaks);
             } else {
-                Decoder.addRequest(new AudioDecoder.PeriodRequest
-                        (Time, Decoder.SampleDuration, processListener));
+                AudioDecoder.addRequest(new AudioDecoder.PeriodRequest
+                        (Time, processListener));
 
                 iterations++;
                 if (iterations > iterationsMax) {
                     iterations = 0;
-                    float progress = ((float) Time / (float) Decoder.MediaDuration) * 100f;
+                    float progress = ((float) Time / (float) AudioDecoder.MediaDuration) * 100f;
                     if (progress > 98.5f) iterationsMax = 1;
 
                     Poll.execute(() -> progressListener.OnProgressChange(progress));
@@ -166,6 +168,6 @@ public class SoundAnalyzer {
             }
         };
 
-        Decoder.addRequest(new AudioDecoder.PeriodRequest(Time, Decoder.SampleDuration, processListener));
+        AudioDecoder.addRequest(new AudioDecoder.PeriodRequest(Time, processListener));
     }
 }

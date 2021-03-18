@@ -2,6 +2,7 @@ package com.example.spectrumaudiofrequency;
 
 import android.content.Context;
 import android.content.ContextWrapper;
+import android.net.Uri;
 import android.os.Build;
 import android.util.Log;
 
@@ -19,6 +20,12 @@ import java.io.OutputStreamWriter;
 import java.util.regex.Pattern;
 
 public class Util {
+
+    public static Uri getUriFromResourceId(Context context, int ResourceId){
+        return Uri.parse("android.resource://" + context.getPackageName() + "/raw/" + ResourceId);
+    }
+
+
     public static short[][][] SplitArray(short[][] OriginalArray, int Divider) {
         int DataLength = (OriginalArray[0].length > 0) ? OriginalArray[0].length / Divider : 0;
         short[][][] WavePiecesArrays = new short[Divider][OriginalArray.length][DataLength];
@@ -271,4 +278,7 @@ public class Util {
         return ret;
     }
 
+    public static String getFileName(String path){
+        return path.substring(path.lastIndexOf("/")+1);
+    }
 }
