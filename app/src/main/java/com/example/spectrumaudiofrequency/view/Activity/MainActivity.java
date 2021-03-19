@@ -1,4 +1,4 @@
-package com.example.spectrumaudiofrequency;
+package com.example.spectrumaudiofrequency.view.Activity;
 
 import android.Manifest;
 import android.annotation.SuppressLint;
@@ -23,20 +23,23 @@ import androidx.core.content.ContextCompat;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
-import com.example.spectrumaudiofrequency.MediaDecoder.AudioDecoder;
+import com.example.spectrumaudiofrequency.R;
+import com.example.spectrumaudiofrequency.core.SoundAnalyzer;
+import com.example.spectrumaudiofrequency.mediaDecoder.AudioDecoder;
+import com.example.spectrumaudiofrequency.util.Files;
+import com.example.spectrumaudiofrequency.view.LongWaveImageAdapter;
+import com.example.spectrumaudiofrequency.view.SinusoidDrawn;
 
 import java.io.IOException;
 import java.util.Timer;
 import java.util.TimerTask;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
 
 import static androidx.recyclerview.widget.LinearLayoutManager.HORIZONTAL;
-import static com.example.spectrumaudiofrequency.SoundAnalyzer.AudioPeakAnalyzer.Peak.JsonStringToPeakArray;
-import static com.example.spectrumaudiofrequency.SoundAnalyzer.AudioPeakAnalyzer.Peak.PeakArrayToJsonString;
-import static com.example.spectrumaudiofrequency.Util.ReadJsonFile;
-import static com.example.spectrumaudiofrequency.Util.SaveJsonFile;
-import static com.example.spectrumaudiofrequency.Util.getUriFromResourceId;
+import static com.example.spectrumaudiofrequency.core.SoundAnalyzer.AudioPeakAnalyzer.Peak.JsonStringToPeakArray;
+import static com.example.spectrumaudiofrequency.core.SoundAnalyzer.AudioPeakAnalyzer.Peak.PeakArrayToJsonString;
+import static com.example.spectrumaudiofrequency.util.Files.ReadJsonFile;
+import static com.example.spectrumaudiofrequency.util.Files.getUriFromResourceId;
 
 public class MainActivity extends AppCompatActivity {
     static {
@@ -45,7 +48,6 @@ public class MainActivity extends AppCompatActivity {
 
     public static int MANAGE_EXTERNAL_STORAGE_REQUEST = 120;
 
-    private RecyclerView WaveRecyclerView;
     private Button playButton;
 
     @SuppressLint("StaticFieldLeak")
@@ -55,13 +57,11 @@ public class MainActivity extends AppCompatActivity {
 
     private AudioDecoder Decoder;
     private MediaPlayer mediaPlayer;
-    private WaveRender waveRender;
-    private View.OnClickListener Play;
+    private SinusoidDrawn sinusoidDrawn;
+    private View.OnClickListener onClickPlayButton;
     private ProgressBar AnalysisProgressBar;
     private TextView ProgressText;
     private LinearLayout ProgressLayout;
-    private Button ReanalyzeButton;
-    private Button goButton;
     private int Peak = 0;
 
     public void RequestPermissions(Activity activity) {
@@ -87,10 +87,11 @@ public class MainActivity extends AppCompatActivity {
             ProgressText.setText((progress + "%"));
             AnalysisProgressBar.setProgress((int) (progress));
         }));
+
         soundAnalyzer.start(peaks -> {
             ProgressLayout.post(() -> ProgressLayout.setVisibility(View.GONE));
-            waveRender.Peaks = peaks;
-            SaveJsonFile(this, AudioName, PeakArrayToJsonString(peaks));
+            sinusoidDrawn.Peaks = peaks;
+            Files.SaveJsonFile(this, AudioName, PeakArrayToJsonString(peaks));
             onAnalysis = false;
         });
     }
@@ -102,31 +103,30 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
 
         setContentView(R.layout.activity_main);
-
         RequestPermissions(this);
 
         ProgressLayout = this.findViewById(R.id.ProgressLayout);
         AnalysisProgressBar = this.findViewById(R.id.AnalysisProgressBar);
         ProgressText = this.findViewById(R.id.ProgressText);
-        goButton = this.findViewById(R.id.goButton);
+        Button goButton = this.findViewById(R.id.goButton);
 
-        WaveRecyclerView = this.findViewById(R.id.WaveRecyclerView);
+        RecyclerView waveRecyclerView = this.findViewById(R.id.WaveRecyclerView);
         InfoTextView = this.findViewById(R.id.InfoTextView);
         playButton = this.findViewById(R.id.playButton);
-        ReanalyzeButton = this.findViewById(R.id.ReanalyzeButton);
+        Button reanalyzeButton = this.findViewById(R.id.ReanalyzeButton);
         SeekBar scaleInput = this.findViewById(R.id.scaleInput);
 
         Decoder = new AudioDecoder(this, R.raw.choose, true);
         Decoder.prepare().join();
 
-        waveRender = new WaveRender(this, Decoder.MediaDuration);
-        WaveAdapter = new LongWaveImageAdapter(Decoder, this.waveRender);
+        sinusoidDrawn = new SinusoidDrawn(this, Decoder.MediaDuration);
+        WaveAdapter = new LongWaveImageAdapter(Decoder, this.sinusoidDrawn);
 
-        WaveRecyclerView.setHasFixedSize(false);
+        waveRecyclerView.setHasFixedSize(false);
         LinearLayoutManager linearLayoutManagerOfWaveRecyclerView
                 = new LinearLayoutManager(this, HORIZONTAL, false);
-        WaveRecyclerView.setLayoutManager(linearLayoutManagerOfWaveRecyclerView);
-        WaveRecyclerView.setAdapter(WaveAdapter);
+        waveRecyclerView.setLayoutManager(linearLayoutManagerOfWaveRecyclerView);
+        waveRecyclerView.setAdapter(WaveAdapter);
 
         int AudioResourceChoseId = R.raw.choose;
 
@@ -135,18 +135,15 @@ public class MainActivity extends AppCompatActivity {
             AnalyzeAudio(FileName);
         } else {
             ProgressLayout.setVisibility(View.GONE);
-            waveRender.Peaks = JsonStringToPeakArray(ReadJsonFile(this, FileName));
+            sinusoidDrawn.Peaks = JsonStringToPeakArray(ReadJsonFile(this, FileName));
         }
 
-        ReanalyzeButton.setOnClickListener(v -> AnalyzeAudio(FileName));
-
+        reanalyzeButton.setOnClickListener(v -> AnalyzeAudio(FileName));
 
         goButton.setOnClickListener(v -> {
-            if (Peak >= waveRender.Peaks.length) Peak = 0;
-
-            int position = (int) ((waveRender.Peaks[Peak].time - Decoder.SampleDuration) / Decoder.SampleDuration);
-
-            linearLayoutManagerOfWaveRecyclerView.scrollToPositionWithOffset(position, 0);
+            if (Peak >= sinusoidDrawn.Peaks.length) Peak = 0;
+            linearLayoutManagerOfWaveRecyclerView.scrollToPositionWithOffset((int)
+                    (sinusoidDrawn.Peaks[Peak].time / Decoder.SampleDuration), 0);
             Peak++;
         });
 
@@ -171,13 +168,14 @@ public class MainActivity extends AppCompatActivity {
         mediaPlayer = new MediaPlayer();
         try {
             mediaPlayer.setAudioStreamType(AudioManager.STREAM_MUSIC);
-            mediaPlayer.setDataSource(this, getUriFromResourceId(this,AudioResourceChoseId));
+            mediaPlayer.setDataSource(this, getUriFromResourceId(this, AudioResourceChoseId));
 
         } catch (IOException e) {
             e.printStackTrace();
         }
         final boolean[] isPlay = {false};
         AtomicBoolean IsPapered = new AtomicBoolean(false);
+
         View.OnClickListener PlayWithMusic = v -> {
             if (!isPlay[0] && !mediaPlayer.isPlaying()) {
                 if (!IsPapered.get()) {
@@ -189,15 +187,32 @@ public class MainActivity extends AppCompatActivity {
                         timer.scheduleAtFixedRate(new TimerTask() {
                             @Override
                             public void run() {
-                                // if (mediaPlayer.isPlaying())
-                                WaveAdapter.update((mediaPlayer.getCurrentPosition() * 1000));
+
+                                if (mediaPlayer.isPlaying()) {
+                                    long currentTime = mediaPlayer.getCurrentPosition() * 10;
+                                    int PeacePosition = (int)
+                                            (currentTime / Decoder.SampleDuration);
+                                    long restTime = currentTime - PeacePosition * Decoder.SampleDuration;
+
+                                    int pixelTime = Decoder.SampleDuration / linearLayoutManagerOfWaveRecyclerView.getWidth();
+
+                                    Log.i("!!!", "PeacePosition: " + PeacePosition);
+
+                                    waveRecyclerView.post(() -> {
+                                        int offset = 0;
+                                        if (restTime > 0)
+                                            offset = (int) (restTime / pixelTime) * -1;
+                                        linearLayoutManagerOfWaveRecyclerView
+                                                .scrollToPositionWithOffset(PeacePosition, offset);
+                                    });
+                                }
                             }
-                        }, 0, 16);
+                        }, 0, 33);
 
                     });
                     mediaPlayer.prepareAsync();
                 } else {
-                    if (mediaPlayer.getCurrentPosition() > mediaPlayer.getDuration() / 1.5f)
+                    if (mediaPlayer.getCurrentPosition() > mediaPlayer.getDuration() / 1.9f)
                         mediaPlayer.reset();
 
                     mediaPlayer.start();
@@ -209,33 +224,12 @@ public class MainActivity extends AppCompatActivity {
 
             isPlay[0] = !isPlay[0];
         };
-
-        this.Play = null;
-        Play = v -> {
-            Timer timer = new Timer();
-            AtomicInteger time = new AtomicInteger();
-
-            timer.scheduleAtFixedRate(new TimerTask() {
-                @Override
-                public void run() {
-                    WaveAdapter.update(time.addAndGet(Decoder.SampleDuration / 1000));
-                }
-            }, 0, 100);
-            playButton.setOnClickListener(v1 -> {
-                timer.cancel();
-                playButton.setOnClickListener(Play);
-            });
-        };
-
-        playButton.setOnClickListener(Play);
-
-
+        playButton.setOnClickListener(PlayWithMusic);
     }
 
     @Override
     protected void onDestroy() {
         super.onDestroy();
-        this.waveRender.destroy();
-        Log.i("onDestroy", "WavesImagesAsClear" + WaveRender.Clear());
+        this.sinusoidDrawn.destroy();
     }
 }

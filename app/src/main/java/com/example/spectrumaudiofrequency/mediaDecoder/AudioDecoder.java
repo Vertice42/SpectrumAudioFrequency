@@ -1,4 +1,4 @@
-package com.example.spectrumaudiofrequency.MediaDecoder;
+package com.example.spectrumaudiofrequency.mediaDecoder;
 
 import android.content.Context;
 import android.media.MediaCodec;
@@ -21,16 +21,12 @@ import java.util.concurrent.ForkJoinTask;
 
 import static android.media.MediaExtractor.SEEK_TO_CLOSEST_SYNC;
 import static android.media.MediaExtractor.SEEK_TO_PREVIOUS_SYNC;
-import static com.example.spectrumaudiofrequency.Util.getFileName;
-import static com.example.spectrumaudiofrequency.Util.getUriFromResourceId;
+import static com.example.spectrumaudiofrequency.util.Files.getFileName;
+import static com.example.spectrumaudiofrequency.util.Files.getUriFromResourceId;
 
 @RequiresApi(api = Build.VERSION_CODES.LOLLIPOP)
 public
 class AudioDecoder {
-    private final boolean SaveCacheEnable;
-    private dbAudioDecoderManager dbAudioDecoderManager;
-    private final String MediaName;
-
     public static class PeriodRequest {
         long RequiredTime;
 
@@ -41,7 +37,6 @@ class AudioDecoder {
             this.ProcessListener = ProcessListener;
         }
     }
-
     public static class DecoderResult {
         public byte[] BytesSamplesChannels;
         public final long SampleTime;
@@ -51,16 +46,6 @@ class AudioDecoder {
             SampleTime = sampleTime;
         }
     }
-
-    private final ForkJoinPool Poll;
-
-    private MediaCodec Decoder;
-    private MediaFormat format;
-    private MediaExtractor extractor;
-
-    private Context context;
-    private Uri uri;
-    private String AudioPath = null;
 
     public long MediaDuration;
     public int SampleDuration;
@@ -72,10 +57,23 @@ class AudioDecoder {
     private interface IdListener {
         void onIdAvailable(int Id);
     }
-
     public interface ProcessListener {
         void OnProceed(DecoderResult decoderResult);
     }
+
+    private final boolean SaveCacheEnable;
+    private dbAudioDecoderManager dbAudioDecoderManager;
+    private final String MediaName;
+
+    private final ForkJoinPool Poll;
+
+    private MediaCodec Decoder;
+    private MediaFormat format;
+    private MediaExtractor extractor;
+
+    private Context context;
+    private Uri uri;
+    private String AudioPath = null;
 
     private final ArrayList<Integer> InputIds = new ArrayList<>();
     private final ArrayList<IdListener> InputIDListeners = new ArrayList<>();
@@ -109,7 +107,7 @@ class AudioDecoder {
         }
     }
 
-    AudioDecoder(String AudioPath, boolean saveCacheEnable) {
+    public AudioDecoder(String AudioPath, boolean saveCacheEnable) {
         SaveCacheEnable = saveCacheEnable;
         this.AudioPath = AudioPath;
         this.MediaName = getFileName(AudioPath);
@@ -326,6 +324,13 @@ class AudioDecoder {
 
     public void addRequest(PeriodRequest periodRequest) {
         if (SaveCacheEnable) {
+
+            long LastPeaceTime = MediaDuration - SampleDuration;
+            if (periodRequest.RequiredTime > LastPeaceTime)
+                periodRequest.RequiredTime = LastPeaceTime;//todo obter time zero da erro ou o primeiro procesamento da error ?
+            else if (periodRequest.RequiredTime < SampleDuration)
+                periodRequest.RequiredTime = SampleDuration;
+
             int SamplePeace = (int) (periodRequest.RequiredTime / SampleDuration);
             byte[] bytes = dbAudioDecoderManager.getSamplePiece(SamplePeace);
 
@@ -337,5 +342,13 @@ class AudioDecoder {
         } else {
             getInputId(InputID -> putRequest(InputID, periodRequest));
         }
+    }
+
+    public void clear() {
+        dbAudioDecoderManager.deleteMediaDecoded(MediaName);
+    }
+
+    public void destroy() {
+        dbAudioDecoderManager.close();
     }
 }

@@ -1,4 +1,4 @@
-package com.example.spectrumaudiofrequency;
+package com.example.spectrumaudiofrequency.view;
 
 import android.content.Context;
 import android.graphics.Bitmap;
@@ -12,12 +12,13 @@ import android.util.Log;
 
 import androidx.renderscript.RenderScript;
 
-import com.example.spectrumaudiofrequency.SinusoidConverter.CalculatorFFT;
-import com.example.spectrumaudiofrequency.SinusoidConverter.CalculatorFFT__Adapted;
-import com.example.spectrumaudiofrequency.SinusoidConverter.CalculatorFFT__Default;
-import com.example.spectrumaudiofrequency.SinusoidConverter.CalculatorFFT__Precise;
-import com.example.spectrumaudiofrequency.SinusoidConverter.CalculatorFFT_Native;
-import com.example.spectrumaudiofrequency.SoundAnalyzer.AudioPeakAnalyzer.Peak;
+import com.example.spectrumaudiofrequency.core.SinusoidConverter;
+import com.example.spectrumaudiofrequency.core.SinusoidConverter.CalculatorFFT;
+import com.example.spectrumaudiofrequency.core.SinusoidConverter.CalculatorFFT__Adapted;
+import com.example.spectrumaudiofrequency.core.SinusoidConverter.CalculatorFFT__Default;
+import com.example.spectrumaudiofrequency.core.SinusoidConverter.CalculatorFFT__Precise;
+import com.example.spectrumaudiofrequency.core.SinusoidConverter.CalculatorFFT_Native;
+import com.example.spectrumaudiofrequency.core.SoundAnalyzer.AudioPeakAnalyzer.Peak;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -25,34 +26,28 @@ import java.io.FileOutputStream;
 import java.util.Date;
 import java.util.concurrent.ForkJoinPool;
 
-import static com.example.spectrumaudiofrequency.SinusoidConverter.SimplifySinusoid;
+import static com.example.spectrumaudiofrequency.core.SinusoidConverter.SimplifySinusoid;
 
-class WaveRender {
-
+public class SinusoidDrawn {
     interface WaveRenderListeners {
         void onFinish(Bitmap bitmap);
     }
 
+    public boolean AntiAlias = false;
+    public Peak[] Peaks = new Peak[0];
+    public long SpectrumSize;
+
     private static final String Folder = "WavePieces";
 
     private final RenderScript rs;
-
     private final ForkJoinPool pool;
-
-    public Peak[] Peaks = new Peak[0];
-
-    public long SpectrumSize;
 
     public int Height;
     public int Width;
 
-    public float Frequency = 1;
-
-    public boolean AntiAlias = true;
-
     private final CalculatorFFT calculatorFFTGpu;
 
-    WaveRender(Context context, long SpectrumSize) {
+    public SinusoidDrawn(Context context, long SpectrumSize) {
         this.SpectrumSize = SpectrumSize;
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
             this.pool = ForkJoinPool.commonPool();
@@ -106,103 +101,7 @@ class WaveRender {
         Log.i("TAG", "SaveTime: " + (new Date().getTime() - SaveTime) + "ms");
     }
 
-    private void DrawTime(Canvas canvas, long Time, long PieceDuration, float Anchor) {
-        int DrawNumber = 4;
-
-        float timeDistance = PieceDuration / (float) DrawNumber;
-        float pixelDistance = Width / (float) DrawNumber;
-
-        Paint paint = new Paint();
-        paint.setStrokeWidth(1);
-        paint.setTextSize(10);
-        paint.setColor(Color.BLACK);
-
-        for (int i = 0; i < DrawNumber; i++) {
-            canvas.drawText(((Time + i * timeDistance)) + "mic", i * pixelDistance, Anchor + Anchor / 10, paint);
-        }
-    }
-
-    private void DrawAnalyzer(Canvas canvas, short[] Sample, long Time, long SampleDuration, float Anchor, float Press) {
-        double pixelTime = (Width / (double) SampleDuration);
-
-        Peak peakToDraw = null;
-        for (Peak peak : this.Peaks) {
-            if (peak.time >= Time && peak.time <= Time + SampleDuration) {
-                peakToDraw = peak;
-                break;
-            }
-        }
-
-        if (peakToDraw == null) return;
-
-        float Position = (float) ((peakToDraw.time - Time) * pixelTime);
-
-        Paint textPaint = new Paint();
-        textPaint.setStrokeWidth(20);
-        textPaint.setTextSize(10);
-        textPaint.setColor(Color.BLACK);
-        canvas.drawText(peakToDraw.time + "mic", Position, Anchor+Anchor/10, textPaint);
-        canvas.drawText("datum: " + peakToDraw.datum, Position, Anchor + Anchor / 2, textPaint);
-
-        Paint pointPaint = new Paint();
-        pointPaint.setColor(Color.RED);
-        pointPaint.setStrokeWidth(10);
-
-        float amplitude = Anchor + peakToDraw.datum / Press;
-
-        boolean exit = false;
-        for (short value : Sample) {
-            if (value == peakToDraw.datum) {
-                exit = true;
-                break;
-            }
-        }
-
-        if (exit) Log.e("not exit on Sample", "" + peakToDraw.datum);
-
-        canvas.drawPoint(Position, amplitude, pointPaint);
-    }
-
-    private void DrawFFT(Canvas canvas, float[] fft, float Anchor, int color, float Press) {
-        float SpaceBetweenWaves = (float) Width / fft.length;
-        //"spacing" determining the line spacing is by consequence the size of the sound wave
-        Paint WavePaint = new Paint();
-        WavePaint.setStrokeWidth(1);
-        WavePaint.setColor(color);
-        WavePaint.setAntiAlias(AntiAlias);
-        //activates anti aliasing and sets the thickness of the line
-        float startLineW = SpaceBetweenWaves, endLineW = SpaceBetweenWaves;
-        //Initialise Lines
-        for (float v : fft) {
-            float amplitude = v;
-            if (amplitude > 0) amplitude *= -1f;
-
-            float EndLine = Anchor + amplitude / Press;
-            //decreases the amplitude of the sound wave
-            canvas.drawLine(startLineW, Anchor, endLineW, EndLine, WavePaint);
-            //canvas.drawText(String.valueOf((int) EndLine), endLineW, endLineH - endLineH / 10, new Paint());
-            startLineW += SpaceBetweenWaves;
-            endLineW += SpaceBetweenWaves;
-            //advances to the next wave point
-        }
-    }
-
-    private void DrawFFT_Test(Canvas canvas, float[] sample, long Time, long PieceDuration) {
-        if (sample.length < 1) return;
-
-        //Log.i("TAG", "sample:" + sample.length + " Time:" + Time + "PieceDuration: " + PieceDuration + "microns");
-
-        /*
-        float byteTime = (float) sample.length / PieceDuration; // Microns
-
-        int divisor = (int) (sample.length / (byteTime * 100000)); // Microns
-
-        short[][] sample = Util.SplitArray(sample, divisor);
-
-        short[] sample = sample[0];
-        */
-
-
+    private void DrawFFT_Test(Canvas canvas, float[] sample, long Time, long PieceDuration, float Frequency) {
         int CenterX = (Width / 2);
         int CenterY = (Height / 2);
 
@@ -385,9 +284,78 @@ class WaveRender {
         }
     }
 
-    private void DrawSinusoid(Canvas canvas, short[] sample, float Anchor, int color, float Press) {
-        if (sample.length < 10) return;
+    private void DrawTime(Canvas canvas, long Time, long PieceDuration, float Anchor) {
+        int DrawNumber = 4;
 
+        float timeDistance = PieceDuration / (float) DrawNumber;
+        float pixelDistance = Width / (float) DrawNumber;
+
+        Paint paint = new Paint();
+        paint.setStrokeWidth(1);
+        paint.setTextSize(10);
+        paint.setColor(Color.BLACK);
+
+        for (int i = 0; i < DrawNumber; i++) {
+            canvas.drawText(((Time + i * timeDistance)) + "mic", i * pixelDistance, Anchor + Anchor / 10, paint);
+        }
+    }
+
+    private void DrawAnalyzer(Canvas canvas, short[] Sample, long Time, long SampleDuration, float Anchor, float Press) {
+        double pixelTime = (Width / (double) SampleDuration);
+
+        Peak peakToDraw = null;
+        for (Peak peak : this.Peaks) {
+            if (peak.time >= Time && peak.time <= Time + SampleDuration) {
+                peakToDraw = peak;
+                break;
+            }
+        }
+
+        if (peakToDraw == null) return;
+
+        float Position = (float) ((peakToDraw.time - Time) * pixelTime);
+
+        Paint textPaint = new Paint();
+        textPaint.setStrokeWidth(20);
+        textPaint.setTextSize(10);
+        textPaint.setColor(Color.BLACK);
+        canvas.drawText(peakToDraw.time + "mic", Position, Anchor + Anchor / 10, textPaint);
+        canvas.drawText("datum: " + peakToDraw.datum, Position, Anchor + Anchor / 2, textPaint);
+
+        Paint pointPaint = new Paint();
+        pointPaint.setColor(Color.RED);
+        pointPaint.setStrokeWidth(10);
+
+        float amplitude = Anchor + peakToDraw.datum / Press;
+
+        canvas.drawPoint(Position, amplitude, pointPaint);
+    }
+
+    private void DrawFFT(Canvas canvas, float[] fft, float Anchor, int color, float Press) {
+        float SpaceBetweenWaves = (float) Width / fft.length;
+        //"spacing" determining the line spacing is by consequence the size of the sound wave
+        Paint WavePaint = new Paint();
+        WavePaint.setStrokeWidth(1);
+        WavePaint.setColor(color);
+        WavePaint.setAntiAlias(AntiAlias);
+        //activates anti aliasing and sets the thickness of the line
+        float startLineW = SpaceBetweenWaves, endLineW = SpaceBetweenWaves;
+        //Initialise Lines
+        for (float v : fft) {
+            float amplitude = v;
+            if (amplitude > 0) amplitude *= -1f;
+
+            float EndLine = Anchor + amplitude / Press;
+            //decreases the amplitude of the sound wave
+            canvas.drawLine(startLineW, Anchor, endLineW, EndLine, WavePaint);
+            //canvas.drawText(String.valueOf((int) EndLine), endLineW, endLineH - endLineH / 10, new Paint());
+            startLineW += SpaceBetweenWaves;
+            endLineW += SpaceBetweenWaves;
+            //advances to the next wave point
+        }
+    }
+
+    private void DrawSinusoid(Canvas canvas, short[] sample, float Anchor, int color, float Press) {
         float SpaceBetweenWaves = (float) Width / sample.length;
         //"spacing" determining the line spacing is by consequence the size of the sound wave
         Paint WavePaint = new Paint();
@@ -462,14 +430,13 @@ class WaveRender {
             DrawTime(canvas, Time, SampleDuration, Height / 20f);
 
             if (SampleChannels[0].length > 10) {
-                DrawAnalyzer(canvas, SampleChannels[0], Time, SampleDuration, Height / 2f, Height / 2f);
+               // DrawAnalyzer(canvas, SampleChannels[0], Time, SampleDuration, Height / 2f, Height / 2f);
 
-                DrawSinusoid(canvas, SampleChannels[0], Height / 2f, Color.GREEN, Height / 2f);
+                DrawSinusoid(canvas, SampleChannels[0], Height / 2f, Color.BLACK, Height / 5f);
 
-                //DrawWave(canvas, SimplifySinusoid(sampleChannels[0], Width), Height / 3f, Color.BLACK, Height / 2f);
+                //DrawWave(canvas, SimplifySinusoid(SampleChannels[0], Width), Height / 3f, Color.BLACK, Height / 2f);
 
-                DrawFFT(canvas, SimplifySinusoid(calculatorFFTGpu.Process(SampleChannels[0]), Width),
-                        Height / 1.5f, Color.BLUE, Height / 20f);
+                //DrawFFT(canvas, SinusoidConverter.SimplifySinusoid(calculatorFFTGpu.Process(SampleChannels[0]), Width), Height / 1.5f, Color.BLUE, Height / 20f);
             }
             onRenderFinish.onFinish(imageBitmap);
         });

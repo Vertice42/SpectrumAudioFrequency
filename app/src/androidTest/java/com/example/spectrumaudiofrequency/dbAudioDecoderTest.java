@@ -5,7 +5,7 @@ import android.content.Context;
 import androidx.test.core.app.ApplicationProvider;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
 
-import com.example.spectrumaudiofrequency.MediaDecoder.dbAudioDecoderManager;
+import com.example.spectrumaudiofrequency.mediaDecoder.dbAudioDecoderManager;
 
 import org.junit.Assert;
 import org.junit.Test;

@@ -1,8 +1,7 @@
-package com.example.spectrumaudiofrequency;
+package com.example.spectrumaudiofrequency.view;
 
 import android.annotation.SuppressLint;
 import android.os.Build;
-import android.util.Log;
 import android.view.ViewGroup;
 import android.widget.ImageView;
 
@@ -10,22 +9,23 @@ import androidx.annotation.NonNull;
 import androidx.annotation.RequiresApi;
 import androidx.recyclerview.widget.RecyclerView;
 
-import com.example.spectrumaudiofrequency.MediaDecoder.AudioDecoder;
-import com.example.spectrumaudiofrequency.MediaDecoder.AudioDecoder.PeriodRequest;
-import com.example.spectrumaudiofrequency.SinusoidConverter.SuperSimplifySinusoid;
-import com.example.spectrumaudiofrequency.Util.CalculatePerformance.Performance;
+import com.example.spectrumaudiofrequency.core.SinusoidConverter.SuperSimplifySinusoid;
+import com.example.spectrumaudiofrequency.mediaDecoder.AudioDecoder;
+import com.example.spectrumaudiofrequency.mediaDecoder.AudioDecoder.PeriodRequest;
+import com.example.spectrumaudiofrequency.util.CalculatePerformance;
+import com.example.spectrumaudiofrequency.util.CalculatePerformance.Performance;
 
-import static com.example.spectrumaudiofrequency.MainActivity.InfoTextView;
-import static com.example.spectrumaudiofrequency.Util.CalculatePerformance.SomePerformances;
+import static com.example.spectrumaudiofrequency.util.CalculatePerformance.SomePerformances;
+import static com.example.spectrumaudiofrequency.view.Activity.MainActivity.InfoTextView;
 
 public class LongWaveImageAdapter extends RecyclerView.Adapter<WaveViewHolder> {
-    public com.example.spectrumaudiofrequency.MediaDecoder.AudioDecoder AudioDecoder;
-    public WaveRender waveRender;
+    public com.example.spectrumaudiofrequency.mediaDecoder.AudioDecoder AudioDecoder;
+    public SinusoidDrawn sinusoidDrawn;
 
     public int WaveLength = 0;
 
-    private final Util.CalculatePerformance RequestPerformance;
-    private final Util.CalculatePerformance RenderPerformance;
+    private final CalculatePerformance RequestPerformance;
+    private final CalculatePerformance RenderPerformance;
     private static final int ImageResolution = 1;
 
     private WaveViewHolder holderObserved;
@@ -38,21 +38,21 @@ public class LongWaveImageAdapter extends RecyclerView.Adapter<WaveViewHolder> {
         UpdateLength();
     }
 
-    LongWaveImageAdapter(AudioDecoder audioDecoder, WaveRender waveRender) {
+    public LongWaveImageAdapter(AudioDecoder audioDecoder, SinusoidDrawn sinusoidDrawn) {
         this.AudioDecoder = audioDecoder;
-        this.waveRender = waveRender;
+        this.sinusoidDrawn = sinusoidDrawn;
 
-        this.RequestPerformance = new Util.CalculatePerformance("RequestPerformance");
-        this.RenderPerformance = new Util.CalculatePerformance("RenderPerformance");
+        this.RequestPerformance = new CalculatePerformance("RequestPerformance");
+        this.RenderPerformance = new CalculatePerformance("RenderPerformance");
 
-        setZoom(3);
+        setZoom(1);
     }
 
     @RequiresApi(api = Build.VERSION_CODES.LOLLIPOP)
     private void setWavePieceImageOnHolder(WaveViewHolder holder, final long Time,
                                            short[][] SampleChannels, long WavePieceDuration) {
-        waveRender.render(holder.ImageBitmap, SampleChannels, Time, WavePieceDuration,
-                (bitmap) -> holder.updateImage());
+        sinusoidDrawn.render(holder.ImageBitmap, SampleChannels, Time, WavePieceDuration,
+                holder::updateImage);
     }
 
     @NonNull
@@ -63,16 +63,17 @@ public class LongWaveImageAdapter extends RecyclerView.Adapter<WaveViewHolder> {
                 RecyclerView.LayoutParams.MATCH_PARENT, RecyclerView.LayoutParams.MATCH_PARENT);
 
         WaveImageView.setLayoutParams(layoutParams);
-        return new WaveViewHolder(WaveImageView, parent.getWidth() / ImageResolution, parent.getHeight() / ImageResolution);
+        return new WaveViewHolder(WaveImageView, parent.getWidth() / ImageResolution,
+                parent.getHeight() / ImageResolution);
     }
 
     interface getAudioPeriodsSimplifiedListener {
         void onResult(short[][] result);
     }
 
-    void getAudioPeriodsSimplified(SuperSimplifySinusoid superSimplifySinusoid, long Time,
-                                   int ObtainedPeriods, int NumberOfPeriods,
-                                   getAudioPeriodsSimplifiedListener processListener) {
+    void nextAudioPeriodsToSimplify(SuperSimplifySinusoid superSimplifySinusoid, long Time,
+                                    int ObtainedPeriods, int NumberOfPeriods,
+                                    getAudioPeriodsSimplifiedListener processListener) {
         AudioDecoder.addRequest(new PeriodRequest(Time,
                 decoderResult -> {
                     superSimplifySinusoid.Simplify(AudioDecoder.bytesToSampleChannels(decoderResult.BytesSamplesChannels));
@@ -80,7 +81,7 @@ public class LongWaveImageAdapter extends RecyclerView.Adapter<WaveViewHolder> {
                     if (ObtainedPeriods > NumberOfPeriods) {
                         processListener.onResult(superSimplifySinusoid.getSinusoidChannelSimplify());
                     } else {
-                        getAudioPeriodsSimplified(superSimplifySinusoid,
+                        nextAudioPeriodsToSimplify(superSimplifySinusoid,
                                 Time + AudioDecoder.SampleDuration,
                                 ObtainedPeriods + 1, NumberOfPeriods, processListener);
                     }
@@ -101,7 +102,7 @@ public class LongWaveImageAdapter extends RecyclerView.Adapter<WaveViewHolder> {
                     if (NumberOfPeriods == 1) {
                         processListener.onResult(simplifySinusoid.getSinusoidChannelSimplify());
                     } else {
-                        getAudioPeriodsSimplified(simplifySinusoid,
+                        nextAudioPeriodsToSimplify(simplifySinusoid,
                                 Time + AudioDecoder.SampleDuration,
                                 1, NumberOfPeriods, processListener);
                     }
@@ -113,9 +114,9 @@ public class LongWaveImageAdapter extends RecyclerView.Adapter<WaveViewHolder> {
         if (Zoom == 1) {
             AudioDecoder.addRequest(new PeriodRequest(Time, decoderResult ->
             {
-                if (Time != decoderResult.SampleTime)
-                    Log.e("setSampleError", "Time:" + Time + " decoderResultTime:" + decoderResult.SampleTime);
-                setWavePieceImageOnHolder(waveViewHolder, Time, AudioDecoder.bytesToSampleChannels(decoderResult.BytesSamplesChannels), AudioDecoder.SampleDuration);
+                setWavePieceImageOnHolder(waveViewHolder, Time,
+                        AudioDecoder.bytesToSampleChannels(decoderResult.BytesSamplesChannels),
+                        AudioDecoder.SampleDuration);
             }));
         } else {
             getAudioPeriodsSimplified(Time, Zoom, result -> {
@@ -134,7 +135,7 @@ public class LongWaveImageAdapter extends RecyclerView.Adapter<WaveViewHolder> {
 
     @SuppressLint("SetTextI18n")
     @RequiresApi(api = Build.VERSION_CODES.LOLLIPOP)
-    public void update(int Time) {
+    public void update(long Time) {
         if (inUpdate) return;
         inUpdate = true;
 
@@ -143,13 +144,11 @@ public class LongWaveImageAdapter extends RecyclerView.Adapter<WaveViewHolder> {
             Performance requestPerformance = RequestPerformance.stop();
 
             RenderPerformance.start();
-            waveRender.render(holderObserved.ImageBitmap, AudioDecoder.bytesToSampleChannels(decoderResult.BytesSamplesChannels), Time,
+            sinusoidDrawn.render(holderObserved.ImageBitmap,
+                    AudioDecoder.bytesToSampleChannels(decoderResult.BytesSamplesChannels), Time,
                     AudioDecoder.SampleDuration, (bitmap) -> {
-
-                        holderObserved.ImageBitmap = bitmap;
-                        holderObserved.updateImage();
+                        holderObserved.updateImage(bitmap);
                         inUpdate = false;
-
                         Performance renderPerformance = RenderPerformance.stop();
 
                         InfoTextView.setText(SomePerformances("Total", new Performance[]

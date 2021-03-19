@@ -1,11 +1,11 @@
-package com.example.spectrumaudiofrequency;
+package com.example.spectrumaudiofrequency.core;
 
 import android.os.Build;
 import android.util.Log;
 
-import com.example.spectrumaudiofrequency.MediaDecoder.AudioDecoder;
-import com.example.spectrumaudiofrequency.MediaDecoder.AudioDecoder.ProcessListener;
-import com.example.spectrumaudiofrequency.SoundAnalyzer.AudioPeakAnalyzer.Peak;
+import com.example.spectrumaudiofrequency.mediaDecoder.AudioDecoder;
+import com.example.spectrumaudiofrequency.mediaDecoder.AudioDecoder.ProcessListener;
+import com.example.spectrumaudiofrequency.core.SoundAnalyzer.AudioPeakAnalyzer.Peak;
 
 import org.jetbrains.annotations.NotNull;
 import org.json.JSONArray;
@@ -26,20 +26,20 @@ public class SoundAnalyzer {
     private int iterationsMax;
     private final int SpikesCollectionSize;
 
-    interface SoundAnalyzerListener {
+    public interface SoundAnalyzerListener {
         void OnFinishedAnalysis(Peak[] result);
     }
 
-    interface SoundAnalyzerProgressListener {
+    public interface SoundAnalyzerProgressListener {
         void OnProgressChange(float progress);
     }
 
-    static class AudioPeakAnalyzer {
+    public static class AudioPeakAnalyzer {
         private final long Duration;
 
-        static class Peak {
-            short datum;
-            long time;
+        public static class Peak {
+            public short datum;
+            public long time;
 
             public Peak(short datum, long time) {
                 this.datum = datum;
@@ -135,7 +135,7 @@ public class SoundAnalyzer {
         this.progressListener = soundAnalyzerProgressListener;
     }
 
-    void start(SoundAnalyzerListener soundAnalyzerListener) {
+    public void start(SoundAnalyzerListener soundAnalyzerListener) {
         this.iterations = 0;
         this.iterationsMax = (int) ((AudioDecoder.MediaDuration / AudioDecoder.SampleDuration) / AudioDecoder.MediaDuration) + 1;
         this.Time = 0;
