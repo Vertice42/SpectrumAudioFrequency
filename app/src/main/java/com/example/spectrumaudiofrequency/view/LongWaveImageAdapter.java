@@ -9,14 +9,14 @@ import androidx.annotation.NonNull;
 import androidx.annotation.RequiresApi;
 import androidx.recyclerview.widget.RecyclerView;
 
-import com.example.spectrumaudiofrequency.core.SinusoidConverter.SuperSimplifySinusoid;
+import com.example.spectrumaudiofrequency.sinusoid_converter.Rearrange.SuperSimplifySinusoid;
 import com.example.spectrumaudiofrequency.mediaDecoder.AudioDecoder;
 import com.example.spectrumaudiofrequency.mediaDecoder.AudioDecoder.PeriodRequest;
 import com.example.spectrumaudiofrequency.util.CalculatePerformance;
 import com.example.spectrumaudiofrequency.util.CalculatePerformance.Performance;
 
 import static com.example.spectrumaudiofrequency.util.CalculatePerformance.SomePerformances;
-import static com.example.spectrumaudiofrequency.view.Activity.MainActivity.InfoTextView;
+import static com.example.spectrumaudiofrequency.view.activity.MainActivity.InfoTextView;
 
 public class LongWaveImageAdapter extends RecyclerView.Adapter<WaveViewHolder> {
     public com.example.spectrumaudiofrequency.mediaDecoder.AudioDecoder AudioDecoder;

@@ -152,10 +152,10 @@ double *fft(const short *Sample, int start, int end, int sampleLength) {
 
 extern "C"
 JNIEXPORT jdoubleArray JNICALL
-Java_com_example_spectrumaudiofrequency_core_SinusoidConverter_00024CalculatorFFT_1Native_fftNative(JNIEnv *env,
-                                                                    __unused jclass clazz,
-                                                                    jint start, jint end,
-                                                                    jshortArray sample) {
+Java_com_example_spectrumaudiofrequency_core_FourierFastTransform_00024Native_fftNative(JNIEnv *env,
+                                                                                        __unused jclass clazz,
+                                                                                        jint start, jint end,
+                                                                                        jshortArray sample) {
     short *shortArray = nullptr;
     int shortArrayLength = JShortArrayTOShortArray(env, sample, &shortArray);
 
@@ -164,15 +164,14 @@ Java_com_example_spectrumaudiofrequency_core_SinusoidConverter_00024CalculatorFF
 }
 extern "C"
 JNIEXPORT void JNICALL
-Java_com_example_spectrumaudiofrequency_core_SinusoidConverter_00024CalculatorFFT_1Native_CalculateAnglesOfFrequenciesRange(
+Java_com_example_spectrumaudiofrequency_core_FourierFastTransform_00024Native_CalculateAnglesOfFrequenciesRange(
         __unused JNIEnv *env, __unused jclass clazz,
         jint anglesLength,
         jint sampleLength) {
     CalculateAnglesOfFrequenciesRange(anglesLength, sampleLength);
 }extern "C"
 JNIEXPORT void JNICALL
-Java_com_example_spectrumaudiofrequency_core_SinusoidConverter_00024CalculatorFFT_1Native_setPrecision(__unused JNIEnv *env,
-                                                                       __unused jclass clazz,
-                                                                       jdouble precision) {
+Java_com_example_spectrumaudiofrequency_core_FourierFastTransform_00024Native_setPrecision(
+        JNIEnv *env, jclass clazz, jdouble precision) {
     PRECISION = precision;
 }

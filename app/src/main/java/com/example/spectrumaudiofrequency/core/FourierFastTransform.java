@@ -12,8 +12,6 @@ import com.example.spectrumaudiofrequency.ScriptC_fftGpuPrecise;
 import com.example.spectrumaudiofrequency.util.Array;
 import com.example.spectrumaudiofrequency.util.CalculatePerformance;
 
-import org.jetbrains.annotations.NotNull;
-
 import java.util.ArrayList;
 import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.ForkJoinTask;
@@ -22,35 +20,44 @@ import java.util.concurrent.RecursiveTask;
 import static com.example.spectrumaudiofrequency.util.Array.ConcatenateArray;
 import static com.example.spectrumaudiofrequency.util.CPU.getNumberOfCores;
 
-public class SinusoidConverter {
-    final static int PRECISION = 10;
-    static int SPECTRUM_ANALYSIS_RAGE = 400;//todo erro de memoria se for muito grande
-
-    public static float ToLogarithmicScale(float data) {
-        if (data == 0) return 0;
-        return (float) (((data < 0) ? Math.log10(data * -1) * -1 : (Math.log10(data))) * 100);
-    }
+public class FourierFastTransform {
+    /**
+     * Sets the precision of spectrum analysis by default to one decimal place.
+     * Attention a very large tablet can cause out of memory errors.
+     */
+    public static int PRECISION = 10;
+    /**
+     * Defines the length of the Spectrum to be analyzed.
+     * By default 400.
+     * Attention a very large tablet can cause out of memory errors.
+     */
+    public static int SPECTRUM_ANALYSIS_RAGE = 400;
 
     private interface Calculate {
-        float[] CalculateFFT(int FrequencyRange, short[] Sample);
+        /**
+         * Method used internally in the class does not call
+         */
+       abstract float[] CalculateFFT(int FrequencyRange, short[] Sample);
     }
 
-    public static abstract class CalculatorFFT implements Calculate {
+    /**
+     * Abstract class to manage requirements for processing audio samples
+     */
+    public static abstract class FFTAbstract implements Calculate {
         static boolean CalculatePerformanceEnable = false;
         private CalculatePerformance gnuFFT_PerformanceTask;
 
-        //todo add asink metodo;
         static class fftRequest {
 
             public final ForkJoinTask<float[]> task;
             public short[] SampleInput;
 
-            fftRequest(CalculatorFFT CalculatorFFT, short[] SampleInput) {
+            fftRequest(FFTAbstract fft, short[] SampleInput) {
                 this.SampleInput = SampleInput;
                 task = new RecursiveTask<float[]>() {
                     @Override
                     protected float[] compute() {
-                        return CalculatorFFT.CalculateFFT(SPECTRUM_ANALYSIS_RAGE * PRECISION, SampleInput);
+                        return fft.CalculateFFT(SPECTRUM_ANALYSIS_RAGE * PRECISION, SampleInput);
                     }
                 };
             }
@@ -63,21 +70,23 @@ public class SinusoidConverter {
         private int SampleLength = -1;
         private int AnglesLength = -1;
 
-        CalculatorFFT(ForkJoinPool poll) {
+        FFTAbstract(ForkJoinPool poll) {
             this.poll = poll;
         }
 
-        public float[] Process(short[] SampleChannels) {
-            fftRequest gpu_fftRequest = new fftRequest(this, SampleChannels);
-            Process(gpu_fftRequest);
+        /**
+         * Add a request to the list of orders is awaited by the result. So the execution time may vary.
+         */
+        public float[] Transform(short[] Sample) {
+            fftRequest gpu_fftRequest = new fftRequest(this, Sample);
+            Transform(gpu_fftRequest);
             return gpu_fftRequest.task.join();
         }
 
-        private void Process(fftRequest task) {
+        private void Transform(fftRequest task) {
             fftRequests.add(task);
             if (fftRequests.size() == 1) NextRequest();
         }
-
 
         private void RunWithPerformanceCalculation(ForkJoinTask<float[]> task) {
             if (this.gnuFFT_PerformanceTask == null)
@@ -95,7 +104,7 @@ public class SinusoidConverter {
             if (fftRequests.size() == 0) return;
 
             fftRequest gpuFFTRequest = this.fftRequests.get(0);
-            if (CalculatorFFT.CalculatePerformanceEnable)
+            if (FFTAbstract.CalculatePerformanceEnable)
                 RunWithPerformanceCalculation(gpuFFTRequest.task);
             else Run(gpuFFTRequest.task);
             this.fftRequests.remove(gpuFFTRequest);
@@ -105,11 +114,15 @@ public class SinusoidConverter {
 
     }
 
-    public static class CalculatorFFT__Default extends CalculatorFFT implements Calculate {
+    /**
+     * Calculate Fast Fourier Transform using the GPU.
+     * Using the standard form of using multidimensional arrays in Render Script.
+     */
+    public static class Default extends FFTAbstract implements Calculate {
         private final ScriptC_fftGpu gpu;
         private final RenderScript rs;
 
-        public CalculatorFFT__Default(RenderScript renderScript, ForkJoinPool forkJoinPool) {
+        public Default(RenderScript renderScript, ForkJoinPool forkJoinPool) {
             super(forkJoinPool);
             this.rs = renderScript;
             this.gpu = new ScriptC_fftGpu(renderScript);
@@ -160,11 +173,17 @@ public class SinusoidConverter {
         }
     }
 
-    public static class CalculatorFFT__Adapted extends CalculatorFFT implements Calculate {
+    /**
+     * Calculate Fast Fourier Transform using GPU.
+     * The multi-referenced arrays are rearranged in one-dimensional arrays,
+     * with a gain in performance in emulators,
+     * all The performance in physical devices must be tested.
+     */
+    public static class Adapted extends FFTAbstract implements Calculate {
         private final ScriptC_fftGpuAdapted fftGpuAdapted;
         private final RenderScript rs;
 
-        public CalculatorFFT__Adapted(RenderScript renderScript, ForkJoinPool forkJoinPool) {
+        public Adapted(RenderScript renderScript, ForkJoinPool forkJoinPool) {
             super(forkJoinPool);
             this.rs = renderScript;
             this.fftGpuAdapted = new ScriptC_fftGpuAdapted(rs);
@@ -213,11 +232,15 @@ public class SinusoidConverter {
         }
     }
 
-    public static class CalculatorFFT__Precise extends CalculatorFFT implements Calculate {
+    /**
+     * Calculate Fast Fourier Transform using GPU. Doubles are used in place of float,
+     * but performance is reduced.
+     */
+    public static class Precise extends FFTAbstract implements Calculate {
         private final ScriptC_fftGpuPrecise fftGpuPrecise;
         private final RenderScript rs;
 
-        public CalculatorFFT__Precise(RenderScript renderScript, ForkJoinPool forkJoinPool) {
+        public Precise(RenderScript renderScript, ForkJoinPool forkJoinPool) {
             super(forkJoinPool);
             this.rs = renderScript;
             this.fftGpuPrecise = new ScriptC_fftGpuPrecise(rs);
@@ -264,7 +287,12 @@ public class SinusoidConverter {
         }
     }
 
-    public static class CalculatorFFT_Native extends CalculatorFFT implements Calculate {
+    /**
+     * Calculate Fast Fourier transform using the native C++ CPU,
+     * the performance is reduced to long "SPECTRUM_ANALYSIS_RAGE",
+     * but the performance is better for short "SPECTRUM_ANALYSIS_RAGE".
+     */
+    public static class Native extends FFTAbstract implements Calculate {
 
         private static native void CalculateAnglesOfFrequenciesRange(int anglesLength, int WavePieceLength);
 
@@ -272,7 +300,7 @@ public class SinusoidConverter {
 
         private static native void setPrecision(double Precision);
 
-        public CalculatorFFT_Native(ForkJoinPool poll) {
+        public Native(ForkJoinPool poll) {
             super(poll);
         }
 
@@ -303,79 +331,4 @@ public class SinusoidConverter {
 
     }
 
-    /**
-     * Decrease the Sample by averaging the values.
-     * If the new length is greater than or equal to the old one,
-     * returns the sample without modification.
-     */
-    public static short[] SimplifySinusoid(short @NotNull [] Sample, int NewLength) {
-        if (NewLength >= Sample.length) return Sample;
-
-        short[] result = new short[NewLength];
-        int divider = Sample.length / NewLength;
-
-        for (int i = 0; i < result.length; i++) {
-            short media = 0;
-            for (int j = 0; j < divider; j++) media += Sample[i * divider + j];
-            media /= divider;
-
-            result[i] = media;
-        }
-        return result;
-    }
-
-    public static float[] SimplifySinusoid(float @NotNull [] Sample, int NewLength) {
-        if (NewLength >= Sample.length) return Sample;
-
-        float[] result = new float[NewLength];
-        int simplificationLength = Sample.length / NewLength;
-
-        for (int i = 0; i < result.length; i++) {
-            float media = 0;
-
-            for (int j = 0; j < simplificationLength; j++)
-                media += Sample[i * simplificationLength + j];
-
-            media /= simplificationLength;
-
-            result[i] = media;
-        }
-        return result;
-    }
-
-    public static class SuperSimplifySinusoid {
-        ArrayList<ArrayList<Short>> SinusoidChannelSimplify = new ArrayList<>();
-        private final int NewSampleLength;
-
-        public SuperSimplifySinusoid(int NewSampleLength) {
-            this.NewSampleLength = NewSampleLength;
-        }
-
-        public short[][] getSinusoidChannelSimplify() {
-            short[][] SinusoidChannels = new short[SinusoidChannelSimplify.size()][];
-
-            for (int i = 0; i < SinusoidChannels.length; i++) {
-                ArrayList<Short> list = SinusoidChannelSimplify.get(i);
-                SinusoidChannels[i] = new short[list.size()];
-                for (int j = 0; j < SinusoidChannels[i].length; j++) {
-                    SinusoidChannels[i][j] = SinusoidChannelSimplify.get(i).get(j);
-                }
-            }
-            return SinusoidChannels;
-        }
-
-        public void Simplify(short[][] SampleChannels) {
-            for (int channel = 0; channel < SampleChannels.length; channel++) {
-                SinusoidChannelSimplify.add(new ArrayList<>());
-                int simplificationLength = SampleChannels[channel].length / NewSampleLength;
-                short media = 0;
-                for (int i = 0; i < NewSampleLength; i++) {
-                    for (int j = 0; j < simplificationLength; j++)
-                        media += SampleChannels[channel][i * simplificationLength + j];
-                    media /= simplificationLength;
-                    SinusoidChannelSimplify.get(channel).add(media);
-                }
-            }
-        }
-    }
 }

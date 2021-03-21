@@ -12,21 +12,22 @@ import android.util.Log;
 
 import androidx.renderscript.RenderScript;
 
-import com.example.spectrumaudiofrequency.core.SinusoidConverter;
-import com.example.spectrumaudiofrequency.core.SinusoidConverter.CalculatorFFT;
-import com.example.spectrumaudiofrequency.core.SinusoidConverter.CalculatorFFT__Adapted;
-import com.example.spectrumaudiofrequency.core.SinusoidConverter.CalculatorFFT__Default;
-import com.example.spectrumaudiofrequency.core.SinusoidConverter.CalculatorFFT__Precise;
-import com.example.spectrumaudiofrequency.core.SinusoidConverter.CalculatorFFT_Native;
+import com.example.spectrumaudiofrequency.core.FourierFastTransform;
+import com.example.spectrumaudiofrequency.core.FourierFastTransform.Adapted;
+import com.example.spectrumaudiofrequency.core.FourierFastTransform.Default;
+import com.example.spectrumaudiofrequency.core.FourierFastTransform.Precise;
+import com.example.spectrumaudiofrequency.core.FourierFastTransform.Native;
 import com.example.spectrumaudiofrequency.core.SoundAnalyzer.AudioPeakAnalyzer.Peak;
+import com.example.spectrumaudiofrequency.sinusoid_converter.Converter;
 
 import java.io.File;
 import java.io.FileOutputStream;
 
+import java.util.Arrays;
 import java.util.Date;
 import java.util.concurrent.ForkJoinPool;
 
-import static com.example.spectrumaudiofrequency.core.SinusoidConverter.SimplifySinusoid;
+import static com.example.spectrumaudiofrequency.sinusoid_converter.Rearrange.SimplifySinusoid;
 
 public class SinusoidDrawn {
     interface WaveRenderListeners {
@@ -45,7 +46,7 @@ public class SinusoidDrawn {
     public int Height;
     public int Width;
 
-    private final CalculatorFFT calculatorFFTGpu;
+    private final FourierFastTransform.FFTAbstract fft;
 
     public SinusoidDrawn(Context context, long SpectrumSize) {
         this.SpectrumSize = SpectrumSize;
@@ -57,19 +58,18 @@ public class SinusoidDrawn {
 
         this.rs = RenderScript.create(context);
 
-        switch (0) {
+        switch (2) {
             case 0:
-                this.calculatorFFTGpu = new CalculatorFFT__Adapted(rs, pool);
+                this.fft = new Adapted(rs, pool);
                 break;
             case 1:
-                this.calculatorFFTGpu = new CalculatorFFT__Precise(rs, pool);
+                this.fft = new Precise(rs, pool);
                 break;
             case 2:
-                this.calculatorFFTGpu = new CalculatorFFT_Native(pool);
+                this.fft = new Native(pool);
                 break;
             default:
-                this.calculatorFFTGpu = new CalculatorFFT__Default(rs, pool);
-
+                this.fft = new Default(rs, pool);
         }
     }
 
@@ -191,8 +191,8 @@ public class SinusoidDrawn {
                 WavePaint.setColor(Color.GRAY);
             }
 
-            float EndLine = SinusoidConverter.ToLogarithmicScale(sample[i]);
-            float startLineH = SinusoidConverter.ToLogarithmicScale(sample[i - 1]);//todo é possivel reutilisar do loop anterior
+            float EndLine = Converter.ToLogarithmicScale(sample[i]);
+            float startLineH = Converter.ToLogarithmicScale(sample[i - 1]);//todo é possivel reutilisar do loop anterior
 
             float endLineH = EndLine;
 
@@ -223,8 +223,8 @@ public class SinusoidDrawn {
 
 
         for (int i = 1; i < sample.length; i++) {
-            float EndLine = SinusoidConverter.ToLogarithmicScale(sample[i]);
-            float startLineH = SinusoidConverter.ToLogarithmicScale(sample[i - 1]);//todo é possivel reutilisar do loop anterior
+            float EndLine = Converter.ToLogarithmicScale(sample[i]);
+            float startLineH = Converter.ToLogarithmicScale(sample[i - 1]);//todo é possivel reutilisar do loop anterior
 
             if (EndLine > 0) EndLine *= -1;
             if (startLineH > 0) startLineH *= -1;
@@ -356,6 +356,9 @@ public class SinusoidDrawn {
     }
 
     private void DrawSinusoid(Canvas canvas, short[] sample, float Anchor, int color, float Press) {
+
+        Log.i("sample", Arrays.toString(sample));
+
         float SpaceBetweenWaves = (float) Width / sample.length;
         //"spacing" determining the line spacing is by consequence the size of the sound wave
         Paint WavePaint = new Paint();
@@ -430,13 +433,10 @@ public class SinusoidDrawn {
             DrawTime(canvas, Time, SampleDuration, Height / 20f);
 
             if (SampleChannels[0].length > 10) {
-               // DrawAnalyzer(canvas, SampleChannels[0], Time, SampleDuration, Height / 2f, Height / 2f);
-
+                // DrawAnalyzer(canvas, SampleChannels[0], Time, SampleDuration, Height / 2f, Height / 2f);
                 DrawSinusoid(canvas, SampleChannels[0], Height / 2f, Color.BLACK, Height / 5f);
-
                 //DrawWave(canvas, SimplifySinusoid(SampleChannels[0], Width), Height / 3f, Color.BLACK, Height / 2f);
-
-                //DrawFFT(canvas, SinusoidConverter.SimplifySinusoid(calculatorFFTGpu.Process(SampleChannels[0]), Width), Height / 1.5f, Color.BLUE, Height / 20f);
+                DrawFFT(canvas, fft.Transform(SampleChannels[0]), Height / 1.5f, Color.BLUE, Height / 20f);
             }
             onRenderFinish.onFinish(imageBitmap);
         });

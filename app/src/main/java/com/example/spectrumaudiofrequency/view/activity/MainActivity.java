@@ -1,4 +1,4 @@
-package com.example.spectrumaudiofrequency.view.Activity;
+package com.example.spectrumaudiofrequency.view.activity;
 
 import android.Manifest;
 import android.annotation.SuppressLint;
