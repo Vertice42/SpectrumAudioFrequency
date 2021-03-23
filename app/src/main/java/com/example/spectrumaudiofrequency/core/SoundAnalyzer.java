@@ -145,7 +145,7 @@ public class SoundAnalyzer {
             if (Time != decoderResult.SampleTime)
                 Log.e("Time is !==", Time + "!=" + decoderResult.SampleTime);
 
-            short[][] sampleChannels = AudioDecoder.bytesToSampleChannels(decoderResult.BytesSamplesChannels);
+            short[][] sampleChannels = decoderResult.getSampleChannels(AudioDecoder);
 
             audioPeakAnalyzer.analyzeData(sampleChannels[0], Time, AudioDecoder.SampleDuration);
 

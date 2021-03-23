@@ -1,5 +1,9 @@
 package com.example.spectrumaudiofrequency.util;
 
+import android.util.Log;
+
+import java.util.Arrays;
+
 public class Array {
     public static short[][][] SplitArray(short[][] OriginalArray, int Divider) {
         int DataLength = (OriginalArray[0].length > 0) ? OriginalArray[0].length / Divider : 0;
@@ -96,5 +100,23 @@ public class Array {
         float[] floats = new float[doubles.length];
         for (int i = 0; i < doubles.length; i++) floats[i] = (float) doubles[i];
         return floats;
+    }
+
+    public static float someArray(float[] floats) {
+        float some = 0;
+        for (float aFloat : floats) some += aFloat;
+        return some;
+    }
+
+    public static float calculateEquity(float[] a, float[] b) {
+        if (a.length != b.length) return -1;
+
+        float[] differences = new float[a.length];
+
+        for (int i = 0; i < a.length; i++)differences[i] = (b[i] - b[i]) / b[i] ;
+
+        Log.i("differences", Arrays.toString(differences));
+
+        return (someArray(differences) / differences.length) * 100;
     }
 }

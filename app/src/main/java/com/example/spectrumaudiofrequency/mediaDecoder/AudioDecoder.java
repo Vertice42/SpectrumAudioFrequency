@@ -12,24 +12,26 @@ import android.util.Log;
 import androidx.annotation.NonNull;
 import androidx.annotation.RequiresApi;
 
+import org.jetbrains.annotations.NotNull;
+
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.ForkJoinTask;
 
 import static android.media.MediaExtractor.SEEK_TO_CLOSEST_SYNC;
-import static android.media.MediaExtractor.SEEK_TO_PREVIOUS_SYNC;
 import static com.example.spectrumaudiofrequency.util.Files.getFileName;
 import static com.example.spectrumaudiofrequency.util.Files.getUriFromResourceId;
 
 @RequiresApi(api = Build.VERSION_CODES.LOLLIPOP)
 public
 class AudioDecoder {
+
     public static class PeriodRequest {
         long RequiredTime;
-
         ProcessListener ProcessListener;
 
         public PeriodRequest(long RequiredTime, ProcessListener ProcessListener) {
@@ -37,6 +39,21 @@ class AudioDecoder {
             this.ProcessListener = ProcessListener;
         }
     }
+
+    public static class OutputPromise extends PeriodRequest {
+        int Id;
+
+        public OutputPromise(int Id, long RequiredTime, AudioDecoder.ProcessListener ProcessListener) {
+            super(RequiredTime, ProcessListener);
+            this.Id = Id;
+        }
+
+        public OutputPromise(int Id, PeriodRequest periodRequest) {
+            super(periodRequest.RequiredTime, periodRequest.ProcessListener);
+            this.Id = Id;
+        }
+    }
+
     public static class DecoderResult {
         public byte[] BytesSamplesChannels;
         public final long SampleTime;
@@ -45,14 +62,37 @@ class AudioDecoder {
             this.BytesSamplesChannels = BytesSamplesChannels;
             SampleTime = sampleTime;
         }
+
+        public short[][] getSampleChannels(AudioDecoder audioDecoder) {
+            short[] shorts = new short[BytesSamplesChannels.length / 2];
+            ByteBuffer.wrap(BytesSamplesChannels).order(ByteOrder.nativeOrder()).asShortBuffer().get(shorts);
+
+            short[][] SamplesChannels;
+            SamplesChannels = new short[audioDecoder.ChannelsNumber][shorts.length / audioDecoder.ChannelsNumber];
+            for (int i = 0; i < SamplesChannels.length; ++i) {
+                for (int j = 0; j < SamplesChannels[i].length; j++) {
+                    SamplesChannels[i][j] = shorts[j * audioDecoder.ChannelsNumber + i];
+                }
+            }
+
+            if (SamplesChannels[0].length < 1) SamplesChannels = new short[2][200];
+            return SamplesChannels;
+        }
+
+        @Override
+        public @NotNull String toString() {
+            return "DecoderResult{" +
+                    "BytesSamplesChannels=" + Arrays.toString(BytesSamplesChannels) +
+                    ", SampleTime=" + SampleTime +
+                    '}';
+        }
     }
 
     public long MediaDuration;
     public int SampleDuration;
     public int ChannelsNumber;
-    public int SampleSize;
 
-    public int process = 0;
+    public int TotalAverageDurationProcessed = 0;
 
     private interface IdListener {
         void onIdAvailable(int Id);
@@ -61,7 +101,6 @@ class AudioDecoder {
         void OnProceed(DecoderResult decoderResult);
     }
 
-    private final boolean SaveCacheEnable;
     private dbAudioDecoderManager dbAudioDecoderManager;
     private final String MediaName;
 
@@ -78,11 +117,11 @@ class AudioDecoder {
     private final ArrayList<Integer> InputIds = new ArrayList<>();
     private final ArrayList<IdListener> InputIDListeners = new ArrayList<>();
     private final ArrayList<PeriodRequest> RequestsPromises = new ArrayList<>();
-    private final ArrayList<PeriodRequest> OutputPromises = new ArrayList<>();
+    private final ArrayList<OutputPromise> OutputPromises = new ArrayList<>();
 
-    private PeriodRequest getOutputPromise(long RequiredTime) {
+    private PeriodRequest getOutputPromise(int Id) {
         for (int i = 0; i < OutputPromises.size(); i++) {
-            if (OutputPromises.get(i).RequiredTime == RequiredTime) {
+            if (OutputPromises.get(i).Id == Id) {
                 PeriodRequest periodRequest = OutputPromises.get(i);
                 OutputPromises.remove(i);
                 return periodRequest;
@@ -91,14 +130,11 @@ class AudioDecoder {
         return null;
     }
 
-    public AudioDecoder(Context context, int ResourceId, boolean SaveCacheEnable) {
+    public AudioDecoder(Context context, int ResourceId) {
         this.context = context;
 
         this.uri = getUriFromResourceId(context, ResourceId);
         this.MediaName = getFileName(context.getResources().getResourceName(ResourceId));
-
-        Log.e("MediaName", MediaName);
-        this.SaveCacheEnable = SaveCacheEnable;
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
             this.Poll = ForkJoinPool.commonPool();
@@ -107,8 +143,7 @@ class AudioDecoder {
         }
     }
 
-    public AudioDecoder(String AudioPath, boolean saveCacheEnable) {
-        SaveCacheEnable = saveCacheEnable;
+    public AudioDecoder(String AudioPath) {
         this.AudioPath = AudioPath;
         this.MediaName = getFileName(AudioPath);
 
@@ -120,7 +155,7 @@ class AudioDecoder {
     }
 
     public ForkJoinTask<?> prepare() {
-
+        // todo adicionar multidetherd ou loding
         return this.Poll.submit(() -> {
             try {
                 Decoder = MediaCodec.createDecoderByType(MediaFormat.MIMETYPE_AUDIO_MPEG);
@@ -162,10 +197,8 @@ class AudioDecoder {
                 public void onOutputBufferAvailable(@NonNull final MediaCodec mediaCodec,
                                                     final int outputBufferId,
                                                     @NonNull final BufferInfo bufferInfo) {
-
-                    PeriodRequest promise = getOutputPromise(bufferInfo.presentationTimeUs);
-                    if (promise == null) {//todo é possivel otput buffer esta avalible mas não ter nenhuma promessa pendente ?
-                        //todo provavelmente o extrator compartolhado entre em requisisioes
+                    PeriodRequest promise = getOutputPromise(outputBufferId);
+                    if (promise == null) {
                         Log.e("OnOutputAvailable", "not are premises bur has a output ?");
                         return;
                     }
@@ -177,16 +210,7 @@ class AudioDecoder {
 
                     DecoderResult decoderResult = new DecoderResult(bytes, bufferInfo.presentationTimeUs);
 
-                    if (SaveCacheEnable) {
-                        promise.ProcessListener.OnProceed(decoderResult);
-                    } else {
-                        boolean sampleInvalid = bytes.length < 1;
-                        if (sampleInvalid) {
-                            Poll.execute(() -> promise.ProcessListener.OnProceed(decoderResult));
-                        } else {
-                            addRequest(promise);
-                        }
-                    }
+                    promise.ProcessListener.OnProceed(decoderResult);
 
                     Decoder.releaseOutputBuffer(outputBufferId, false);
                 }
@@ -205,10 +229,9 @@ class AudioDecoder {
             Decoder.configure(format, null, null, 0);
             Decoder.start();
 
-            if (SaveCacheEnable) {
-                this.dbAudioDecoderManager = new dbAudioDecoderManager(context, MediaName);
-                if (!dbAudioDecoderManager.MediaIsDecoded(MediaName)) startDecoding();
-            }
+            this.dbAudioDecoderManager = new dbAudioDecoderManager(context, MediaName);
+            if (!dbAudioDecoderManager.MediaIsDecoded(MediaName)) startDecoding();
+
         });
     }
 
@@ -221,10 +244,11 @@ class AudioDecoder {
             }
             long extractorTime = extractor.getSampleTime();
 
-            process = (int) ((extractorTime / MediaDuration) * 100);
-            OutputPromises.add(new PeriodRequest(extractorTime, decoderResult -> {
-                dbAudioDecoderManager.addSamplePiece((int)
-                        (decoderResult.SampleTime / SampleDuration), decoderResult.BytesSamplesChannels);
+            TotalAverageDurationProcessed = (int) ((extractorTime / MediaDuration) * 100);
+            OutputPromises.add(new OutputPromise(InputID, extractorTime, decoderResult -> {
+                dbAudioDecoderManager.addSamplePiece(
+                        (int) (decoderResult.SampleTime / SampleDuration),
+                        decoderResult.BytesSamplesChannels);
 
                 if (RequestsPromises.size() > 0) {
                     for (int i = 0; i < RequestsPromises.size(); i++) {
@@ -252,64 +276,14 @@ class AudioDecoder {
     }
 
     private void startDecoding() {
-        next();
-    }
-
-    public void setTimeOnExtractor(PeriodRequest periodRequest) {
-        long oldTime = extractor.getSampleTime();
-
-        if (periodRequest.RequiredTime < 0) {
-            Log.e("setTimeOfExtractor", "NewTime < 0 ");
-            periodRequest.RequiredTime = 0;
-        } else if (periodRequest.RequiredTime >= MediaDuration) {
-            Log.e("setTimeOfExtractor", "NewTime > MediaDuration");
-            extractor.seekTo(MediaDuration, SEEK_TO_PREVIOUS_SYNC);
-        } else if (periodRequest.RequiredTime + SampleDuration > MediaDuration) {
-            extractor.seekTo(periodRequest.RequiredTime, SEEK_TO_PREVIOUS_SYNC);
-        } else if (periodRequest.RequiredTime != oldTime + SampleDuration) {
-            extractor.seekTo(periodRequest.RequiredTime, SEEK_TO_CLOSEST_SYNC);
-        } else extractor.advance();
-
-
-        oldTime = extractor.getSampleTime();
-        if (oldTime != periodRequest.RequiredTime) {
-            Log.e("setTimeOfExtractor",
-                    "NewTime is != extractorTime | NewTime: " + periodRequest.RequiredTime
-                            + " extractorTime: " + oldTime
-                            + " Jump: " + (oldTime - periodRequest.RequiredTime)
-                            + " SampleDuration: " + SampleDuration
-                            + " Max Duration:" + MediaDuration);
-
-            periodRequest.RequiredTime = extractor.getSampleTime();
-        }
-    }
-
-    public short[][] bytesToSampleChannels(byte[] bytes) {
-        short[] shorts = new short[bytes.length / 2];
-        ByteBuffer.wrap(bytes).order(ByteOrder.nativeOrder()).asShortBuffer().get(shorts);
-
-        short[][] SamplesChannels;
-        SamplesChannels = new short[ChannelsNumber][shorts.length / ChannelsNumber];
-        for (int i = 0; i < SamplesChannels.length; ++i) {
-            for (int j = 0; j < SamplesChannels[i].length; j++) {
-                SamplesChannels[i][j] = shorts[j * ChannelsNumber + i];
-            }
-        }
-
-        if (SamplesChannels[0].length < 1) SamplesChannels = new short[2][200];
-
-        this.SampleSize = SamplesChannels[0].length;//todo ???
-        return SamplesChannels;
-    }
-
-    private void putRequest(int InputId, PeriodRequest periodRequest) {
-        setTimeOnExtractor(periodRequest);
-
-        int sampleSize = extractor.readSampleData(Decoder.getInputBuffer(InputId), 0);
-
-        if (sampleSize < 0) sampleSize = 1;
-        OutputPromises.add(periodRequest);
-        Decoder.queueInputBuffer(InputId, 0, sampleSize, extractor.getSampleTime(), 0);
+        getInputId(InputID -> {
+            int sampleSize = extractor.readSampleData(Decoder.getInputBuffer(InputID), 0);
+            OutputPromises.add(new OutputPromise(InputID, 0, decoderResult -> {
+                extractor.seekTo(0, SEEK_TO_CLOSEST_SYNC);
+                next();
+            }));
+            Decoder.queueInputBuffer(InputID, 0, sampleSize, 0, 0);
+        });
     }
 
     private void getInputId(IdListener idListener) {
@@ -323,25 +297,22 @@ class AudioDecoder {
     }
 
     public void addRequest(PeriodRequest periodRequest) {
-        if (SaveCacheEnable) {
+        long LastPeaceTime = MediaDuration - SampleDuration;
+        if (periodRequest.RequiredTime > LastPeaceTime)
+            periodRequest.RequiredTime = LastPeaceTime;
+        else if (periodRequest.RequiredTime < 0)
+            periodRequest.RequiredTime = 0;
 
-            long LastPeaceTime = MediaDuration - SampleDuration;
-            if (periodRequest.RequiredTime > LastPeaceTime)
-                periodRequest.RequiredTime = LastPeaceTime;//todo obter time zero da erro ou o primeiro procesamento da error ?
-            else if (periodRequest.RequiredTime < SampleDuration)
-                periodRequest.RequiredTime = SampleDuration;
+        int SamplePeace = (int) (periodRequest.RequiredTime / SampleDuration);
+        byte[] dbSampleBytes = dbAudioDecoderManager.getSamplePiece(SamplePeace);
 
-            int SamplePeace = (int) (periodRequest.RequiredTime / SampleDuration);
-            byte[] bytes = dbAudioDecoderManager.getSamplePiece(SamplePeace);
-
-            if (bytes != null) {
-                periodRequest.ProcessListener.OnProceed(new DecoderResult(bytes, SamplePeace * SampleDuration));
-            } else {
-                RequestsPromises.add(periodRequest);
-            }
+        if (dbSampleBytes != null) {
+            periodRequest.ProcessListener.OnProceed(new DecoderResult(dbSampleBytes,
+                    SamplePeace * SampleDuration));
         } else {
-            getInputId(InputID -> putRequest(InputID, periodRequest));
+            RequestsPromises.add(periodRequest);
         }
+
     }
 
     public void clear() {

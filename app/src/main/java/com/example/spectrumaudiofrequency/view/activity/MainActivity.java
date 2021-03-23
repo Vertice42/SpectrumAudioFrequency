@@ -42,20 +42,14 @@ import static com.example.spectrumaudiofrequency.util.Files.ReadJsonFile;
 import static com.example.spectrumaudiofrequency.util.Files.getUriFromResourceId;
 
 public class MainActivity extends AppCompatActivity {
-    static {
-        System.loadLibrary("native-lib");
-    }
-
     public static int MANAGE_EXTERNAL_STORAGE_REQUEST = 120;
-
-    private Button playButton;
 
     @SuppressLint("StaticFieldLeak")
     public static TextView InfoTextView;
 
     public LongWaveImageAdapter WaveAdapter;
 
-    private AudioDecoder Decoder;
+    private AudioDecoder audioDecoder;
     private MediaPlayer mediaPlayer;
     private SinusoidDrawn sinusoidDrawn;
     private View.OnClickListener onClickPlayButton;
@@ -76,13 +70,13 @@ public class MainActivity extends AppCompatActivity {
 
     private static boolean onAnalysis = false;
 
-    public void AnalyzeAudio(String AudioName) {
+    public void startAnalyzeAudio(String AudioName) {
         if (onAnalysis) return;
         onAnalysis = true;
 
         ProgressLayout.setVisibility(View.VISIBLE);
 
-        SoundAnalyzer soundAnalyzer = new SoundAnalyzer(Decoder, 20);
+        SoundAnalyzer soundAnalyzer = new SoundAnalyzer(audioDecoder, 20);
         soundAnalyzer.setOnProgressChange(progress -> AnalysisProgressBar.post(() -> {
             ProgressText.setText((progress + "%"));
             AnalysisProgressBar.setProgress((int) (progress));
@@ -112,15 +106,15 @@ public class MainActivity extends AppCompatActivity {
 
         RecyclerView waveRecyclerView = this.findViewById(R.id.WaveRecyclerView);
         InfoTextView = this.findViewById(R.id.InfoTextView);
-        playButton = this.findViewById(R.id.playButton);
+        Button playButton = this.findViewById(R.id.playButton);
         Button reanalyzeButton = this.findViewById(R.id.ReanalyzeButton);
         SeekBar scaleInput = this.findViewById(R.id.scaleInput);
 
-        Decoder = new AudioDecoder(this, R.raw.choose, true);
-        Decoder.prepare().join();
+        audioDecoder = new AudioDecoder(this, R.raw.choose);
+        audioDecoder.prepare().join();
 
-        sinusoidDrawn = new SinusoidDrawn(this, Decoder.MediaDuration);
-        WaveAdapter = new LongWaveImageAdapter(Decoder, this.sinusoidDrawn);
+        sinusoidDrawn = new SinusoidDrawn(this, audioDecoder.MediaDuration);
+        WaveAdapter = new LongWaveImageAdapter(audioDecoder, this.sinusoidDrawn);
 
         waveRecyclerView.setHasFixedSize(false);
         LinearLayoutManager linearLayoutManagerOfWaveRecyclerView
@@ -128,22 +122,22 @@ public class MainActivity extends AppCompatActivity {
         waveRecyclerView.setLayoutManager(linearLayoutManagerOfWaveRecyclerView);
         waveRecyclerView.setAdapter(WaveAdapter);
 
-        int AudioResourceChoseId = R.raw.choose;
+        int AudioResourceChoseId = R.raw.hollow;
 
         String FileName = String.valueOf(AudioResourceChoseId);
         if (ReadJsonFile(this, FileName).equals("")) {//todo change to true validation
-            AnalyzeAudio(FileName);
+            startAnalyzeAudio(FileName);
         } else {
             ProgressLayout.setVisibility(View.GONE);
             sinusoidDrawn.Peaks = JsonStringToPeakArray(ReadJsonFile(this, FileName));
         }
 
-        reanalyzeButton.setOnClickListener(v -> AnalyzeAudio(FileName));
+        reanalyzeButton.setOnClickListener(v -> startAnalyzeAudio(FileName));
 
         goButton.setOnClickListener(v -> {
             if (Peak >= sinusoidDrawn.Peaks.length) Peak = 0;
             linearLayoutManagerOfWaveRecyclerView.scrollToPositionWithOffset((int)
-                    (sinusoidDrawn.Peaks[Peak].time / Decoder.SampleDuration), 0);
+                    (sinusoidDrawn.Peaks[Peak].time / audioDecoder.SampleDuration), 0);
             Peak++;
         });
 
@@ -189,14 +183,13 @@ public class MainActivity extends AppCompatActivity {
                             public void run() {
 
                                 if (mediaPlayer.isPlaying()) {
-                                    long currentTime = mediaPlayer.getCurrentPosition() * 10;
+                                    long currentTime = mediaPlayer.getCurrentPosition() * 1000;
+                                    Log.i("currentTime", "time:" + currentTime);
                                     int PeacePosition = (int)
-                                            (currentTime / Decoder.SampleDuration);
-                                    long restTime = currentTime - PeacePosition * Decoder.SampleDuration;
+                                            (currentTime / audioDecoder.SampleDuration);
+                                    long restTime = currentTime - PeacePosition * audioDecoder.SampleDuration;
 
-                                    int pixelTime = Decoder.SampleDuration / linearLayoutManagerOfWaveRecyclerView.getWidth();
-
-                                    Log.i("!!!", "PeacePosition: " + PeacePosition);
+                                    int pixelTime = audioDecoder.SampleDuration / linearLayoutManagerOfWaveRecyclerView.getWidth();
 
                                     waveRecyclerView.post(() -> {
                                         int offset = 0;
@@ -230,6 +223,7 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onDestroy() {
         super.onDestroy();
+        this.audioDecoder.destroy();
         this.sinusoidDrawn.destroy();
     }
 }

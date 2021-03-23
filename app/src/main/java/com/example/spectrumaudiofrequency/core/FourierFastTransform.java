@@ -25,19 +25,19 @@ public class FourierFastTransform {
      * Sets the precision of spectrum analysis by default to one decimal place.
      * Attention a very large tablet can cause out of memory errors.
      */
-    public static int PRECISION = 10;
+    public static int PRECISION = 200;
     /**
      * Defines the length of the Spectrum to be analyzed.
      * By default 400.
      * Attention a very large tablet can cause out of memory errors.
      */
-    public static int SPECTRUM_ANALYSIS_RAGE = 400;
+    public static int SPECTRUM_ANALYSIS_RAGE = 100;
 
     private interface Calculate {
         /**
          * Method used internally in the class does not call
          */
-       abstract float[] CalculateFFT(int FrequencyRange, short[] Sample);
+        abstract float[] CalculateFFT(int FrequencyRange, short[] Sample);
     }
 
     /**
@@ -125,7 +125,7 @@ public class FourierFastTransform {
         public Default(RenderScript renderScript, ForkJoinPool forkJoinPool) {
             super(forkJoinPool);
             this.rs = renderScript;
-            this.gpu = new ScriptC_fftGpu(renderScript);
+            this.gpu = new ScriptC_fftGpu(rs);
         }
 
         void CalculateAngles(int SampleLength, int AnglesLength) {
@@ -233,7 +233,9 @@ public class FourierFastTransform {
     }
 
     /**
-     * Calculate Fast Fourier Transform using GPU. Doubles are used in place of float,
+     * Calculate Fast Fourier Transform using GPU.
+     * Usually only the x coordinate of the fft is calculated,
+     * on Adapted is calculated x and y and are added together,
      * but performance is reduced.
      */
     public static class Precise extends FFTAbstract implements Calculate {
@@ -293,6 +295,9 @@ public class FourierFastTransform {
      * but the performance is better for short "SPECTRUM_ANALYSIS_RAGE".
      */
     public static class Native extends FFTAbstract implements Calculate {
+        static {
+            System.loadLibrary("native-lib");
+        }
 
         private static native void CalculateAnglesOfFrequenciesRange(int anglesLength, int WavePieceLength);
 
@@ -328,7 +333,6 @@ public class FourierFastTransform {
 
             return Array.toFloat(ConcatenateArray(CoresResults));//todo deveriar retornar double ou não desidase
         }
-
     }
 
 }

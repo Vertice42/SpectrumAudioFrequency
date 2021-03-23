@@ -216,9 +216,7 @@ public class dbAudioDecoderManager extends SQLiteOpenHelper {
         this.MediaName = MediaName;
         sqLiteDatabase = this.getWritableDatabase();
 
-        if (TableExit(MediaName)) deleteMediaDecoded(MediaName);
-
-        createMediaDecoded(MediaName);
+        if (!TableExit(MediaName)) createMediaDecoded(MediaName);
     }
 
     public void onCreate(SQLiteDatabase db) {
@@ -279,7 +277,7 @@ public class dbAudioDecoderManager extends SQLiteOpenHelper {
         sqLiteDatabase.update(DecodedMedias.TABLE_NAME, values, selection, selectionArgs);
     }
 
-    private Cursor getCursorSamplePiece(int SamplePiece){
+    private Cursor getCursorSamplePiece(int SamplePiece) {
         String selection = SamplesTable.SAMPLE_PIECE + " = ?";
         String[] selectionArgs = {SamplePiece + ""};
 

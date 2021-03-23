@@ -15,6 +15,7 @@ import androidx.renderscript.RenderScript;
 import com.example.spectrumaudiofrequency.core.FourierFastTransform;
 import com.example.spectrumaudiofrequency.core.FourierFastTransform.Adapted;
 import com.example.spectrumaudiofrequency.core.FourierFastTransform.Default;
+import com.example.spectrumaudiofrequency.core.FourierFastTransform.FFTAbstract;
 import com.example.spectrumaudiofrequency.core.FourierFastTransform.Precise;
 import com.example.spectrumaudiofrequency.core.FourierFastTransform.Native;
 import com.example.spectrumaudiofrequency.core.SoundAnalyzer.AudioPeakAnalyzer.Peak;
@@ -30,6 +31,9 @@ import java.util.concurrent.ForkJoinPool;
 import static com.example.spectrumaudiofrequency.sinusoid_converter.Rearrange.SimplifySinusoid;
 
 public class SinusoidDrawn {
+    //private final FFTAbstract[] ffts;
+    private final FFTAbstract fft;
+
     interface WaveRenderListeners {
         void onFinish(Bitmap bitmap);
     }
@@ -46,8 +50,6 @@ public class SinusoidDrawn {
     public int Height;
     public int Width;
 
-    private final FourierFastTransform.FFTAbstract fft;
-
     public SinusoidDrawn(Context context, long SpectrumSize) {
         this.SpectrumSize = SpectrumSize;
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
@@ -58,7 +60,7 @@ public class SinusoidDrawn {
 
         this.rs = RenderScript.create(context);
 
-        switch (2) {
+        switch (1) {
             case 0:
                 this.fft = new Adapted(rs, pool);
                 break;
@@ -71,6 +73,16 @@ public class SinusoidDrawn {
             default:
                 this.fft = new Default(rs, pool);
         }
+
+        /*
+        this.ffts = new FFTAbstract[4];
+
+        ffts[0] = new Native(pool);
+        ffts[1] = new Adapted(rs, pool);
+        ffts[2] = new Default(rs, pool);
+        ffts[3] = new Precise(rs, pool);
+
+         */
     }
 
     public static String getImageFileName(long ImageID) {
@@ -356,9 +368,6 @@ public class SinusoidDrawn {
     }
 
     private void DrawSinusoid(Canvas canvas, short[] sample, float Anchor, int color, float Press) {
-
-        Log.i("sample", Arrays.toString(sample));
-
         float SpaceBetweenWaves = (float) Width / sample.length;
         //"spacing" determining the line spacing is by consequence the size of the sound wave
         Paint WavePaint = new Paint();
@@ -434,9 +443,11 @@ public class SinusoidDrawn {
 
             if (SampleChannels[0].length > 10) {
                 // DrawAnalyzer(canvas, SampleChannels[0], Time, SampleDuration, Height / 2f, Height / 2f);
-                DrawSinusoid(canvas, SampleChannels[0], Height / 2f, Color.BLACK, Height / 5f);
-                //DrawWave(canvas, SimplifySinusoid(SampleChannels[0], Width), Height / 3f, Color.BLACK, Height / 2f);
-                DrawFFT(canvas, fft.Transform(SampleChannels[0]), Height / 1.5f, Color.BLUE, Height / 20f);
+                //DrawSinusoid(canvas, SampleChannels[0], Height / 2f, Color.BLACK, Height / 5f);
+                DrawWave(canvas, SimplifySinusoid(SampleChannels[0], Width), Height / 3f, Color.BLACK, Height / 2f);
+
+                //DrawFFT(canvas, fft.Transform(SampleChannels[0]), Height / 1.2f, Color.BLUE, Height / 100f);
+
             }
             onRenderFinish.onFinish(imageBitmap);
         });
