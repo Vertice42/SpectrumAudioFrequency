@@ -3,88 +3,82 @@ package com.example.spectrumaudiofrequency;
 import android.content.Context;
 import android.util.Log;
 
+import androidx.renderscript.RenderScript;
 import androidx.test.core.app.ApplicationProvider;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
 
 import com.example.spectrumaudiofrequency.core.FourierFastTransform;
+import com.example.spectrumaudiofrequency.mediaDecoder.AudioDecoder;
+import com.example.spectrumaudiofrequency.mediaDecoder.AudioDecoder.PeriodRequest;
 
 import org.junit.Assert;
+import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
-import java.util.Arrays;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ForkJoinPool;
+
+import static com.example.spectrumaudiofrequency.util.Array.calculateEquity;
 
 @RunWith(AndroidJUnit4.class)
 public class FourierFastTransformTest {
-    private final FourierFastTransform.Native aNative;
 
-    public FourierFastTransformTest() {
+    private final FourierFastTransform.Native fft_Native;
+    private final FourierFastTransform.Default fft_Default;
+    private final FourierFastTransform.Adapted fft_Adapted;
+    private final FourierFastTransform.Precise fft_Precise;
+    private short[] Sample;
+    private float[] ExpectedArray;
+
+    public FourierFastTransformTest() throws InterruptedException {
         Context context = ApplicationProvider.getApplicationContext();
-        FourierFastTransform.PRECISION = 10;
-        FourierFastTransform.SPECTRUM_ANALYSIS_RAGE = 400;
-        aNative = new FourierFastTransform.Native(ForkJoinPool.commonPool());
+
+        RenderScript rs = RenderScript.create(context);
+
+        AudioDecoder audioDecoder = new AudioDecoder(context, R.raw.choose);
+        audioDecoder.prepare().join();
+
+        fft_Default = new FourierFastTransform.Default(rs, ForkJoinPool.commonPool());
+        fft_Native = new FourierFastTransform.Native(ForkJoinPool.commonPool());
+        fft_Adapted = new FourierFastTransform.Adapted(rs, ForkJoinPool.commonPool());
+        fft_Precise = new FourierFastTransform.Precise(rs, ForkJoinPool.commonPool());
+
+        final CountDownLatch signal = new CountDownLatch(1);
+        audioDecoder.addRequest(new PeriodRequest(672000, decoderResult -> {
+            Sample = decoderResult.getSampleChannels(audioDecoder)[0];
+            signal.countDown();
+        }));
+        signal.await();
+    }
+
+    @Before
+    public void FourierFastTransformDefault() {
+        ExpectedArray = fft_Default.Transform(Sample);
+        Assert.assertFalse(ExpectedArray.length < 10);
     }
 
     @Test
     public void FourierFastTransformNative() {
-        short[] sample =
-                {2081, 2229, 2349, 2435, 2454, 2397, 2307, 2224, 2222, 2330, 2498, 2668, 2762, 2758,
-                        2695, 2625, 2591, 2604, 2644, 2687, 2726, 2747, 2746, 2733, 2705, 2682, 2665,
-                        2637, 2585, 2504, 2423, 2380, 2395, 2438, 2448, 2386, 2242, 2077, 1964, 1933,
-                        1974, 2023, 2024, 1953, 1821, 1669, 1534, 1447, 1409, 1413, 1443, 1472, 1478,
-                        1438, 1333, 1174, 1001, 874, 846, 915, 1023, 1086, 1053, 940, 812, 728, 688,
-                        653, 591, 514, 482, 521, 600, 644, 588, 458, 331, 278, 304, 350, 358, 318,
-                        279, 267, 260, 208, 75, -71, -142, -88, 51, 130, 40, -212, -512, -699, -674,
-                        -475, -230, -78, -120, -346, -678, -996, -1170, -1147, -953, -704, -556, -607,
-                        -863, -1221, -1523, -1658, -1610, -1458, -1334, -1334, -1474, -1692, -1874,
-                        -1950, -1904, -1796, -1716, -1702, -1747, -1799, -1829, -1856, -1921, -2055,
-                        -2204, -2293, -2268, -2149, -2047, -2051, -2180, -2359, -2474, -2476, -2394,
-                        -2311, -2281, -2289, -2276, -2209, -2120, -2071, -2112, -2219, -2326, -2377,
-                        -2347, -2261, -2160, -2059, -1976, -1942, -1989, -2127, -2304, -2399, -2327,
-                        -2085, -1779, -1576, -1563, -1716, -1901, -1970, -1876, -1665, -1464, -1365,
-                        -1378, -1458, -1515, -1496, -1400, -1255, -1121, -1037, -1006, -1004, -981,
-                        -899, -764, -615, -513, -488, -510, -515, -436, -263, -51, 116, 168, 108, 5,
-                        -46, 36, 245, 512, 748, 880, 914, 913, 929, 994, 1074, 1118, 1122, 1118, 1174,
-                        1322, 1519, 1684, 1740, 1681, 1578, 1526, 1588, 1749, 1942, 2085, 2134, 2103,
-                        2029, 1969, 1960, 1994, 2050, 2095, 2103, 2087, 2058, 2036, 2026, 2015, 2012,
-                        2025, 2071, 2152, 2223, 2233, 2154, 2012, 1880, 1825, 1868, 1951, 1989, 1935,
-                        1791, 1633, 1537, 1520, 1570, 1625, 1643, 1627, 1584, 1534, 1472, 1389, 1303,
-                        1244, 1251, 1326, 1419, 1453, 1372, 1193, 992, 859, 842, 915, 1011, 1071, 1073,
-                        1035, 986, 931, 866, 789, 716, 679, 688, 737, 791, 804, 763, 660, 530, 427, 398,
-                        482, 637, 786, 834, 728, 528, 332, 236, 262, 331, 353, 286, 168, 71, 42, 63, 78,
-                        64, 35, 16, 21, 5, -70, -191, -298, -316, -232, -128, -118, -275, -561, -847, -997,
-                        -952, -773, -595, -537, -637, -840, -1035, -1151, -1178, -1149, -1117, -1084, -1043,
-                        -1004, -994, -1080, -1265, -1473, -1589, -1518, -1309, -1111, -1086, -1294, -1621, -1882,
-                        -1928, -1769, -1540, -1404, -1438, -1596, -1778, -1891, -1925, -1903, -1847, -1774, -1673
-                        - 1596, -1607, -1739, -1971, -2172, -2210, -2027, -1706, -1441, -1401, -1631, -1980, -2225,
-                        -2209, -1941, -1614, -1434, -1492, -1704, -1880, -1879, -1701, -1478, -1355, -1386, -1507,
-                        -1600, -1595, -1500, -1380, -1289, -1239, -1215, -1198, -1193, -1200, -1208, -1200, -1147,
-                        -1052, -938, -828, -745, -704, -705, -741, -777, -759, -643, -443, -230, -97, -108, -225,
-                        -349, -380, -263, -46, 180, 328, 356, 287, 181, 122, 158, 307, 525, 707, 789, 738, 622,
-                        565, 630, 828, 1054, 1191, 1198, 1103, 1014, 1010, 1105, 1247, 1353, 1387, 1358, 1316,
-                        1300, 1317, 1342, 1338, 1307, 1273, 1297, 1406, 1569, 1709, 1733, 1614, 1408, 1241,
-                        1226, 1390, 1654, 1859, 1897, 1731, 1452, 1223, 1152, 1285, 1526, 1728, 1787, 1664,
-                        1453, 1277, 1228, 1311, 1441, 1539, 1543, 1465, 1351, 1236, 1159, 1134, 1170, 1251,
-                        1325, 1335, 1265, 1168, 1124, 1173, 1258, 1287, 1213, 1097, 1065, 1156, 1275, 1249,
-                        1005, 677, 513, 666, 1020, 1275, 1175, 759, 355, 287, 629, 1107, 1338, 1150, 701,
-                        329, 266, 473, 692, 718, 529, 271, 124, 110, 170, 223, 256, 321, 394, 413, 283,
-                        24, -207, -248, -20, 322, 518, 385, -64, -552, -786, -630, -229, 67, 6, -411
-                        - 892, -1086, -877, -456, -202, -340, -754, -1089, -1049, -681, -344, -386, -834
-                        - 1327, -1420, -976, -304, 54, -229, -995, -1725, -1920, -1490, -797, -360, -487,
-                        -1063, -1683, -1957, -1760, -1288, -880, -784, -1025, -1410, -1688, -1718, -1518,
-                        -1260, -1122, -1183, -1399, -1620, -1724, -1659, -1478, -1294, -1208, -1276, -1458
-                        - 1659, -1755, -1676, -1470, -1261, -1204, -1335, -1543, -1654, -1536, -1264, -1053,
-                        -1097, -1411, -1770, -1878, -1593, -1057, -615, -585, -1008, -1618, -2019, -1943,
-                        -1452, -860, -529, -619, -974, -1301, -1353, -1134, -853, -713, -763, -844, -764,
-                        -496, -221, -180, -453, -864, -1082, -891, -368, 166, 363, 104, -429, -883, -975,
-                        -645, -78, 423, 622, 442, 15, -403, -562, -346, 151, 671, 939};
-
-        float[] fft = aNative.Transform(sample);
-        float[] ExpectedArray = {0,0,0,0,0,0};
-
-        Log.i("TAG", Arrays.toString(fft));
-        Assert.assertArrayEquals(fft, ExpectedArray, 0.1f);
+        float[] fft = fft_Native.Transform(Sample);
+        float equity = calculateEquity(fft, ExpectedArray);
+        Log.i("equity", "" + equity);
+        Assert.assertTrue(equity < 50);
     }
 
+    @Test
+    public void FourierFastTransformAdapted() {
+        float[] fft = fft_Adapted.Transform(Sample);
+        float equity = calculateEquity(fft, ExpectedArray);
+        Log.i("equity", "" + equity);
+        Assert.assertTrue(equity < 50);
+    }
+
+    @Test
+    public void FourierFastTransformPrecise() {
+        float[] fft = fft_Precise.Transform(Sample);
+        float equity = calculateEquity(fft, ExpectedArray);
+        Log.i("equity", "" + equity);
+        Assert.assertTrue(equity < 50);
+    }
 }
