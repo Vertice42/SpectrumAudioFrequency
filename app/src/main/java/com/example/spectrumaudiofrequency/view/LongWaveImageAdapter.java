@@ -26,7 +26,7 @@ public class LongWaveImageAdapter extends RecyclerView.Adapter<WaveViewHolder> {
 
     private final CalculatePerformance RequestPerformance;
     private final CalculatePerformance RenderPerformance;
-    private static final int ImageResolution = 3;
+    private static final int ImageResolution = 1;
 
     private WaveViewHolder holderObserved;
 
@@ -109,13 +109,23 @@ public class LongWaveImageAdapter extends RecyclerView.Adapter<WaveViewHolder> {
                 }));
     }
 
+    @SuppressLint("SetTextI18n")
     @RequiresApi(api = Build.VERSION_CODES.LOLLIPOP)
     public void setSampleOnTimePosition(WaveViewHolder waveViewHolder, final long Time) {
         if (Zoom == 1) {
-            AudioDecoder.addRequest(new PeriodRequest(Time, decoderResult ->
-            {
+            RequestPerformance.start();
+
+            AudioDecoder.addRequest(new PeriodRequest(Time, decoderResult -> {
+
+                Performance requestPerformance = RequestPerformance.stop();
+                RenderPerformance.start();
                 setWavePieceImageOnHolder(waveViewHolder, Time, decoderResult.getSampleChannels(AudioDecoder),
                         AudioDecoder.SampleDuration);
+
+                Performance renderPerformance = RenderPerformance.stop();
+                InfoTextView.setText(SomePerformances("Total", new Performance[]
+                        {requestPerformance, renderPerformance}).toString() +
+                        requestPerformance.toString() + renderPerformance.toString());
             }));
         } else {
             getAudioPeriodsSimplified(Time, Zoom, result -> {
@@ -148,8 +158,8 @@ public class LongWaveImageAdapter extends RecyclerView.Adapter<WaveViewHolder> {
                     AudioDecoder.SampleDuration, (bitmap) -> {
                         holderObserved.updateImage(bitmap);
                         inUpdate = false;
-                        Performance renderPerformance = RenderPerformance.stop();
 
+                        Performance renderPerformance = RenderPerformance.stop();
                         InfoTextView.setText(SomePerformances("Total", new Performance[]
                                 {requestPerformance, renderPerformance}).toString() +
                                 requestPerformance.toString() + renderPerformance.toString());

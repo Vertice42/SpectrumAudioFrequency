@@ -92,11 +92,12 @@ class AudioDecoder {
     public int SampleDuration;
     public int ChannelsNumber;
 
-    public int TotalAverageDurationProcessed = 0;
+    public float TotalAverageDurationProcessed = 0;
 
     private interface IdListener {
         void onIdAvailable(int Id);
     }
+
     public interface ProcessListener {
         void OnProceed(DecoderResult decoderResult);
     }
@@ -239,12 +240,17 @@ class AudioDecoder {
         getInputId(InputID -> {
             int sampleSize = extractor.readSampleData(Decoder.getInputBuffer(InputID), 0);
             if (sampleSize < 0) {
+                if (TotalAverageDurationProcessed < 99) {
+                    Log.i("Average Error", "TotalAverageDurationProcessed: " + TotalAverageDurationProcessed);
+                }
                 dbAudioDecoderManager.setDecoded(MediaName);
                 return;
             }
             long extractorTime = extractor.getSampleTime();
 
-            TotalAverageDurationProcessed = (int) ((extractorTime / MediaDuration) * 100);
+            TotalAverageDurationProcessed = (((float) extractorTime / MediaDuration) * 100f);
+            Log.i("Processed", "TotalAverageDurationProcessed: " + TotalAverageDurationProcessed + "%");
+
             OutputPromises.add(new OutputPromise(InputID, extractorTime, decoderResult -> {
                 dbAudioDecoderManager.addSamplePiece(
                         (int) (decoderResult.SampleTime / SampleDuration),

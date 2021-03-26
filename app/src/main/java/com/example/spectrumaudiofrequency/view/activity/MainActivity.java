@@ -25,6 +25,7 @@ import androidx.recyclerview.widget.RecyclerView;
 
 import com.example.spectrumaudiofrequency.R;
 import com.example.spectrumaudiofrequency.core.SoundAnalyzer;
+import com.example.spectrumaudiofrequency.core.VideoMuxer;
 import com.example.spectrumaudiofrequency.mediaDecoder.AudioDecoder;
 import com.example.spectrumaudiofrequency.util.Files;
 import com.example.spectrumaudiofrequency.view.LongWaveImageAdapter;
@@ -110,7 +111,9 @@ public class MainActivity extends AppCompatActivity {
         Button reanalyzeButton = this.findViewById(R.id.ReanalyzeButton);
         SeekBar scaleInput = this.findViewById(R.id.scaleInput);
 
-        audioDecoder = new AudioDecoder(this, R.raw.choose);
+        int AudioResourceChoseId = R.raw.hollow;
+
+        audioDecoder = new AudioDecoder(this, AudioResourceChoseId);
         audioDecoder.prepare().join();
 
         sinusoidDrawn = new SinusoidDrawn(this, audioDecoder.MediaDuration);
@@ -122,7 +125,6 @@ public class MainActivity extends AppCompatActivity {
         waveRecyclerView.setLayoutManager(linearLayoutManagerOfWaveRecyclerView);
         waveRecyclerView.setAdapter(WaveAdapter);
 
-        int AudioResourceChoseId = R.raw.hollow;
 
         String FileName = String.valueOf(AudioResourceChoseId);
         if (ReadJsonFile(this, FileName).equals("")) {//todo change to true validation
@@ -184,7 +186,6 @@ public class MainActivity extends AppCompatActivity {
 
                                 if (mediaPlayer.isPlaying()) {
                                     long currentTime = mediaPlayer.getCurrentPosition() * 1000;
-                                    Log.i("currentTime", "time:" + currentTime);
                                     int PeacePosition = (int)
                                             (currentTime / audioDecoder.SampleDuration);
                                     long restTime = currentTime - PeacePosition * audioDecoder.SampleDuration;
@@ -218,6 +219,19 @@ public class MainActivity extends AppCompatActivity {
             isPlay[0] = !isPlay[0];
         };
         playButton.setOnClickListener(PlayWithMusic);
+
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
+            VideoMuxer videoMuxer = new VideoMuxer(this,
+                    getUriFromResourceId(this, R.raw.video_input1),
+                    getUriFromResourceId(this, R.raw.stardew_valley));
+            try {
+                videoMuxer.encode();
+            } catch (IOException e) {
+                Log.e("videoEncode", "onCreate: ", e);
+                e.printStackTrace();
+            }
+        }
+
     }
 
     @Override

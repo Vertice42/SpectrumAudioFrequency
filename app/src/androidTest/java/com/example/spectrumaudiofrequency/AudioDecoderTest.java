@@ -10,12 +10,10 @@ import androidx.test.platform.app.InstrumentationRegistry;
 import com.example.spectrumaudiofrequency.mediaDecoder.AudioDecoder;
 
 import org.junit.After;
-import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
 import java.util.Arrays;
-import java.util.Random;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -79,7 +77,15 @@ public class AudioDecoderTest {
     }
 
     @After
-    public void clear() {
-        audioDecoder.clear();
+    public void clear() throws InterruptedException {
+        final CountDownLatch signal = new CountDownLatch(1);
+
+        audioDecoder.addRequest(new AudioDecoder.PeriodRequest(audioDecoder.MediaDuration - audioDecoder.SampleDuration,
+                decoderResult -> {
+                    Log.e("on clear", decoderResult.SampleTime + "");
+                    audioDecoder.clear();
+                    signal.countDown();
+        }));
+        signal.await();
     }
 }
