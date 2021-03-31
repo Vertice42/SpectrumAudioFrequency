@@ -139,7 +139,7 @@ public class MainActivity extends AppCompatActivity {
         goButton.setOnClickListener(v -> {
             if (Peak >= sinusoidDrawn.Peaks.length) Peak = 0;
             linearLayoutManagerOfWaveRecyclerView.scrollToPositionWithOffset((int)
-                    (sinusoidDrawn.Peaks[Peak].time / audioDecoder.SampleDuration), 0);
+                    (sinusoidDrawn.Peaks[Peak].starTime / audioDecoder.SampleDuration), 0);
             Peak++;
         });
 
@@ -224,12 +224,9 @@ public class MainActivity extends AppCompatActivity {
             VideoMuxer videoMuxer = new VideoMuxer(this,
                     getUriFromResourceId(this, R.raw.video_input1),
                     getUriFromResourceId(this, R.raw.stardew_valley));
-            try {
-                videoMuxer.encode();
-            } catch (IOException e) {
-                Log.e("videoEncode", "onCreate: ", e);
-                e.printStackTrace();
-            }
+            videoMuxer.prepare(sinusoidDrawn.Peaks);//todo obtendo do jeito errado
+            videoMuxer.render();
+
         }
 
     }

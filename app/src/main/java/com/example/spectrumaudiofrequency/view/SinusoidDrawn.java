@@ -12,7 +12,6 @@ import android.util.Log;
 
 import androidx.renderscript.RenderScript;
 
-import com.example.spectrumaudiofrequency.core.FourierFastTransform;
 import com.example.spectrumaudiofrequency.core.FourierFastTransform.Adapted;
 import com.example.spectrumaudiofrequency.core.FourierFastTransform.Default;
 import com.example.spectrumaudiofrequency.core.FourierFastTransform.FFTAbstract;
@@ -24,7 +23,6 @@ import com.example.spectrumaudiofrequency.sinusoid_converter.Converter;
 import java.io.File;
 import java.io.FileOutputStream;
 
-import java.util.Arrays;
 import java.util.Date;
 import java.util.concurrent.ForkJoinPool;
 
@@ -317,7 +315,7 @@ public class SinusoidDrawn {
 
         Peak peakToDraw = null;
         for (Peak peak : this.Peaks) {
-            if (peak.time >= Time && peak.time <= Time + SampleDuration) {
+            if (peak.starTime >= Time && peak.starTime <= Time + SampleDuration) {
                 peakToDraw = peak;
                 break;
             }
@@ -325,13 +323,13 @@ public class SinusoidDrawn {
 
         if (peakToDraw == null) return;
 
-        float Position = (float) ((peakToDraw.time - Time) * pixelTime);
+        float Position = (float) ((peakToDraw.starTime - Time) * pixelTime);
 
         Paint textPaint = new Paint();
         textPaint.setStrokeWidth(20);
         textPaint.setTextSize(10);
         textPaint.setColor(Color.BLACK);
-        canvas.drawText(peakToDraw.time + "mic", Position, Anchor + Anchor / 10, textPaint);
+        canvas.drawText(peakToDraw.starTime + "mic", Position, Anchor + Anchor / 10, textPaint);
         canvas.drawText("datum: " + peakToDraw.datum, Position, Anchor + Anchor / 2, textPaint);
 
         Paint pointPaint = new Paint();

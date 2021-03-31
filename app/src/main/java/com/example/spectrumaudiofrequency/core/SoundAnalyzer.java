@@ -3,6 +3,7 @@ package com.example.spectrumaudiofrequency.core;
 import android.os.Build;
 import android.util.Log;
 
+import com.example.spectrumaudiofrequency.core.VideoMuxer.Cutoff;
 import com.example.spectrumaudiofrequency.mediaDecoder.AudioDecoder;
 import com.example.spectrumaudiofrequency.mediaDecoder.AudioDecoder.ProcessListener;
 import com.example.spectrumaudiofrequency.core.SoundAnalyzer.AudioPeakAnalyzer.Peak;
@@ -37,32 +38,31 @@ public class SoundAnalyzer {
     public static class AudioPeakAnalyzer {
         private final long Duration;
 
-        public static class Peak {
+        public static class Peak extends Cutoff {
             public short datum;
-            public long time;
 
             public Peak(short datum, long time) {
+                super(time, time + datum / 2);
                 this.datum = datum;
-                this.time = time;
             }
 
             public void update(short datum, long time) {
                 this.datum = datum;
-                this.time = time;
+                this.starTime = time;
             }
 
             @Override
             public @NotNull String toString() {
                 return "Peak{" +
                         "datum=" + datum +
-                        ", time=" + time +
+                        ", time=" + starTime +
                         '}';
             }
 
             public @NotNull String toJson() {
                 return '{' +
                         "\"datum\":" + datum +
-                        ", \"time\":" + time +
+                        ", \"time\":" + starTime +
                         '}';
             }
 
