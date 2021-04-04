@@ -1,4 +1,4 @@
-package com.example.spectrumaudiofrequency.mediaDecoder;
+package com.example.spectrumaudiofrequency.core.codec_manager.media_decoder;
 
 import android.content.ContentValues;
 import android.content.Context;

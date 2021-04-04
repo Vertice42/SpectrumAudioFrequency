@@ -10,8 +10,8 @@ import androidx.annotation.RequiresApi;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.example.spectrumaudiofrequency.sinusoid_converter.Rearrange.SuperSimplifySinusoid;
-import com.example.spectrumaudiofrequency.mediaDecoder.AudioDecoder;
-import com.example.spectrumaudiofrequency.mediaDecoder.AudioDecoder.PeriodRequest;
+import com.example.spectrumaudiofrequency.core.codec_manager.media_decoder.AudioDecoder;
+import com.example.spectrumaudiofrequency.core.codec_manager.media_decoder.AudioDecoder.PeriodRequest;
 import com.example.spectrumaudiofrequency.util.CalculatePerformance;
 import com.example.spectrumaudiofrequency.util.CalculatePerformance.Performance;
 
@@ -19,7 +19,7 @@ import static com.example.spectrumaudiofrequency.util.CalculatePerformance.SomeP
 import static com.example.spectrumaudiofrequency.view.activity.MainActivity.InfoTextView;
 
 public class LongWaveImageAdapter extends RecyclerView.Adapter<WaveViewHolder> {
-    public com.example.spectrumaudiofrequency.mediaDecoder.AudioDecoder AudioDecoder;
+    public com.example.spectrumaudiofrequency.core.codec_manager.media_decoder.AudioDecoder AudioDecoder;
     public SinusoidDrawn sinusoidDrawn;
 
     public int WaveLength = 0;

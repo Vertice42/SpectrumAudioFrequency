@@ -4,8 +4,8 @@ import android.os.Build;
 import android.util.Log;
 
 import com.example.spectrumaudiofrequency.core.VideoMuxer.Cutoff;
-import com.example.spectrumaudiofrequency.mediaDecoder.AudioDecoder;
-import com.example.spectrumaudiofrequency.mediaDecoder.AudioDecoder.ProcessListener;
+import com.example.spectrumaudiofrequency.core.codec_manager.media_decoder.AudioDecoder;
+import com.example.spectrumaudiofrequency.core.codec_manager.media_decoder.AudioDecoder.ProcessListener;
 import com.example.spectrumaudiofrequency.core.SoundAnalyzer.AudioPeakAnalyzer.Peak;
 
 import org.jetbrains.annotations.NotNull;

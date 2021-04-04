@@ -5,7 +5,7 @@ import android.content.Context;
 import androidx.test.core.app.ApplicationProvider;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
 
-import com.example.spectrumaudiofrequency.mediaDecoder.dbAudioDecoderManager;
+import com.example.spectrumaudiofrequency.core.codec_manager.media_decoder.dbAudioDecoderManager;
 
 import org.junit.Assert;
 import org.junit.Test;
@@ -14,11 +14,11 @@ import org.junit.runner.RunWith;
 import java.util.Random;
 
 @RunWith(AndroidJUnit4.class)
-public class dbAudioDecoderTest {
+public class dbDecoderCodecManagerTest {
     private final String MediaName = "choose";
     private final dbAudioDecoderManager dbManager;
 
-    public dbAudioDecoderTest() {
+    public dbDecoderCodecManagerTest() {
         Context context = ApplicationProvider.getApplicationContext();
         dbManager = new dbAudioDecoderManager(context,MediaName);
     }

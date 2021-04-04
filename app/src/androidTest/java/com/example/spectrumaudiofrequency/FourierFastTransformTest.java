@@ -8,8 +8,8 @@ import androidx.test.core.app.ApplicationProvider;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
 
 import com.example.spectrumaudiofrequency.core.FourierFastTransform;
-import com.example.spectrumaudiofrequency.mediaDecoder.AudioDecoder;
-import com.example.spectrumaudiofrequency.mediaDecoder.AudioDecoder.PeriodRequest;
+import com.example.spectrumaudiofrequency.core.codec_manager.media_decoder.AudioDecoder;
+import com.example.spectrumaudiofrequency.core.codec_manager.media_decoder.AudioDecoder.PeriodRequest;
 
 import org.junit.Assert;
 import org.junit.Before;
