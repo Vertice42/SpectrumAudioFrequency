@@ -9,7 +9,6 @@ import androidx.test.platform.app.InstrumentationRegistry;
 import com.example.spectrumaudiofrequency.R;
 import com.example.spectrumaudiofrequency.core.codec_manager.DecoderCodecManager;
 import com.example.spectrumaudiofrequency.core.codec_manager.DecoderCodecManager.PeriodRequest;
-import com.example.spectrumaudiofrequency.core.codec_manager.media_decoder.AudioDecoder;
 
 import org.junit.After;
 import org.junit.Test;
@@ -28,7 +27,7 @@ public class DecoderCodecManagerTest {
     public DecoderCodecManagerTest() {
         Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();
 
-        int id = R.raw.choose;
+        int id = R.raw.hollow;
         decoderCodecManager = new DecoderCodecManager(context, id);
 
         try {
@@ -53,16 +52,16 @@ public class DecoderCodecManagerTest {
             final int Time = i * decoderCodecManager.SampleDuration;
             decoderCodecManager.addRequest(new PeriodRequest(Time,
                     decoderResult -> {
-                        TestResult[finalI] = (decoderResult.BytesSamplesChannels.length > 0
-                                && Time == decoderResult.SampleTime);
+                        TestResult[finalI] = (decoderResult.Sample.length > 0
+                                && Time == decoderResult.bufferInfo.presentationTimeUs);
 
                         decoderResult.getSampleChannels(decoderCodecManager);
 
                         if (!TestResult[finalI])
                             Log.e("BytesSamplesChannels " + finalI, "SampleTime: "
-                                    + decoderResult.SampleTime + " =? " + Time
+                                    + decoderResult.bufferInfo.presentationTimeUs + " =? " + Time
                                     + " BytesSamplesChannels.length =" +
-                                    decoderResult.BytesSamplesChannels.length);
+                                    decoderResult.Sample.length);
 
                         ResponsesNumber.getAndIncrement();
                         if (ResponsesNumber.get() >= RequestsNumber) signal.countDown();

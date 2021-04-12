@@ -1,83 +1,85 @@
 package com.example.spectrumaudiofrequency.core.codec_manager;
 
-import android.media.MediaCodec;
-import android.media.MediaCodecList;
-import android.media.MediaExtractor;
+import android.content.Context;
 import android.media.MediaFormat;
 
-import androidx.annotation.NonNull;
+import com.example.spectrumaudiofrequency.core.ByteQueue;
+import com.example.spectrumaudiofrequency.core.codec_manager.CodecManager.CodecManagerResult;
+import com.example.spectrumaudiofrequency.core.codec_manager.EncoderCodecManager.InputBufferListener;
 
-import java.io.IOException;
-import java.nio.ByteBuffer;
+import java.util.concurrent.CountDownLatch;
+
+import static android.media.MediaCodec.BUFFER_FLAG_END_OF_STREAM;
 
 public class MediaFormatConverter {
-    private final MediaExtractor ExtractorOriginalMedia;
-    private final String OutputMediaName;
+    public interface MediaFormatConverterListener {
+        void onConvert(boolean end, CodecManagerResult codecManagerResult
+        );
+    }
+    private final long Duration;
+    private final ByteQueue Remnant;
 
-    public MediaFormatConverter(String OriginalMediaPath, String OutputMediaName) {
-        ExtractorOriginalMedia = new MediaExtractor();
-        try {
-            ExtractorOriginalMedia.setDataSource(OriginalMediaPath);
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-        this.OutputMediaName = OutputMediaName;
+    private MediaFormatConverterListener mediaFormatConverterListener;
+    private CountDownLatch countDownLatch = new CountDownLatch(1);
 
+    private final DecoderCodecManager decoderCodecManager;
+    private final EncoderCodecManager encoderCodecManager;
+
+    public MediaFormatConverter(Context context, int MediaToConvertId, MediaFormat newMediaFormat) {
+        this.Duration = newMediaFormat.getLong(MediaFormat.KEY_DURATION);
+        decoderCodecManager = new DecoderCodecManager(context, MediaToConvertId);
+        encoderCodecManager = new EncoderCodecManager(newMediaFormat);
+
+        Remnant = new ByteQueue();
     }
 
-    public void convert() {
-        MediaCodec codec = null;
-        try {
-            codec = MediaCodec.createByCodecName(OutputMediaName);
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-        MediaFormat originalFormat = ExtractorOriginalMedia.getTrackFormat(0);
-
-        codec.configure(originalFormat, null, null, 0);
-
-        MediaFormat outputFormat = codec.getOutputFormat();
-
-        long timeoutUs = 0;
-
-        codec.setCallback(new MediaCodec.Callback() {
-            @Override
-            public void onInputBufferAvailable(@NonNull MediaCodec codec, int index) {
-
-            }
-
-            @Override
-            public void onOutputBufferAvailable(@NonNull MediaCodec codec, int index, @NonNull MediaCodec.BufferInfo info) {
-
-            }
-
-            @Override
-            public void onError(@NonNull MediaCodec codec, @NonNull MediaCodec.CodecException e) {
-
-            }
-
-            @Override
-            public void onOutputFormatChanged(@NonNull MediaCodec codec, @NonNull MediaFormat format) {
-
-            }
-        });
-
-        codec.start();
-
-        while (true) {
-            int inputBufferId = codec.dequeueInputBuffer(timeoutUs);
-            if (inputBufferId >= 0) {
-                ByteBuffer inputBuffer = codec.getInputBuffer(inputBufferId);
-
-                int size = ExtractorOriginalMedia.readSampleData(inputBuffer, 0);
-                long presentationTimeUs = ExtractorOriginalMedia.getSampleTime();
-                int flags = ExtractorOriginalMedia.getSampleFlags();
-
-                codec.queueInputBuffer(inputBufferId, 0, size, presentationTimeUs, flags);
-            }
-
-        codec.stop();
-        codec.release();
+    public void setOnConvert(MediaFormatConverterListener listener) {
+        mediaFormatConverterListener = listener;
     }
+
+    private void convert(long Time) {
+        decoderCodecManager.addRequest(new DecoderCodecManager.PeriodRequest(Time,
+                decoderResult -> {
+
+                    if (countDownLatch != null) countDownLatch.countDown();
+
+                    Remnant.add(decoderResult.Sample);
+                    InputBufferListener onInputObtained = (bufferId, inputBuffer) -> {
+                        int byteBufferSize = inputBuffer.limit();
+
+                        byte[] bytes = Remnant.peekList(byteBufferSize);
+                        //Log.e("limit", +byteBufferSize + " input length: " + decoderResult.Sample.length);
+
+                        inputBuffer.clear();
+                        inputBuffer.put(bytes);
+
+                        long time = Time + decoderCodecManager.SampleDuration;
+                        final boolean End = (time >= Duration);
+
+                        decoderResult.bufferInfo.size = bytes.length;
+
+                        if (End) decoderResult.bufferInfo.flags = BUFFER_FLAG_END_OF_STREAM;
+                        encoderCodecManager.processInput(bufferId, new EncoderCodecManager
+                                .CodecRequest(decoderResult.bufferInfo,
+                                encoderResult -> mediaFormatConverterListener.onConvert(End,
+                                        new CodecManagerResult(encoderResult.OutputBuffer,
+                                                encoderResult.bufferInfo))));
+                        if (!End) convert(time);
+                    };
+                    encoderCodecManager.getInputBuffer(onInputObtained);
+
+                }));
+    }
+
+    public void start() {
+        convert(0);
+    }
+
+    public MediaFormat getOutputFormat() throws InterruptedException {
+        if (countDownLatch != null) {
+            countDownLatch.await();
+            countDownLatch = null;
+        }
+        return encoderCodecManager.getOutputFormat();
     }
 }

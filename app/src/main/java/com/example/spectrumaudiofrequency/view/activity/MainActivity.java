@@ -24,8 +24,8 @@ import androidx.recyclerview.widget.RecyclerView;
 
 import com.example.spectrumaudiofrequency.R;
 import com.example.spectrumaudiofrequency.core.SoundAnalyzer;
-import com.example.spectrumaudiofrequency.core.VideoMuxer;
-import com.example.spectrumaudiofrequency.core.codec_manager.media_decoder.AudioDecoder;
+import com.example.spectrumaudiofrequency.core.MediaMuxerManager;
+import com.example.spectrumaudiofrequency.core.codec_manager.DecoderCodecManager;
 import com.example.spectrumaudiofrequency.util.Files;
 import com.example.spectrumaudiofrequency.view.LongWaveImageAdapter;
 import com.example.spectrumaudiofrequency.view.SinusoidDrawn;
@@ -49,7 +49,7 @@ public class MainActivity extends AppCompatActivity {
 
     public LongWaveImageAdapter WaveAdapter;
 
-    private AudioDecoder audioDecoder;
+    private DecoderCodecManager decoderCodecManager;
     private MediaPlayer mediaPlayer;
     private SinusoidDrawn sinusoidDrawn;
     private View.OnClickListener onClickPlayButton;
@@ -76,7 +76,7 @@ public class MainActivity extends AppCompatActivity {
 
         ProgressLayout.setVisibility(View.VISIBLE);
 
-        SoundAnalyzer soundAnalyzer = new SoundAnalyzer(audioDecoder, 20);
+        SoundAnalyzer soundAnalyzer = new SoundAnalyzer(decoderCodecManager, 20);
         soundAnalyzer.setOnProgressChange(progress -> AnalysisProgressBar.post(() -> {
             ProgressText.setText((progress + "%"));
             AnalysisProgressBar.setProgress((int) (progress));
@@ -112,11 +112,10 @@ public class MainActivity extends AppCompatActivity {
 
         int AudioResourceChoseId = R.raw.hollow;
 
-        audioDecoder = new AudioDecoder(this, AudioResourceChoseId);
-        audioDecoder.prepare().join();
+        decoderCodecManager = new DecoderCodecManager(this, AudioResourceChoseId);
 
-        sinusoidDrawn = new SinusoidDrawn(this, audioDecoder.MediaDuration);
-        WaveAdapter = new LongWaveImageAdapter(audioDecoder, this.sinusoidDrawn);
+        sinusoidDrawn = new SinusoidDrawn(this, decoderCodecManager.MediaDuration);
+        WaveAdapter = new LongWaveImageAdapter(decoderCodecManager, this.sinusoidDrawn);
 
         waveRecyclerView.setHasFixedSize(false);
         LinearLayoutManager linearLayoutManagerOfWaveRecyclerView
@@ -138,7 +137,7 @@ public class MainActivity extends AppCompatActivity {
         goButton.setOnClickListener(v -> {
             if (Peak >= sinusoidDrawn.Peaks.length) Peak = 0;
             linearLayoutManagerOfWaveRecyclerView.scrollToPositionWithOffset((int)
-                    (sinusoidDrawn.Peaks[Peak].starTime / audioDecoder.SampleDuration), 0);
+                    (sinusoidDrawn.Peaks[Peak].starTime / decoderCodecManager.SampleDuration), 0);
             Peak++;
         });
 
@@ -186,10 +185,10 @@ public class MainActivity extends AppCompatActivity {
                                 if (mediaPlayer.isPlaying()) {
                                     long currentTime = mediaPlayer.getCurrentPosition() * 1000;
                                     int PeacePosition = (int)
-                                            (currentTime / audioDecoder.SampleDuration);
-                                    long restTime = currentTime - PeacePosition * audioDecoder.SampleDuration;
+                                            (currentTime / decoderCodecManager.SampleDuration);
+                                    long restTime = currentTime - PeacePosition * decoderCodecManager.SampleDuration;
 
-                                    int pixelTime = audioDecoder.SampleDuration / linearLayoutManagerOfWaveRecyclerView.getWidth();
+                                    int pixelTime = decoderCodecManager.SampleDuration / linearLayoutManagerOfWaveRecyclerView.getWidth();
 
                                     waveRecyclerView.post(() -> {
                                         int offset = 0;
@@ -218,22 +217,12 @@ public class MainActivity extends AppCompatActivity {
             isPlay[0] = !isPlay[0];
         };
         playButton.setOnClickListener(PlayWithMusic);
-
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
-            VideoMuxer videoMuxer = new VideoMuxer(this,
-                    getUriFromResourceId(this, R.raw.video_input1),
-                    getUriFromResourceId(this, R.raw.stardew_valley));
-            videoMuxer.prepare(sinusoidDrawn.Peaks);//todo obtendo do jeito errado
-            videoMuxer.render();
-
-        }
-
     }
 
     @Override
     protected void onDestroy() {
         super.onDestroy();
-        this.audioDecoder.destroy();
+        this.decoderCodecManager.destroy();
         this.sinusoidDrawn.destroy();
     }
 }

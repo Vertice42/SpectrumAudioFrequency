@@ -9,9 +9,9 @@ import androidx.annotation.NonNull;
 import androidx.annotation.RequiresApi;
 import androidx.recyclerview.widget.RecyclerView;
 
+import com.example.spectrumaudiofrequency.core.codec_manager.DecoderCodecManager;
+import com.example.spectrumaudiofrequency.core.codec_manager.DecoderCodecManager.PeriodRequest;
 import com.example.spectrumaudiofrequency.sinusoid_converter.Rearrange.SuperSimplifySinusoid;
-import com.example.spectrumaudiofrequency.core.codec_manager.media_decoder.AudioDecoder;
-import com.example.spectrumaudiofrequency.core.codec_manager.media_decoder.AudioDecoder.PeriodRequest;
 import com.example.spectrumaudiofrequency.util.CalculatePerformance;
 import com.example.spectrumaudiofrequency.util.CalculatePerformance.Performance;
 
@@ -19,7 +19,7 @@ import static com.example.spectrumaudiofrequency.util.CalculatePerformance.SomeP
 import static com.example.spectrumaudiofrequency.view.activity.MainActivity.InfoTextView;
 
 public class LongWaveImageAdapter extends RecyclerView.Adapter<WaveViewHolder> {
-    public com.example.spectrumaudiofrequency.core.codec_manager.media_decoder.AudioDecoder AudioDecoder;
+    public DecoderCodecManager DecoderCodecManager;
     public SinusoidDrawn sinusoidDrawn;
 
     public int WaveLength = 0;
@@ -38,8 +38,8 @@ public class LongWaveImageAdapter extends RecyclerView.Adapter<WaveViewHolder> {
         UpdateLength();
     }
 
-    public LongWaveImageAdapter(AudioDecoder audioDecoder, SinusoidDrawn sinusoidDrawn) {
-        this.AudioDecoder = audioDecoder;
+    public LongWaveImageAdapter(DecoderCodecManager decoderCodecManager, SinusoidDrawn sinusoidDrawn) {
+        this.DecoderCodecManager = decoderCodecManager;
         this.sinusoidDrawn = sinusoidDrawn;
 
         this.RequestPerformance = new CalculatePerformance("RequestPerformance");
@@ -74,14 +74,14 @@ public class LongWaveImageAdapter extends RecyclerView.Adapter<WaveViewHolder> {
     void nextAudioPeriodsToSimplify(SuperSimplifySinusoid superSimplifySinusoid, long Time,
                                     int ObtainedPeriods, int NumberOfPeriods,
                                     getAudioPeriodsSimplifiedListener processListener) {
-        AudioDecoder.addRequest(new PeriodRequest(Time, decoderResult -> {
-            superSimplifySinusoid.Simplify(decoderResult.getSampleChannels(AudioDecoder));
+        DecoderCodecManager.addRequest(new PeriodRequest(Time, decoderResult -> {
+            superSimplifySinusoid.Simplify(decoderResult.getSampleChannels(DecoderCodecManager));
 
             if (ObtainedPeriods > NumberOfPeriods) {
                 processListener.onResult(superSimplifySinusoid.getSinusoidChannelSimplify());
             } else {
                 nextAudioPeriodsToSimplify(superSimplifySinusoid,
-                        Time + AudioDecoder.SampleDuration,
+                        Time + DecoderCodecManager.SampleDuration,
                         ObtainedPeriods + 1, NumberOfPeriods, processListener);
             }
         }));
@@ -91,9 +91,9 @@ public class LongWaveImageAdapter extends RecyclerView.Adapter<WaveViewHolder> {
     void getAudioPeriodsSimplified(long Time, int NumberOfPeriods,
                                    getAudioPeriodsSimplifiedListener processListener) {
 
-        AudioDecoder.addRequest(new PeriodRequest(Time,
+        DecoderCodecManager.addRequest(new PeriodRequest(Time,
                 decoderResult -> {
-                    short[][] sampleChannels = decoderResult.getSampleChannels(AudioDecoder);
+                    short[][] sampleChannels = decoderResult.getSampleChannels(DecoderCodecManager);
 
                     SuperSimplifySinusoid simplifySinusoid = new SuperSimplifySinusoid
                             (sampleChannels[0].length / Zoom);
@@ -103,7 +103,7 @@ public class LongWaveImageAdapter extends RecyclerView.Adapter<WaveViewHolder> {
                         processListener.onResult(simplifySinusoid.getSinusoidChannelSimplify());
                     } else {
                         nextAudioPeriodsToSimplify(simplifySinusoid,
-                                Time + AudioDecoder.SampleDuration,
+                                Time + DecoderCodecManager.SampleDuration,
                                 1, NumberOfPeriods, processListener);
                     }
                 }));
@@ -115,12 +115,12 @@ public class LongWaveImageAdapter extends RecyclerView.Adapter<WaveViewHolder> {
         if (Zoom == 1) {
             RequestPerformance.start();
 
-            AudioDecoder.addRequest(new PeriodRequest(Time, decoderResult -> {
+            DecoderCodecManager.addRequest(new PeriodRequest(Time, decoderResult -> {
 
                 Performance requestPerformance = RequestPerformance.stop();
                 RenderPerformance.start();
-                setWavePieceImageOnHolder(waveViewHolder, Time, decoderResult.getSampleChannels(AudioDecoder),
-                        AudioDecoder.SampleDuration);
+                setWavePieceImageOnHolder(waveViewHolder, Time, decoderResult.getSampleChannels(DecoderCodecManager),
+                        DecoderCodecManager.SampleDuration);
 
                 Performance renderPerformance = RenderPerformance.stop();
                 InfoTextView.setText(SomePerformances("Total", new Performance[]
@@ -130,7 +130,7 @@ public class LongWaveImageAdapter extends RecyclerView.Adapter<WaveViewHolder> {
         } else {
             getAudioPeriodsSimplified(Time, Zoom, result -> {
                 setWavePieceImageOnHolder(waveViewHolder, Time, result,
-                        AudioDecoder.SampleDuration * Zoom);
+                        DecoderCodecManager.SampleDuration * Zoom);
             });
         }
     }
@@ -149,13 +149,13 @@ public class LongWaveImageAdapter extends RecyclerView.Adapter<WaveViewHolder> {
         inUpdate = true;
 
         RequestPerformance.start();
-        AudioDecoder.addRequest(new PeriodRequest(Time, decoderResult -> {
+        DecoderCodecManager.addRequest(new PeriodRequest(Time, decoderResult -> {
             Performance requestPerformance = RequestPerformance.stop();
 
             RenderPerformance.start();
             sinusoidDrawn.render(holderObserved.ImageBitmap,
-                    decoderResult.getSampleChannels(AudioDecoder), Time,
-                    AudioDecoder.SampleDuration, (bitmap) -> {
+                    decoderResult.getSampleChannels(DecoderCodecManager), Time,
+                    DecoderCodecManager.SampleDuration, (bitmap) -> {
                         holderObserved.updateImage(bitmap);
                         inUpdate = false;
 
@@ -171,7 +171,7 @@ public class LongWaveImageAdapter extends RecyclerView.Adapter<WaveViewHolder> {
     @Override
     public void onBindViewHolder(@NonNull WaveViewHolder holder, int position) {
         this.holderObserved = holder;
-        setSampleOnTimePosition(holder, position * AudioDecoder.SampleDuration);
+        setSampleOnTimePosition(holder, position * DecoderCodecManager.SampleDuration);
     }
 
     @Override
@@ -180,7 +180,7 @@ public class LongWaveImageAdapter extends RecyclerView.Adapter<WaveViewHolder> {
     }
 
     void UpdateLength() {
-        this.WaveLength = (int) (AudioDecoder.MediaDuration / Zoom) / AudioDecoder.SampleDuration;
+        this.WaveLength = (int) (DecoderCodecManager.MediaDuration / Zoom) / DecoderCodecManager.SampleDuration;
         this.notifyDataSetChanged();
     }
 }

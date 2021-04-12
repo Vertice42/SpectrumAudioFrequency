@@ -32,17 +32,17 @@ public class DecoderCodecManager {
     }
 
     public static class DecoderResult {
-        public byte[] BytesSamplesChannels;
-        public final long SampleTime;
+        public byte[] Sample;
+        public MediaCodec.BufferInfo bufferInfo;
 
-        DecoderResult(byte[] BytesSamplesChannels, long sampleTime) {
-            this.BytesSamplesChannels = BytesSamplesChannels;
-            SampleTime = sampleTime;
+        public DecoderResult(byte[] sample, MediaCodec.BufferInfo bufferInfo) {
+            Sample = sample;
+            this.bufferInfo = bufferInfo;
         }
 
         public short[][] getSampleChannels(DecoderCodecManager decoderCodecManager) {
-            short[] shorts = new short[BytesSamplesChannels.length / 2];
-            ByteBuffer.wrap(BytesSamplesChannels).order(ByteOrder.nativeOrder()).asShortBuffer().get(shorts);
+            short[] shorts = new short[Sample.length / 2];
+            ByteBuffer.wrap(Sample).order(ByteOrder.nativeOrder()).asShortBuffer().get(shorts);
 
             short[][] SamplesChannels;
             SamplesChannels = new short[decoderCodecManager.ChannelsNumber][shorts.length / decoderCodecManager.ChannelsNumber];
@@ -59,8 +59,8 @@ public class DecoderCodecManager {
         @Override
         public @NotNull String toString() {
             return "DecoderResult{" +
-                    "BytesSamplesChannels=" + Arrays.toString(BytesSamplesChannels) +
-                    ", SampleTime=" + SampleTime +
+                    "BytesSamplesChannels=" + Arrays.toString(Sample) +
+                    ", presentationTimeUs=" + bufferInfo.presentationTimeUs +
                     '}';
         }
     }
@@ -80,7 +80,7 @@ public class DecoderCodecManager {
 
     public float TotalAverageDurationProcessed = 0;
     public long MediaDuration;
-    private int ChannelsNumber;
+    public int ChannelsNumber;
     public int SampleDuration;
 
     private final String MediaName;
@@ -102,35 +102,38 @@ public class DecoderCodecManager {
     public DecoderCodecManager(String AudioPath) {
         this.AudioPath = AudioPath;
         this.MediaName = getFileName(AudioPath);
-
         prepare();
     }
 
     private void prepare() {
         // todo adicionar multidetherd ou loding
-        MediaCodec mediaCodec = null;
-        try {
-            mediaCodec = MediaCodec.createDecoderByType(MediaFormat.MIMETYPE_AUDIO_MPEG);
 
+        try {
             extractor = new MediaExtractor();
             if (AudioPath != null) extractor.setDataSource(AudioPath);
             else extractor.setDataSource(context, uri, null);
+            MediaFormat Format = extractor.getTrackFormat(0);
+
+            extractor.selectTrack(0);//todo prepara all trakss
+
+            MediaDuration = Format.getLong(MediaFormat.KEY_DURATION);
+
+            if (Format.getString(MediaFormat.KEY_MIME).contains("audio")) {
+                ChannelsNumber = Format.getInteger(MediaFormat.KEY_CHANNEL_COUNT);
+                SampleDuration = Format.getInteger(MediaFormat.KEY_SAMPLE_RATE) / ChannelsNumber;
+            } else {
+                //todo very on video
+                SampleDuration = Format.getInteger(MediaFormat.KEY_SAMPLE_RATE);
+            }
+
+            codecManager = new CodecManager(Format, true);
+
+            this.dbAudioDecoderManager = new dbAudioDecoderManager(context, MediaName);
+            if (!dbAudioDecoderManager.MediaIsDecoded(MediaName)) startDecoding();
+
         } catch (IOException e) {
             e.printStackTrace();
         }
-
-        MediaFormat Format = extractor.getTrackFormat(0);
-        extractor.selectTrack(0);
-
-        MediaDuration = Format.getLong(MediaFormat.KEY_DURATION);
-        ChannelsNumber = Format.getInteger(MediaFormat.KEY_CHANNEL_COUNT);
-        SampleDuration = Format.getInteger(MediaFormat.KEY_SAMPLE_RATE) / ChannelsNumber;
-
-
-        codecManager = new CodecManager(mediaCodec, Format);
-
-        this.dbAudioDecoderManager = new dbAudioDecoderManager(context, MediaName);
-        if (!dbAudioDecoderManager.MediaIsDecoded(MediaName)) startDecoding();
     }
 
     private void next() {
@@ -138,15 +141,11 @@ public class DecoderCodecManager {
             int sampleSize = extractor.readSampleData(codecManager.getInputBuffer(ID), 0);
             if (sampleSize < 0) {
                 if (TotalAverageDurationProcessed < 99) {
-                    Log.i("Average Error", "TotalAverageDurationProcessed: " + TotalAverageDurationProcessed);
+                    Log.e("Average Error", "TotalAverageDurationProcessed: " + TotalAverageDurationProcessed);
                 }
                 dbAudioDecoderManager.setDecoded(MediaName);
                 return;
             }
-            long extractorTime = extractor.getSampleTime();
-
-            TotalAverageDurationProcessed = (((float) extractorTime / MediaDuration) * 100f);
-            Log.i("Processed", "TotalAverageDurationProcessed: " + TotalAverageDurationProcessed + "%");
 
             MediaCodec.BufferInfo bufferInfo = new MediaCodec.BufferInfo();
             int offset = 0;
@@ -166,7 +165,7 @@ public class DecoderCodecManager {
                         if (request.RequiredTime == decoderResult.bufferInfo.presentationTimeUs) {
 
                             request.ProcessListener.OnProceed(new DecoderResult(BytesSamplesChannels,
-                                    decoderResult.bufferInfo.presentationTimeUs));
+                                    decoderResult.bufferInfo));
                             RequestsPromises.remove(request);
                             break;
                         }
@@ -187,14 +186,16 @@ public class DecoderCodecManager {
 
     private void startDecoding() {
         codecManager.getInputBufferId(InputID -> {
-            int sampleSize = extractor.readSampleData(codecManager.getInputBuffer(InputID), 0);
+            ByteBuffer inputBuffer = codecManager.getInputBuffer(InputID);
+            Log.i("limit", "" + inputBuffer.limit());
+            int sampleSize = extractor.readSampleData(inputBuffer, 0);
 
             MediaCodec.BufferInfo bufferInfo = new MediaCodec.BufferInfo();
             bufferInfo.set(0, sampleSize, extractor.getSampleTime(),
                     extractor.getSampleFlags());
 
             codecManager.processInput(new CodecManagerRequest(InputID, bufferInfo, decoderResult -> {
-                extractor.seekTo(0, SEEK_TO_CLOSEST_SYNC);//todo talves isso sehá desnecesario
+                extractor.seekTo(0, SEEK_TO_CLOSEST_SYNC);//todo talves isso sejá desnecesario
                 next();
             }));
         });
@@ -214,8 +215,12 @@ public class DecoderCodecManager {
         byte[] dbSampleBytes = dbAudioDecoderManager.getSamplePiece(SamplePeace);
 
         if (dbSampleBytes != null) {
-            periodRequest.ProcessListener.OnProceed(new DecoderResult(dbSampleBytes,
-                    SamplePeace * SampleDuration));
+
+            MediaCodec.BufferInfo bufferInfo = new MediaCodec.BufferInfo();
+            bufferInfo.set(0, dbSampleBytes.length,
+                    SamplePeace * SampleDuration,
+                    MediaCodec.BUFFER_FLAG_KEY_FRAME);//todo possivel erro de uso de key frame
+            periodRequest.ProcessListener.OnProceed(new DecoderResult(dbSampleBytes, bufferInfo));
         } else {
             RequestsPromises.add(periodRequest);
         }
