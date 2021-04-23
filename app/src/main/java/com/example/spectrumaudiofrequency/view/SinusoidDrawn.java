@@ -108,7 +108,7 @@ public class SinusoidDrawn {
         } catch (Exception e) {
             Log.e("DrawWave Error", "DirectoriesHasCreated:" + DirectoriesHasCreated + " CreateFile Error: ", e);
         }
-        Log.i("TAG", "SaveTime: " + (new Date().getTime() - SaveTime) + "ms");
+        Log.i("", "SaveTime: " + (new Date().getTime() - SaveTime) + "ms");
     }
 
     private void DrawFFT_Test(Canvas canvas, float[] sample, long Time, long PieceDuration, float Frequency) {

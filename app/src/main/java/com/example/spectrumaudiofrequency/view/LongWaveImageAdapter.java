@@ -81,7 +81,7 @@ public class LongWaveImageAdapter extends RecyclerView.Adapter<WaveViewHolder> {
                 processListener.onResult(superSimplifySinusoid.getSinusoidChannelSimplify());
             } else {
                 nextAudioPeriodsToSimplify(superSimplifySinusoid,
-                        Time + DecoderCodecManager.SampleDuration,
+                        Time + 1,
                         ObtainedPeriods + 1, NumberOfPeriods, processListener);
             }
         }));
@@ -103,7 +103,7 @@ public class LongWaveImageAdapter extends RecyclerView.Adapter<WaveViewHolder> {
                         processListener.onResult(simplifySinusoid.getSinusoidChannelSimplify());
                     } else {
                         nextAudioPeriodsToSimplify(simplifySinusoid,
-                                Time + DecoderCodecManager.SampleDuration,
+                                Time + +1,
                                 1, NumberOfPeriods, processListener);
                     }
                 }));
@@ -120,7 +120,7 @@ public class LongWaveImageAdapter extends RecyclerView.Adapter<WaveViewHolder> {
                 Performance requestPerformance = RequestPerformance.stop();
                 RenderPerformance.start();
                 setWavePieceImageOnHolder(waveViewHolder, Time, decoderResult.getSampleChannels(DecoderCodecManager),
-                        DecoderCodecManager.SampleDuration);
+                        +1);
 
                 Performance renderPerformance = RenderPerformance.stop();
                 InfoTextView.setText(SomePerformances("Total", new Performance[]
@@ -130,7 +130,7 @@ public class LongWaveImageAdapter extends RecyclerView.Adapter<WaveViewHolder> {
         } else {
             getAudioPeriodsSimplified(Time, Zoom, result -> {
                 setWavePieceImageOnHolder(waveViewHolder, Time, result,
-                        DecoderCodecManager.SampleDuration * Zoom);
+                        +1 * Zoom);
             });
         }
     }
@@ -155,7 +155,7 @@ public class LongWaveImageAdapter extends RecyclerView.Adapter<WaveViewHolder> {
             RenderPerformance.start();
             sinusoidDrawn.render(holderObserved.ImageBitmap,
                     decoderResult.getSampleChannels(DecoderCodecManager), Time,
-                    DecoderCodecManager.SampleDuration, (bitmap) -> {
+                    +1, (bitmap) -> {
                         holderObserved.updateImage(bitmap);
                         inUpdate = false;
 
@@ -171,7 +171,7 @@ public class LongWaveImageAdapter extends RecyclerView.Adapter<WaveViewHolder> {
     @Override
     public void onBindViewHolder(@NonNull WaveViewHolder holder, int position) {
         this.holderObserved = holder;
-        setSampleOnTimePosition(holder, position * DecoderCodecManager.SampleDuration);
+        setSampleOnTimePosition(holder, position * +1);
     }
 
     @Override
@@ -180,7 +180,7 @@ public class LongWaveImageAdapter extends RecyclerView.Adapter<WaveViewHolder> {
     }
 
     void UpdateLength() {
-        this.WaveLength = (int) (DecoderCodecManager.MediaDuration / Zoom) / DecoderCodecManager.SampleDuration;
+        this.WaveLength = (int) (DecoderCodecManager.codecManager.MediaDuration / Zoom) / +1;
         this.notifyDataSetChanged();
     }
 }

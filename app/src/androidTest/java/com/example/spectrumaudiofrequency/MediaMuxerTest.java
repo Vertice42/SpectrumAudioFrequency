@@ -22,7 +22,7 @@ import static com.example.spectrumaudiofrequency.util.Files.getUriFromResourceId
 
 @RunWith(AndroidJUnit4.class)
 public class MediaMuxerTest {
-    public static final int AudioId = R.raw.hollow;
+    public static final int AudioId = R.raw.choose;
 
     @Test
     public void MainTest() throws IOException, InterruptedException {
@@ -44,14 +44,11 @@ public class MediaMuxerTest {
         extraAudioExtractor.setDataSource(context, getUriFromResourceId(context, AudioId), null);
         MediaFormat originalFormat = extraAudioExtractor.getTrackFormat(0);
 
-        /*
-        MediaExtractor videoExtractor = new MediaExtractor();
-        videoExtractor.setDataSource(context, getUriFromResourceId(context, R.raw.video_input3), null);
-        MediaFormat audioOfVideo = videoExtractor.getTrackFormat(1);*/
+        Log.i("originalFormat", originalFormat + "");
 
         MediaFormat newAudioFormat = CodecManager.copyMediaFormat(originalFormat);
         newAudioFormat.setString(MediaFormat.KEY_MIME, MediaFormat.MIMETYPE_AUDIO_AAC);
-        newAudioFormat.setLong(MediaFormat.KEY_DURATION, originalFormat.getLong(MediaFormat.KEY_DURATION) / 30);
+        //newAudioFormat.setInteger(MediaFormat.KEY_BIT_RATE, originalFormat.getInteger(MediaFormat.KEY_BIT_RATE) * 2);
 
         MediaFormatConverter mediaFormatConverter = new MediaFormatConverter(context, AudioId, newAudioFormat);
 
@@ -61,6 +58,7 @@ public class MediaMuxerTest {
                 MediaFormat outputFormat = null;
                 try {
                     outputFormat = mediaFormatConverter.getOutputFormat();
+                    Log.i("outputFormat", outputFormat.toString());
                 } catch (InterruptedException e) {
                     e.printStackTrace();
                 }

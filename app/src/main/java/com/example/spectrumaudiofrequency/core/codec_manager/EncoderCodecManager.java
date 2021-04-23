@@ -27,7 +27,6 @@ public class EncoderCodecManager {
 
     public EncoderCodecManager(MediaFormat mediaFormat) {
         codecManager = new CodecManager(mediaFormat, false);
-
     }
 
     public interface InputBufferListener {
@@ -47,10 +46,5 @@ public class EncoderCodecManager {
     public void processInput(int bufferId, CodecRequest codecRequest) {
         codecManager.processInput(new CodecManagerRequest(bufferId, codecRequest.bufferInfo,
                 codecRequest.ProcessListener));
-
-    }
-
-    public void putConfig(int bufferId, int BufferSize) {
-        codecManager.putConfig(bufferId, BufferSize);
     }
 }

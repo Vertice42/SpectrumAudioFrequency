@@ -105,14 +105,15 @@ public class MediaMuxerManager {
 
         mediaMuxer.addTrack(VideoFormat);
 
-        if (ExternalMediaFormat != null)
+        if (ExternalMediaFormat != null) {
             ExternalMediaFormatId = mediaMuxer.addTrack(ExternalMediaFormat);
+        }
 
         mediaMuxer.start();
         IsPrepared = true;
     }
 
-    public boolean IsPrepared(){
+    public boolean IsPrepared() {
         return IsPrepared;
     }
 

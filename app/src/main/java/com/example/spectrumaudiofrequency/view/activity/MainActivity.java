@@ -114,7 +114,7 @@ public class MainActivity extends AppCompatActivity {
 
         decoderCodecManager = new DecoderCodecManager(this, AudioResourceChoseId);
 
-        sinusoidDrawn = new SinusoidDrawn(this, decoderCodecManager.MediaDuration);
+        sinusoidDrawn = new SinusoidDrawn(this, decoderCodecManager.codecManager.MediaDuration);
         WaveAdapter = new LongWaveImageAdapter(decoderCodecManager, this.sinusoidDrawn);
 
         waveRecyclerView.setHasFixedSize(false);
@@ -137,7 +137,7 @@ public class MainActivity extends AppCompatActivity {
         goButton.setOnClickListener(v -> {
             if (Peak >= sinusoidDrawn.Peaks.length) Peak = 0;
             linearLayoutManagerOfWaveRecyclerView.scrollToPositionWithOffset((int)
-                    (sinusoidDrawn.Peaks[Peak].starTime / decoderCodecManager.SampleDuration), 0);
+                    (sinusoidDrawn.Peaks[Peak].starTime / 1000), 0);
             Peak++;
         });
 
@@ -185,10 +185,10 @@ public class MainActivity extends AppCompatActivity {
                                 if (mediaPlayer.isPlaying()) {
                                     long currentTime = mediaPlayer.getCurrentPosition() * 1000;
                                     int PeacePosition = (int)
-                                            (currentTime / decoderCodecManager.SampleDuration);
-                                    long restTime = currentTime - PeacePosition * decoderCodecManager.SampleDuration;
+                                            (currentTime / 1000);
+                                    long restTime = currentTime - PeacePosition * 1000;
 
-                                    int pixelTime = decoderCodecManager.SampleDuration / linearLayoutManagerOfWaveRecyclerView.getWidth();
+                                    int pixelTime = 1000 / linearLayoutManagerOfWaveRecyclerView.getWidth();
 
                                     waveRecyclerView.post(() -> {
                                         int offset = 0;

@@ -1,12 +1,14 @@
-package com.example.spectrumaudiofrequency;
+package com.example.spectrumaudiofrequency.codec;
 
 import android.content.Context;
 
 import androidx.test.core.app.ApplicationProvider;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
 
-import com.example.spectrumaudiofrequency.core.codec_manager.media_decoder.dbAudioDecoderManager;
+import com.example.spectrumaudiofrequency.core.codec_manager.media_decoder.dbDecoderManager;
+import com.example.spectrumaudiofrequency.core.codec_manager.media_decoder.dbDecoderManager.MediaSpecs;
 
+import org.junit.After;
 import org.junit.Assert;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -16,11 +18,11 @@ import java.util.Random;
 @RunWith(AndroidJUnit4.class)
 public class dbDecoderCodecManagerTest {
     private final String MediaName = "choose";
-    private final dbAudioDecoderManager dbManager;
+    private final dbDecoderManager dbManager;
 
     public dbDecoderCodecManagerTest() {
         Context context = ApplicationProvider.getApplicationContext();
-        dbManager = new dbAudioDecoderManager(context,MediaName);
+        dbManager = new dbDecoderManager(context, MediaName);
     }
 
     @Test
@@ -35,14 +37,21 @@ public class dbDecoderCodecManagerTest {
         dbManager.addSamplePiece(SamplePeace, bytesToTest);
         byte[] dbSamplePiece = dbManager.getSamplePiece(SamplePeace);
         dbManager.deleteSamplePiece(SamplePeace);
-        dbManager.close();
 
         Assert.assertArrayEquals(dbSamplePiece, bytesToTest);
     }
 
     @Test
     public void setDecoded() {
-        dbManager.setDecoded(MediaName);
+        MediaSpecs mediaSpecs = new MediaSpecs(MediaName, 1800000, 24000);
+        dbManager.setDecoded(mediaSpecs);
         Assert.assertTrue(dbManager.MediaIsDecoded(MediaName));
+        Assert.assertEquals(dbManager.getMediaSpecs(), mediaSpecs);
+    }
+
+    @After
+    public void Clear() {
+        dbManager.deleteMediaDecoded(MediaName);
+        dbManager.close();
     }
 }

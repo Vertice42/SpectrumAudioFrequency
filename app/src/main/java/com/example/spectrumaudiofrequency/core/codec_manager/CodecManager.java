@@ -1,6 +1,5 @@
 package com.example.spectrumaudiofrequency.core.codec_manager;
 
-
 import android.media.MediaCodec;
 import android.media.MediaFormat;
 import android.os.Build;
@@ -12,7 +11,6 @@ import org.jetbrains.annotations.NotNull;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.time.Duration;
 import java.util.ArrayList;
 
 public class CodecManager {
@@ -52,15 +50,30 @@ public class CodecManager {
         public final MediaCodec.BufferInfo bufferInfo;
         ProcessListener ProcessListener;
 
-        public CodecManagerRequest(int bufferId, MediaCodec.BufferInfo bufferInfo, CodecManager.ProcessListener processListener) {
+        public CodecManagerRequest(int bufferId, MediaCodec.BufferInfo bufferInfo,
+                                   CodecManager.ProcessListener processListener) {
             BufferId = bufferId;
             this.bufferInfo = bufferInfo;
             ProcessListener = processListener;
+        }
+
+        @Override
+        public @NotNull String toString() {
+            return "CodecManagerRequest{" +
+                    "BufferId=" + BufferId +
+                    ", bufferInfo {" +
+                    "size=" + bufferInfo.size +
+                    ", presentationTimeUs=" + bufferInfo.presentationTimeUs +
+                    ", flags=" + bufferInfo.flags + '}' +
+                    ", DecoderProcessListener=" + ProcessListener.toString() +
+                    '}';
         }
     }
 
     private MediaCodec Codec = null;
     public MediaFormat mediaFormat;
+    public long MediaDuration;
+    public int EncoderPadding = 0;
 
     public final ArrayList<Integer> InputIds = new ArrayList<>();
     public final ArrayList<IdListener> InputIDListeners = new ArrayList<>();
@@ -93,8 +106,6 @@ public class CodecManager {
             r.setLong(MediaFormat.KEY_DURATION, mediaFormat.getLong(MediaFormat.KEY_DURATION));
             r.setInteger(MediaFormat.KEY_BIT_RATE, mediaFormat.getInteger(MediaFormat.KEY_BIT_RATE));
 
-            // if (mediaFormat.containsKey("csd-0")) r.setByteBuffer("csd-0", mediaFormat.getByteBuffer("csd-0"));
-
             return r;
         }
     }
@@ -114,7 +125,15 @@ public class CodecManager {
         return Codec.getOutputFormat();
     }
 
-    long MediaDuration = 1;
+    public void GiveBackBufferId(int BufferId) {
+        if (InputIDListeners.size() != 0) {
+            IdListener idListener = InputIDListeners.get(0);
+            idListener.onIdAvailable(BufferId);
+            InputIDListeners.remove(idListener);
+        } else {
+            InputIds.add(BufferId);
+        }
+    }
 
     public CodecManager(MediaFormat mediaFormat, boolean IsDecoder) {
         // todo adicionar multidetherd ou loding
@@ -127,20 +146,16 @@ public class CodecManager {
                 Codec = MediaCodec.createEncoderByType(mediaFormat.getString(android.media.MediaFormat.KEY_MIME));
             }
 
+            String ENCODER_PADDING = "encoder-padding";
+            if (mediaFormat.containsKey(ENCODER_PADDING))
+                EncoderPadding = mediaFormat.getInteger(ENCODER_PADDING);
             MediaDuration = mediaFormat.getLong(MediaFormat.KEY_DURATION);
-
             Codec.setCallback(new MediaCodec.Callback() {
 
                 @Override
                 public void onInputBufferAvailable(@NonNull final MediaCodec mediaCodec,
                                                    final int inputBufferId) {
-                    if (InputIDListeners.size() != 0) {
-                        IdListener idListener = InputIDListeners.get(0);
-                        idListener.onIdAvailable(inputBufferId);
-                        InputIDListeners.remove(idListener);
-                    } else {
-                        InputIds.add(inputBufferId);
-                    }
+                    GiveBackBufferId(inputBufferId);
                 }
 
                 @Override
@@ -153,12 +168,6 @@ public class CodecManager {
                     } else {
                         promise.ProcessListener.OnProceed(new CodecManagerResult(Codec.getOutputBuffer(outputBufferId), bufferInfo));
                     }
-                    float TotalAverageDurationProcessed = (((float) bufferInfo.presentationTimeUs / MediaDuration) * 100f);
-
-                    String CodecType = "";
-                    if (IsDecoder) CodecType = "Decoder";
-                    else CodecType = "Encoder";
-                    Log.i("Codec " + CodecType, "Process: " + TotalAverageDurationProcessed + "% " + "presentationTimeUs" + bufferInfo.presentationTimeUs);
                     Codec.releaseOutputBuffer(outputBufferId, false);
                 }
 
@@ -209,11 +218,6 @@ public class CodecManager {
                 codecManagerRequest.bufferInfo.size,
                 codecManagerRequest.bufferInfo.presentationTimeUs,
                 codecManagerRequest.bufferInfo.flags);
-    }
-
-    public void putConfig(int BufferId, int bufferSize) {
-        Codec.queueInputBuffer(BufferId, 0, bufferSize, 0,
-                MediaCodec.BUFFER_FLAG_CODEC_CONFIG);
     }
 
 }

@@ -30,7 +30,7 @@ public class EncoderCodecManagerTest {
     private final EncoderCodecManager Encoder;
     private final MediaFormat newFormat;
     private final Context context;
-    private final int rawId = R.raw.stardew_valley;
+    private final int rawId = R.raw.stardew_valley_ost_sam_s_band_bluegrass;
 
     public EncoderCodecManagerTest() throws IOException {
         context = InstrumentationRegistry.getInstrumentation().getTargetContext();
@@ -53,7 +53,7 @@ public class EncoderCodecManagerTest {
     public void addRequest() throws InterruptedException {
         final CountDownLatch signal = new CountDownLatch(1);
 
-        byte[] inputData = new byte[4096];
+        byte[] inputData = new byte[4096/2];
         for (int i = 0; i < inputData.length; i++) {
             inputData[i] = (byte) (i + i / 2);
         }
@@ -64,11 +64,12 @@ public class EncoderCodecManagerTest {
         AtomicBoolean OK = new AtomicBoolean(true);
         for (int i = 0; i < length; i++) {
             MediaCodec.BufferInfo bufferInfo = new MediaCodec.BufferInfo();
-            bufferInfo.set(0, inputData.length, 1000 * i, 0);
+            bufferInfo.set(0, inputData.length, 1000 * i, MediaCodec.BUFFER_FLAG_KEY_FRAME);
 
             Encoder.getInputBuffer((bufferId, inputBuffer) -> {
                 inputBuffer.clear();
                 inputBuffer.put(inputData);
+                bufferInfo.size = inputData.length;
 
                 Encoder.processInput(bufferId, new CodecRequest(bufferInfo, encoderResult -> {
                     Log.v("encoderResult", encoderResult.toString());
