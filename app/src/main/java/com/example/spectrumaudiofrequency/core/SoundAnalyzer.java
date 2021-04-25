@@ -5,8 +5,8 @@ import android.util.Log;
 
 import com.example.spectrumaudiofrequency.core.SoundAnalyzer.AudioPeakAnalyzer.Peak;
 import com.example.spectrumaudiofrequency.core.MediaMuxerManager.Cutoff;
-import com.example.spectrumaudiofrequency.core.codec_manager.DecoderCodecManager;
-import com.example.spectrumaudiofrequency.core.codec_manager.DecoderCodecManager.DecoderProcessListener;
+import com.example.spectrumaudiofrequency.core.codec_manager.DecoderCodec;
+import com.example.spectrumaudiofrequency.core.codec_manager.DecoderCodecWithCacheManager;
 
 import org.jetbrains.annotations.NotNull;
 import org.json.JSONArray;
@@ -17,10 +17,10 @@ import java.util.concurrent.ForkJoinPool;
 
 public class SoundAnalyzer {
     private final ForkJoinPool Poll;
-    private final DecoderCodecManager DecoderCodecManager;
+    private final DecoderCodecWithCacheManager DecoderCodecWithCacheManager;
 
     private SoundAnalyzerProgressListener progressListener;
-    private DecoderProcessListener decoderProcessListener;
+    private DecoderCodec.DecoderProcessListener decoderProcessListener;
 
     private int Time;
     private int iterations;
@@ -121,8 +121,8 @@ public class SoundAnalyzer {
         }
     }
 
-    public SoundAnalyzer(DecoderCodecManager decoderCodecManager, int SpikesCollectionSize) {
-        this.DecoderCodecManager = decoderCodecManager;
+    public SoundAnalyzer(DecoderCodecWithCacheManager decoderCodecWithCacheManager, int SpikesCollectionSize) {
+        this.DecoderCodecWithCacheManager = decoderCodecWithCacheManager;
         this.SpikesCollectionSize = SpikesCollectionSize;
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
             this.Poll = ForkJoinPool.commonPool();
@@ -137,30 +137,30 @@ public class SoundAnalyzer {
 
     public void start(SoundAnalyzerListener soundAnalyzerListener) {
         this.iterations = 0;
-        this.iterationsMax = (int) (1000 / DecoderCodecManager.codecManager.MediaDuration) + 1;
+        this.iterationsMax = (int) (1000 / DecoderCodecWithCacheManager.MediaDuration) + 1;
         this.Time = 0;
-        AudioPeakAnalyzer audioPeakAnalyzer = new AudioPeakAnalyzer(this.SpikesCollectionSize, DecoderCodecManager.codecManager.MediaDuration);
+        AudioPeakAnalyzer audioPeakAnalyzer = new AudioPeakAnalyzer(this.SpikesCollectionSize, DecoderCodecWithCacheManager.MediaDuration);
         this.decoderProcessListener = decoderResult -> {
 
             if (Time != decoderResult.bufferInfo.presentationTimeUs)
                 Log.e("Time is !==", Time + "!=" + decoderResult.bufferInfo.presentationTimeUs);
 
-            short[][] sampleChannels = decoderResult.getSampleChannels(DecoderCodecManager);
+            short[][] sampleChannels = decoderResult.getSampleChannels(DecoderCodecWithCacheManager);
 
             audioPeakAnalyzer.analyzeData(sampleChannels[0], Time, 1000);
 
             Time += 1000;
-            if (Time >= DecoderCodecManager.codecManager.MediaDuration - 1000) {
+            if (Time >= DecoderCodecWithCacheManager.MediaDuration - 1000) {
                 //Arrays.sort(audioPeakAnalyzer.peaks, (o1, o2) -> o2.datum - o1.datum);
                 soundAnalyzerListener.OnFinishedAnalysis(audioPeakAnalyzer.peaks);
             } else {
-                DecoderCodecManager.addRequest(new DecoderCodecManager.PeriodRequest
+                DecoderCodecWithCacheManager.addRequest(new DecoderCodecWithCacheManager.PeriodRequest
                         (Time, decoderProcessListener));
 
                 iterations++;
                 if (iterations > iterationsMax) {
                     iterations = 0;
-                    float progress = ((float) Time / (float) DecoderCodecManager.codecManager.MediaDuration) * 100f;
+                    float progress = ((float) Time / (float) DecoderCodecWithCacheManager.MediaDuration) * 100f;
                     if (progress > 98.5f) iterationsMax = 1;
 
                     Poll.execute(() -> progressListener.OnProgressChange(progress));
@@ -168,6 +168,6 @@ public class SoundAnalyzer {
             }
         };
 
-        DecoderCodecManager.addRequest(new DecoderCodecManager.PeriodRequest(Time, decoderProcessListener));
+        DecoderCodecWithCacheManager.addRequest(new DecoderCodecWithCacheManager.PeriodRequest(Time, decoderProcessListener));
     }
 }

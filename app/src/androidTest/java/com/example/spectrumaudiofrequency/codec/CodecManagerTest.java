@@ -5,6 +5,6 @@ import org.junit.runners.Suite;
 
 @RunWith(Suite.class)
 @Suite.SuiteClasses({EncoderCodecManagerTest.class,
-        DecoderCodecManagerTest.class})
+        DecoderCodecWithCacheManagerTest.class})
 public class CodecManagerTest {
 }

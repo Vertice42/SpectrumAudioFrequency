@@ -117,17 +117,17 @@ public class dbDecoderManager extends SQLiteOpenHelper {
         Cursor cursor = sqLiteDatabase.query(DecodedMedias.TABLE_NAME, null, selection,
                 selectionArgs, null, null, null);
 
-        int samplePeaceDuration = -1;
+        int SampleIdDuration = -1;
         long trueMediaDuration = -1;
         while (cursor.moveToNext()) {
-            samplePeaceDuration = cursor.getInt(cursor.getColumnIndex(
+            SampleIdDuration = cursor.getInt(cursor.getColumnIndex(
                     DecodedMedias.SAMPLE_PEACE_DURATION));
             trueMediaDuration = cursor.getInt(cursor.getColumnIndex(
                     DecodedMedias.TRUE_MEDIA_DURATION));
         }
 
         cursor.close();
-        return new MediaSpecs(MediaName, trueMediaDuration, samplePeaceDuration);
+        return new MediaSpecs(MediaName, trueMediaDuration, SampleIdDuration);
     }
 
     private void createMediaDecoded(String MediaName) {

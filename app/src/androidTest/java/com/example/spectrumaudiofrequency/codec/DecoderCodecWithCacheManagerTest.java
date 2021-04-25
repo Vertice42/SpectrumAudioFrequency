@@ -7,29 +7,28 @@ import androidx.test.ext.junit.runners.AndroidJUnit4;
 import androidx.test.platform.app.InstrumentationRegistry;
 
 import com.example.spectrumaudiofrequency.R;
-import com.example.spectrumaudiofrequency.core.codec_manager.DecoderCodecManager;
-import com.example.spectrumaudiofrequency.core.codec_manager.DecoderCodecManager.PeriodRequest;
+import com.example.spectrumaudiofrequency.core.codec_manager.DecoderCodec.PeriodRequest;
+import com.example.spectrumaudiofrequency.core.codec_manager.DecoderCodecWithCacheManager;
 
-import org.jetbrains.annotations.NotNull;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
-import java.util.Arrays;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ForkJoinPool;
 
 import static org.junit.Assert.fail;
 
 @RunWith(AndroidJUnit4.class)
-public class DecoderCodecManagerTest {
+public class DecoderCodecWithCacheManagerTest {
     private final ForkJoinPool forkJoinPool;
-    private final DecoderCodecManager decoderCodecManager;
+    private final DecoderCodecWithCacheManager decoderCodecWithCacheManager;
+    private static final long MAX_TIME_OUT = 1000;
 
-    public DecoderCodecManagerTest() {
+    public DecoderCodecWithCacheManagerTest() {
         Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();
 
         int id = R.raw.choose;
-        decoderCodecManager = new DecoderCodecManager(context, id);
+        decoderCodecWithCacheManager = new DecoderCodecWithCacheManager(context, id);
 
         forkJoinPool = ForkJoinPool.commonPool();
     }
@@ -39,59 +38,43 @@ public class DecoderCodecManagerTest {
         return true;
     }
 
-    long maxTime = 1000;
-    private boolean Pass = false;
+    private boolean TimeOutPass = false;
 
-    void Wait(CountDownLatch countDownLatch) {
+    void CountTimeout(CountDownLatch countDownLatch) {
         forkJoinPool.execute(() -> {
             try {
-                Thread.sleep(maxTime);
+                Thread.sleep(MAX_TIME_OUT);
             } catch (InterruptedException e) {
                 e.printStackTrace();
             }
-            if (Pass) Wait(countDownLatch);
+            if (TimeOutPass) CountTimeout(countDownLatch);
             else countDownLatch.countDown();
-            Pass = false;
+            TimeOutPass = false;
         });
-    }
-
-    static class TestResult {
-        boolean IsError;
-        String Message;
-
-        public TestResult(boolean isError, String message) {
-            IsError = isError;
-            Message = message;
-        }
-
-        @Override
-        public @NotNull String toString() {
-            return (IsError) ? "ERROR " : "" + Message;
-        }
     }
 
     @Test
     public void addRequest() throws InterruptedException {
         final CountDownLatch signal = new CountDownLatch(1);
 
-        int RequestsNumber = decoderCodecManager.getSampleLength();
+        decoderCodecWithCacheManager.startDecoding(25000);
+        int RequestsNumber = decoderCodecWithCacheManager.getSampleLength();
 
         TestResult[] TestsResults = new TestResult[RequestsNumber];
 
-        Wait(signal);
-
+        CountTimeout(signal);
         for (int i = 0; i < RequestsNumber; i++) {
-            int SamplePeace = i;
+            int SampleId = i;
 
-            decoderCodecManager.addRequest(new PeriodRequest(SamplePeace, decoderResult -> {
+            decoderCodecWithCacheManager.addRequest(new PeriodRequest(SampleId, decoderResult -> {
                 boolean IsError = false;
-                String Message = "{" + SamplePeace;
+                String Message = "{" + SampleId;
                 if (!decoderResult.SampleTimeNotExist()) {
                     if (decoderResult.Sample.length <= 0) {
                         Message += "size 0";
                         IsError = true;
                     }
-                    short[][] data = decoderResult.getSampleChannels(decoderCodecManager);
+                    short[][] data = decoderResult.getSampleChannels(decoderCodecWithCacheManager);
                 } else {
                     Message += " SampleTimeNotExist";
                 }
@@ -99,14 +82,14 @@ public class DecoderCodecManagerTest {
 
                 if (IsError) Log.e("DecoderTestError", " SampleTime: " +
                         decoderResult.bufferInfo.presentationTimeUs +
-                        " RequestTime: " + SamplePeace +
+                        " RequestTime: " + SampleId +
                         " BytesSamplesChannels.length = " +
                         decoderResult.Sample.length);
 
-                TestsResults[SamplePeace] = new TestResult(IsError, Message);
+                TestsResults[SampleId] = new TestResult(IsError, Message);
 
                 if (AllNotNull(TestsResults)) signal.countDown();
-                Pass = true;
+                TimeOutPass = true;
             }));
         }
 
@@ -126,7 +109,7 @@ public class DecoderCodecManagerTest {
         }
 
         Log.i("TestsResults", Results.toString());
-        decoderCodecManager.clear();
+        decoderCodecWithCacheManager.clear();
 
         for (int i = 0; i < TestsResults.length; i++) {
             TestResult testResult = TestsResults[i];

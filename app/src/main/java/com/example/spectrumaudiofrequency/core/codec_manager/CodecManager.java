@@ -136,6 +136,13 @@ public class CodecManager {
     }
 
     public CodecManager(MediaFormat mediaFormat, boolean IsDecoder) {
+        PrepareEndStart(mediaFormat,IsDecoder);
+    }
+
+    CodecManager(){
+    }
+
+    void PrepareEndStart(MediaFormat mediaFormat, boolean IsDecoder) {
         // todo adicionar multidetherd ou loding
         try {
             this.mediaFormat = mediaFormat;

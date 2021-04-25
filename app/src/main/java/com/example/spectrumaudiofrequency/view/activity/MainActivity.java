@@ -24,8 +24,7 @@ import androidx.recyclerview.widget.RecyclerView;
 
 import com.example.spectrumaudiofrequency.R;
 import com.example.spectrumaudiofrequency.core.SoundAnalyzer;
-import com.example.spectrumaudiofrequency.core.MediaMuxerManager;
-import com.example.spectrumaudiofrequency.core.codec_manager.DecoderCodecManager;
+import com.example.spectrumaudiofrequency.core.codec_manager.DecoderCodecWithCacheManager;
 import com.example.spectrumaudiofrequency.util.Files;
 import com.example.spectrumaudiofrequency.view.LongWaveImageAdapter;
 import com.example.spectrumaudiofrequency.view.SinusoidDrawn;
@@ -49,7 +48,7 @@ public class MainActivity extends AppCompatActivity {
 
     public LongWaveImageAdapter WaveAdapter;
 
-    private DecoderCodecManager decoderCodecManager;
+    private DecoderCodecWithCacheManager decoderCodecWithCacheManager;
     private MediaPlayer mediaPlayer;
     private SinusoidDrawn sinusoidDrawn;
     private View.OnClickListener onClickPlayButton;
@@ -76,7 +75,7 @@ public class MainActivity extends AppCompatActivity {
 
         ProgressLayout.setVisibility(View.VISIBLE);
 
-        SoundAnalyzer soundAnalyzer = new SoundAnalyzer(decoderCodecManager, 20);
+        SoundAnalyzer soundAnalyzer = new SoundAnalyzer(decoderCodecWithCacheManager, 20);
         soundAnalyzer.setOnProgressChange(progress -> AnalysisProgressBar.post(() -> {
             ProgressText.setText((progress + "%"));
             AnalysisProgressBar.setProgress((int) (progress));
@@ -112,10 +111,10 @@ public class MainActivity extends AppCompatActivity {
 
         int AudioResourceChoseId = R.raw.hollow;
 
-        decoderCodecManager = new DecoderCodecManager(this, AudioResourceChoseId);
+        decoderCodecWithCacheManager = new DecoderCodecWithCacheManager(this, AudioResourceChoseId);
 
-        sinusoidDrawn = new SinusoidDrawn(this, decoderCodecManager.codecManager.MediaDuration);
-        WaveAdapter = new LongWaveImageAdapter(decoderCodecManager, this.sinusoidDrawn);
+        sinusoidDrawn = new SinusoidDrawn(this, decoderCodecWithCacheManager.MediaDuration);
+        WaveAdapter = new LongWaveImageAdapter(decoderCodecWithCacheManager, this.sinusoidDrawn);
 
         waveRecyclerView.setHasFixedSize(false);
         LinearLayoutManager linearLayoutManagerOfWaveRecyclerView
@@ -222,7 +221,7 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onDestroy() {
         super.onDestroy();
-        this.decoderCodecManager.destroy();
+        this.decoderCodecWithCacheManager.destroy();
         this.sinusoidDrawn.destroy();
     }
 }

@@ -16,11 +16,11 @@ import org.junit.runner.RunWith;
 import java.util.Random;
 
 @RunWith(AndroidJUnit4.class)
-public class dbDecoderCodecManagerTest {
+public class dbDecoderCodecWithCacheManagerTest {
     private final String MediaName = "choose";
     private final dbDecoderManager dbManager;
 
-    public dbDecoderCodecManagerTest() {
+    public dbDecoderCodecWithCacheManagerTest() {
         Context context = ApplicationProvider.getApplicationContext();
         dbManager = new dbDecoderManager(context, MediaName);
     }
@@ -32,11 +32,11 @@ public class dbDecoderCodecManagerTest {
         byte[] bytesToTest = new byte[200];
         new Random().nextBytes(bytesToTest);
 
-        int SamplePeace = 55;
+        int SampleId = 55;
 
-        dbManager.addSamplePiece(SamplePeace, bytesToTest);
-        byte[] dbSamplePiece = dbManager.getSamplePiece(SamplePeace);
-        dbManager.deleteSamplePiece(SamplePeace);
+        dbManager.addSamplePiece(SampleId, bytesToTest);
+        byte[] dbSamplePiece = dbManager.getSamplePiece(SampleId);
+        dbManager.deleteSamplePiece(SampleId);
 
         Assert.assertArrayEquals(dbSamplePiece, bytesToTest);
     }

@@ -22,11 +22,11 @@ public class MediaFormatConverter {
     private MediaFormatConverterListener mediaFormatConverterListener;
     private CountDownLatch countDownLatch = new CountDownLatch(1);
 
-    private final DecoderCodecManager decoder;
+    private final DecoderCodecWithCacheManager decoder;
     private final EncoderCodecManager encoderCodecManager;
 
     public MediaFormatConverter(Context context, int MediaToConvertId, MediaFormat newMediaFormat) {
-        decoder = new DecoderCodecManager(context, MediaToConvertId);
+        decoder = new DecoderCodecWithCacheManager(context, MediaToConvertId);
         encoderCodecManager = new EncoderCodecManager(newMediaFormat);
     }
 
@@ -41,10 +41,10 @@ public class MediaFormatConverter {
                 " MediaDuration: " + decoder.TrueMediaDuration());
     }
 
-    private void convert(int SamplePeace) {
-        decoder.addRequest(new DecoderCodecManager.PeriodRequest(SamplePeace,
+    private void convert(int SampleId) {
+        decoder.addRequest(new DecoderCodecWithCacheManager.PeriodRequest(SampleId,
                 decoderResult -> {
-                   // LogPercentage(decoderResult, "Decoder");
+                    // LogPercentage(decoderResult, "Decoder");
                     if (countDownLatch != null) countDownLatch.countDown();
                     InputBufferListener onInputObtained = (bufferId, inputBuffer) -> {
                         Log.i("data length", "inputBuffer limit " + inputBuffer.limit() +
@@ -56,12 +56,12 @@ public class MediaFormatConverter {
                         }
 
                         inputBuffer.put(bytes);
-                        int samplePeace = SamplePeace;
-                        samplePeace++;
+                        int sampleId = SampleId;
+                        sampleId++;
 
                         long lastPeace = decoder.getSampleLength();
-                        final boolean End = samplePeace > lastPeace;
-                        Log.i("samplePeace", "" + samplePeace + " lastPeace:" + lastPeace);
+                        final boolean End = sampleId > lastPeace;
+                        Log.i("SampleId", "" + sampleId + " lastPeace:" + lastPeace);
 
                         decoderResult.bufferInfo.size = bytes.length;
                         decoderResult.bufferInfo.flags = BUFFER_FLAG_KEY_FRAME;
@@ -74,7 +74,7 @@ public class MediaFormatConverter {
                                             new CodecManagerResult(encoderResult.OutputBuffer,
                                                     encoderResult.bufferInfo));
                                 }));
-                        if (!End) convert(samplePeace);
+                        if (!End) convert(sampleId);
                     };
                     encoderCodecManager.getInputBuffer(onInputObtained);
                 }));
