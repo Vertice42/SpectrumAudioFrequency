@@ -13,31 +13,35 @@ import java.util.ArrayList;
 
 import static android.media.MediaCodec.BUFFER_FLAG_KEY_FRAME;
 
+/**
+ * Extended Code manager, but contains methods for obtaining samples asynchronously.
+ * The samples are saved in a database.
+ */
 @RequiresApi(api = Build.VERSION_CODES.LOLLIPOP)
-public class DecoderCodecWithCacheManager extends DecoderCodec {
+public class DecoderManagerWithSaveData extends DecoderManager {
     private final ArrayList<PeriodRequest> RequestsPromises = new ArrayList<>();
     private dbDecoderManager dbOfDecoder;
 
-    public DecoderCodecWithCacheManager(Context context, int ResourceId) {
+    public DecoderManagerWithSaveData(Context context, int ResourceId) {
         super(context, ResourceId);
         PrepareDataBase();
     }
 
-    public DecoderCodecWithCacheManager(Context context, String AudioPath) {
+    public DecoderManagerWithSaveData(Context context, String AudioPath) {
         super(context, AudioPath);
         PrepareDataBase();
     }
 
-    private void KeepPromises(int SampleId, BufferInfo bufferInfo, byte[] sample) {
+    private void KeepPromises(DecoderResult decoderResult) {
         int size = RequestsPromises.size();
         int requestIndex = 0;
         for (int i = 0; i < size; i++) {
             PeriodRequest request = RequestsPromises.get(requestIndex);
 
-            if (request.RequiredSampleId == SampleId) {
+            if (request.RequiredSampleId == decoderResult.SampleId) {
                 RequestsPromises.remove(request);
-                request.DecoderListener.OnProceed(new DecoderResult(SampleId, sample, bufferInfo));
-            } else if (request.RequiredSampleId < SampleId || WasDecoded) {
+                request.DecoderListener.OnProceed(decoderResult);
+            } else if (request.RequiredSampleId < decoderResult.SampleId || DecodingFinish) {
                 RequestsPromises.remove(request);
                 addRequest(request);
             } else {
@@ -48,11 +52,16 @@ public class DecoderCodecWithCacheManager extends DecoderCodec {
 
     private void PrepareDataBase() {
         dbOfDecoder = new dbDecoderManager(context, MediaName);
-        WasDecoded = dbOfDecoder.MediaIsDecoded(MediaName);
+        DecodingFinish = dbOfDecoder.MediaIsDecoded(MediaName);
+        if (DecodingFinish) {
+            MediaSpecs mediaSpecs = dbOfDecoder.getMediaSpecs();
+            this.TrueMediaDuration = mediaSpecs.TrueMediaDuration;
+            this.NewSampleDuration = mediaSpecs.SampleDuration;
+        }
 
         addOnDecodeListener(decoderResult -> {
             dbOfDecoder.addSamplePiece(decoderResult.SampleId, decoderResult.Sample);
-            KeepPromises(decoderResult.SampleId, decoderResult.bufferInfo, decoderResult.Sample);
+            KeepPromises(decoderResult);
         });
         addOnEndListener(() -> {
             dbOfDecoder.setDecoded(new MediaSpecs(MediaName, TrueMediaDuration(),
@@ -65,12 +74,13 @@ public class DecoderCodecWithCacheManager extends DecoderCodec {
         if (dbSampleBytes != null) {
             BufferInfo bufferInfo = new BufferInfo();
             bufferInfo.set(0, dbSampleBytes.length,
-                    periodRequest.RequiredSampleId * NewSampleDuration,
+                    (long) (periodRequest.RequiredSampleId * NewSampleDuration),
                     BUFFER_FLAG_KEY_FRAME);
             periodRequest.DecoderListener.OnProceed(new DecoderResult(
+                    (periodRequest.RequiredSampleId == dbOfDecoder.getSamplesLength() - 1),
                     periodRequest.RequiredSampleId,
                     dbSampleBytes, bufferInfo));
-        } else if (WasDecoded) {
+        } else if (DecodingFinish) {
             periodRequest.DecoderListener.OnProceed(new DecoderResult());
         } else RequestsPromises.add(periodRequest);
     }

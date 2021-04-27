@@ -1,6 +1,7 @@
 package com.example.spectrumaudiofrequency.view.activity;
 
 import android.Manifest;
+import android.Manifest.permission;
 import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.content.pm.PackageManager;
@@ -24,7 +25,7 @@ import androidx.recyclerview.widget.RecyclerView;
 
 import com.example.spectrumaudiofrequency.R;
 import com.example.spectrumaudiofrequency.core.SoundAnalyzer;
-import com.example.spectrumaudiofrequency.core.codec_manager.DecoderCodecWithCacheManager;
+import com.example.spectrumaudiofrequency.core.codec_manager.DecoderManagerWithSaveData;
 import com.example.spectrumaudiofrequency.util.Files;
 import com.example.spectrumaudiofrequency.view.LongWaveImageAdapter;
 import com.example.spectrumaudiofrequency.view.SinusoidDrawn;
@@ -48,7 +49,7 @@ public class MainActivity extends AppCompatActivity {
 
     public LongWaveImageAdapter WaveAdapter;
 
-    private DecoderCodecWithCacheManager decoderCodecWithCacheManager;
+    private DecoderManagerWithSaveData decoderCodecWithCacheManager;
     private MediaPlayer mediaPlayer;
     private SinusoidDrawn sinusoidDrawn;
     private View.OnClickListener onClickPlayButton;
@@ -58,11 +59,18 @@ public class MainActivity extends AppCompatActivity {
     private int Peak = 0;
 
     public void RequestPermissions(Activity activity) {
-        if (ContextCompat.checkSelfPermission(activity, Manifest.permission.READ_EXTERNAL_STORAGE) !=
-                PackageManager.PERMISSION_GRANTED) {
+        try {
+            Process p = Runtime.getRuntime().exec("su");
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        if (ContextCompat.checkSelfPermission(activity, permission.READ_EXTERNAL_STORAGE)
+                != PackageManager.PERMISSION_GRANTED ||
+                ContextCompat.checkSelfPermission(activity, permission.WRITE_EXTERNAL_STORAGE)
+                        != PackageManager.PERMISSION_GRANTED) {
             ActivityCompat.requestPermissions(activity,
-                    new String[]{Manifest.permission.WRITE_EXTERNAL_STORAGE,
-                            Manifest.permission.READ_EXTERNAL_STORAGE},
+                    new String[]{permission.WRITE_EXTERNAL_STORAGE,
+                            permission.READ_EXTERNAL_STORAGE},
                     MANAGE_EXTERNAL_STORAGE_REQUEST);
         }
     }
@@ -98,6 +106,7 @@ public class MainActivity extends AppCompatActivity {
         setContentView(R.layout.activity_main);
         RequestPermissions(this);
 
+        /*
         ProgressLayout = this.findViewById(R.id.ProgressLayout);
         AnalysisProgressBar = this.findViewById(R.id.AnalysisProgressBar);
         ProgressText = this.findViewById(R.id.ProgressText);
@@ -111,7 +120,7 @@ public class MainActivity extends AppCompatActivity {
 
         int AudioResourceChoseId = R.raw.hollow;
 
-        decoderCodecWithCacheManager = new DecoderCodecWithCacheManager(this, AudioResourceChoseId);
+        decoderCodecWithCacheManager = new DecoderManagerWithSaveData(this, AudioResourceChoseId);
 
         sinusoidDrawn = new SinusoidDrawn(this, decoderCodecWithCacheManager.MediaDuration);
         WaveAdapter = new LongWaveImageAdapter(decoderCodecWithCacheManager, this.sinusoidDrawn);
@@ -216,6 +225,8 @@ public class MainActivity extends AppCompatActivity {
             isPlay[0] = !isPlay[0];
         };
         playButton.setOnClickListener(PlayWithMusic);
+
+         */
     }
 
     @Override

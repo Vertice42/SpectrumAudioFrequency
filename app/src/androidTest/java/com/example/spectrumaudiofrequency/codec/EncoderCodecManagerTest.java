@@ -12,7 +12,6 @@ import androidx.test.platform.app.InstrumentationRegistry;
 import com.example.spectrumaudiofrequency.R;
 import com.example.spectrumaudiofrequency.core.codec_manager.CodecManager;
 import com.example.spectrumaudiofrequency.core.codec_manager.EncoderCodecManager;
-import com.example.spectrumaudiofrequency.core.codec_manager.EncoderCodecManager.CodecRequest;
 
 import org.junit.Assert;
 import org.junit.Test;
@@ -28,19 +27,17 @@ import static com.example.spectrumaudiofrequency.util.Files.getUriFromResourceId
 @RunWith(AndroidJUnit4.class)
 public class EncoderCodecManagerTest {
     private final EncoderCodecManager Encoder;
-    private final MediaFormat newFormat;
-    private final Context context;
-    private final int rawId = R.raw.stardew_valley_ost_sam_s_band_bluegrass;
+    private static final int TEST_RAW_ID = R.raw.stardew_valley_ost_sam_s_band_bluegrass;
 
     public EncoderCodecManagerTest() throws IOException {
-        context = InstrumentationRegistry.getInstrumentation().getTargetContext();
+        Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();
 
         MediaExtractor mediaExtractor = new MediaExtractor();
-        mediaExtractor.setDataSource(context, getUriFromResourceId(context, rawId), null);
+        mediaExtractor.setDataSource(context, getUriFromResourceId(context, TEST_RAW_ID), null);
 
         MediaFormat oldFormat = mediaExtractor.getTrackFormat(0);
 
-        newFormat = CodecManager.copyMediaFormat(oldFormat);
+        MediaFormat newFormat = CodecManager.copyMediaFormat(oldFormat);
         newFormat.setString(MediaFormat.KEY_MIME, MediaFormat.MIMETYPE_AUDIO_AAC);
 
         Log.i("oldFormat", oldFormat.toString());
@@ -50,7 +47,7 @@ public class EncoderCodecManagerTest {
     }
 
     @Test
-    public void addRequest() throws InterruptedException {
+    public void Encode() throws InterruptedException {
         final CountDownLatch signal = new CountDownLatch(1);
 
         byte[] inputData = new byte[4096/2];
@@ -70,21 +67,20 @@ public class EncoderCodecManagerTest {
                 inputBuffer.clear();
                 inputBuffer.put(inputData);
                 bufferInfo.size = inputData.length;
-
-                Encoder.processInput(bufferId, new CodecRequest(bufferInfo, encoderResult -> {
-                    Log.v("encoderResult", encoderResult.toString());
-
-                    byte[] EncoderResult = new byte[encoderResult.OutputBuffer.remaining()];
-                    encoderResult.OutputBuffer.get(EncoderResult);
-
-                    if (EncoderResult.length < 1) OK.set(false);
-
-                    count.getAndIncrement();
-                    if (count.get() >= length) signal.countDown();
-                }));
+                Encoder.putInput(new CodecManager.CodecManagerRequest(bufferId,bufferInfo));
             });
 
+            Encoder.addOnOutputListener(encoderResult -> {
+                Log.v("encoderResult", encoderResult.toString());
 
+                byte[] EncoderResult = new byte[encoderResult.OutputBuffer.remaining()];
+                encoderResult.OutputBuffer.get(EncoderResult);
+
+                if (EncoderResult.length < 1) OK.set(false);
+
+                count.getAndIncrement();
+                if (count.get() >= length) signal.countDown();
+            });
         }
         signal.await();
 

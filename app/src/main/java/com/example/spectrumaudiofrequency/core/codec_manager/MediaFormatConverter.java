@@ -1,37 +1,43 @@
 package com.example.spectrumaudiofrequency.core.codec_manager;
 
 import android.content.Context;
+import android.media.MediaCodec;
 import android.media.MediaFormat;
 import android.util.Log;
 
+import com.example.spectrumaudiofrequency.core.codec_manager.CodecManager.CodecManagerRequest;
 import com.example.spectrumaudiofrequency.core.codec_manager.CodecManager.CodecManagerResult;
-import com.example.spectrumaudiofrequency.core.codec_manager.EncoderCodecManager.InputBufferListener;
 
-import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicInteger;
 
-import static android.media.MediaCodec.BUFFER_FLAG_END_OF_STREAM;
-import static android.media.MediaCodec.BUFFER_FLAG_KEY_FRAME;
 import static com.example.spectrumaudiofrequency.util.Math.CalculatePercentage;
 
 public class MediaFormatConverter {
     public interface MediaFormatConverterListener {
-        void onConvert(boolean end, CodecManagerResult codecManagerResult
-        );
+        void onConvert(CodecManagerResult codecManagerResult);
     }
 
-    private MediaFormatConverterListener mediaFormatConverterListener;
-    private CountDownLatch countDownLatch = new CountDownLatch(1);
+    public interface MediaFormatConverterFinishListener {
+        void OnFinish();
+    }
 
-    private final DecoderCodecWithCacheManager decoder;
-    private final EncoderCodecManager encoderCodecManager;
+    private MediaFormatConverterFinishListener FinishListener;
+    private MediaFormatConverterListener mediaFormatConverterListener;
+
+    private final DecoderManager decoder;
+    private final EncoderCodecManager encoder;
 
     public MediaFormatConverter(Context context, int MediaToConvertId, MediaFormat newMediaFormat) {
-        decoder = new DecoderCodecWithCacheManager(context, MediaToConvertId);
-        encoderCodecManager = new EncoderCodecManager(newMediaFormat);
+        decoder = new DecoderManager(context, MediaToConvertId);
+        encoder = new EncoderCodecManager(newMediaFormat);
     }
 
-    public void setOnConvert(MediaFormatConverterListener listener) {
-        mediaFormatConverterListener = listener;
+    public void setOnConvert(MediaFormatConverterListener onConvert) {
+        mediaFormatConverterListener = onConvert;
+    }
+
+    public void setFinishListener(MediaFormatConverterFinishListener finishListener) {
+        this.FinishListener = finishListener;
     }
 
     private void LogPercentage(CodecManagerResult codecResult, String Type) {
@@ -41,54 +47,34 @@ public class MediaFormatConverter {
                 " MediaDuration: " + decoder.TrueMediaDuration());
     }
 
-    private void convert(int SampleId) {
-        decoder.addRequest(new DecoderCodecWithCacheManager.PeriodRequest(SampleId,
-                decoderResult -> {
-                    // LogPercentage(decoderResult, "Decoder");
-                    if (countDownLatch != null) countDownLatch.countDown();
-                    InputBufferListener onInputObtained = (bufferId, inputBuffer) -> {
-                        Log.i("data length", "inputBuffer limit " + inputBuffer.limit() +
-                                " decoder length:" + decoderResult.Sample.length);
-                        byte[] bytes = new byte[inputBuffer.limit()];
+    public void start() throws InterruptedException {
+        AtomicInteger Outputs = new AtomicInteger();
+        AtomicInteger inputs = new AtomicInteger();
+        decoder.addOnDecodeListener(decoderResult -> {
+            inputs.getAndIncrement();
+            LogPercentage(decoderResult, "Decoder " + inputs.get());
+            encoder.getInputBuffer((bufferId, byteBuffer) -> {
+                byteBuffer.put(decoderResult.Sample);
+                if (decoderResult.IsLastSample)
+                    decoderResult.bufferInfo.flags = MediaCodec.BUFFER_FLAG_END_OF_STREAM;
+                encoder.putInput(new CodecManagerRequest(bufferId, decoderResult.bufferInfo));
+            });
+        });
 
-                        for (int i = 0; i < bytes.length && i < decoderResult.Sample.length; i++) {
-                            bytes[i] = decoderResult.Sample[i];
-                        }
-
-                        inputBuffer.put(bytes);
-                        int sampleId = SampleId;
-                        sampleId++;
-
-                        long lastPeace = decoder.getSampleLength();
-                        final boolean End = sampleId > lastPeace;
-                        Log.i("SampleId", "" + sampleId + " lastPeace:" + lastPeace);
-
-                        decoderResult.bufferInfo.size = bytes.length;
-                        decoderResult.bufferInfo.flags = BUFFER_FLAG_KEY_FRAME;
-                        if (End) decoderResult.bufferInfo.flags = BUFFER_FLAG_END_OF_STREAM;
-                        encoderCodecManager.processInput(bufferId, new EncoderCodecManager
-                                .CodecRequest(decoderResult.bufferInfo,
-                                encoderResult -> {
-                                    //LogPercentage(encoderResult, "Encoder");
-                                    mediaFormatConverterListener.onConvert(End,
-                                            new CodecManagerResult(encoderResult.OutputBuffer,
-                                                    encoderResult.bufferInfo));
-                                }));
-                        if (!End) convert(sampleId);
-                    };
-                    encoderCodecManager.getInputBuffer(onInputObtained);
-                }));
+        encoder.addOnOutputListener(encoderResult -> {
+            Outputs.getAndIncrement();
+            LogPercentage(encoderResult, "Encoder " + Outputs.get());
+            mediaFormatConverterListener.onConvert(new CodecManagerResult(
+                    encoderResult.OutputBuffer,
+                    encoderResult.bufferInfo));
+            if (encoderResult.bufferInfo.flags == MediaCodec.BUFFER_FLAG_END_OF_STREAM)
+                FinishListener.OnFinish();
+        });
+        decoder.setNewSampleSize(encoder.getInputBufferLimit());
+        decoder.startDecoding();
     }
 
-    public void start() {
-        convert(0);
-    }
-
-    public MediaFormat getOutputFormat() throws InterruptedException {
-        if (countDownLatch != null) {
-            countDownLatch.await();
-            countDownLatch = null;
-        }
-        return encoderCodecManager.getOutputFormat();
+    public MediaFormat getOutputFormat() {
+        return encoder.getOutputFormat();
     }
 }

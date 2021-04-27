@@ -20,7 +20,7 @@ public class dbDecoderManager extends SQLiteOpenHelper {
                 "CREATE TABLE " + TABLE_NAME + " (" +
                         ID + " INTEGER PRIMARY KEY AUTOINCREMENT, " +
                         MEDIA_NAME + " TEXT NOT NULL, " +
-                        SAMPLE_PEACE_DURATION + " INTEGER ," +
+                        SAMPLE_PEACE_DURATION + " REAL ," +
                         TRUE_MEDIA_DURATION + " BIGINT ," +
                         IS_COMPLETE + " INTEGER DEFAULT 0);";
 
@@ -46,9 +46,9 @@ public class dbDecoderManager extends SQLiteOpenHelper {
     public static class MediaSpecs {
         public String MediaName;
         public long TrueMediaDuration;
-        public int SampleDuration;
+        public double SampleDuration;
 
-        public MediaSpecs(String mediaName, long trueMediaDuration, int sampleDuration) {
+        public MediaSpecs(String mediaName, long trueMediaDuration, double sampleDuration) {
             MediaName = mediaName;
             TrueMediaDuration = trueMediaDuration;
             SampleDuration = sampleDuration;
@@ -60,6 +60,8 @@ public class dbDecoderManager extends SQLiteOpenHelper {
 
     private final String MediaName;
     private final SQLiteDatabase sqLiteDatabase;
+
+    private int SamplesLength = 0;
 
     public dbDecoderManager(Context context, String MediaName) {
         super(context, DATABASE_NAME, null, DATABASE_VERSION);
@@ -163,6 +165,26 @@ public class dbDecoderManager extends SQLiteOpenHelper {
                 null,            // don't filter by row groups
                 null                // The sort order
         );
+    }
+
+    public int getSamplesLength() {
+        if (SamplesLength == 0) {
+            String selection = SamplesTable.SAMPLE_PIECE + " = ?";
+            String[] selectionArgs = {""};
+
+            Cursor query = sqLiteDatabase.query(
+                    MediaName,          // The table to query
+                    null,      // The array of columns to return (pass null to get all)
+                    selection,              // The columns for the WHERE clause
+                    selectionArgs,          // The values for the WHERE clause
+                    null,          // don't group the rows
+                    null,           // don't filter by row groups
+                    null           // The sort order
+            );
+            SamplesLength = query.getCount();
+            query.close();
+        }
+        return SamplesLength;
     }
 
     public byte[] getSamplePiece(long SamplePiece) {

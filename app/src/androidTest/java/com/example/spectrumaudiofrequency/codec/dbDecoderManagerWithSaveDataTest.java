@@ -16,11 +16,11 @@ import org.junit.runner.RunWith;
 import java.util.Random;
 
 @RunWith(AndroidJUnit4.class)
-public class dbDecoderCodecWithCacheManagerTest {
+public class dbDecoderManagerWithSaveDataTest {
     private final String MediaName = "choose";
     private final dbDecoderManager dbManager;
 
-    public dbDecoderCodecWithCacheManagerTest() {
+    public dbDecoderManagerWithSaveDataTest() {
         Context context = ApplicationProvider.getApplicationContext();
         dbManager = new dbDecoderManager(context, MediaName);
     }

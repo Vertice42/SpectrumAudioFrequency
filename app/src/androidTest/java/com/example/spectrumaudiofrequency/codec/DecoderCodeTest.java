@@ -7,7 +7,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4;
 import androidx.test.platform.app.InstrumentationRegistry;
 
 import com.example.spectrumaudiofrequency.R;
-import com.example.spectrumaudiofrequency.core.codec_manager.DecoderCodec;
+import com.example.spectrumaudiofrequency.core.codec_manager.DecoderManager;
 
 import org.junit.Assert;
 import org.junit.Test;
@@ -22,14 +22,14 @@ import static org.junit.Assert.fail;
 @RunWith(AndroidJUnit4.class)
 public class DecoderCodeTest {
     private final ForkJoinPool forkJoinPool;
-    private final DecoderCodec decoderCodec;
+    private final DecoderManager decoderManager;
     private static final long MAX_TIME_OUT = 1000;
 
     public DecoderCodeTest() {
         Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();
 
         int id = R.raw.choose;
-        decoderCodec = new DecoderCodec(context, id);
+        decoderManager = new DecoderManager(context, id);
 
         forkJoinPool = ForkJoinPool.commonPool();
     }
@@ -52,7 +52,7 @@ public class DecoderCodeTest {
     @Test
     public void Decode() throws InterruptedException {
         ArrayList<TestResult> testResults = new ArrayList<>();
-        decoderCodec.addOnDecodeListener(decoderResult -> {
+        decoderManager.addOnDecodeListener(decoderResult -> {
             boolean IsError = false;
             String message = "";
             if (decoderResult.Sample.length == 0) {
@@ -63,10 +63,11 @@ public class DecoderCodeTest {
             testResults.add(new TestResult(IsError, message));
         });
         CountDownLatch countDownLatch = new CountDownLatch(1);
-        decoderCodec.addOnEndListener(countDownLatch::countDown);
+        decoderManager.addOnEndListener(countDownLatch::countDown);
 
         CountTimeout(countDownLatch);
-        decoderCodec.startDecoding(25000);
+        decoderManager.setNewSampleDuration(25000);
+        decoderManager.startDecoding();
 
         countDownLatch.await();
         for (int i = 0; i < testResults.size(); i++) {

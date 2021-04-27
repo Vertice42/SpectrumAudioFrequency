@@ -7,8 +7,8 @@ import androidx.test.ext.junit.runners.AndroidJUnit4;
 import androidx.test.platform.app.InstrumentationRegistry;
 
 import com.example.spectrumaudiofrequency.R;
-import com.example.spectrumaudiofrequency.core.codec_manager.DecoderCodec.PeriodRequest;
-import com.example.spectrumaudiofrequency.core.codec_manager.DecoderCodecWithCacheManager;
+import com.example.spectrumaudiofrequency.core.codec_manager.DecoderManager.PeriodRequest;
+import com.example.spectrumaudiofrequency.core.codec_manager.DecoderManagerWithSaveData;
 
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -19,16 +19,16 @@ import java.util.concurrent.ForkJoinPool;
 import static org.junit.Assert.fail;
 
 @RunWith(AndroidJUnit4.class)
-public class DecoderCodecWithCacheManagerTest {
+public class DecoderManagerWithSaveDataTest {
     private final ForkJoinPool forkJoinPool;
-    private final DecoderCodecWithCacheManager decoderCodecWithCacheManager;
+    private final DecoderManagerWithSaveData decoderCodecWithCacheManager;
     private static final long MAX_TIME_OUT = 1000;
 
-    public DecoderCodecWithCacheManagerTest() {
+    public DecoderManagerWithSaveDataTest() {
         Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();
 
         int id = R.raw.choose;
-        decoderCodecWithCacheManager = new DecoderCodecWithCacheManager(context, id);
+        decoderCodecWithCacheManager = new DecoderManagerWithSaveData(context, id);
 
         forkJoinPool = ForkJoinPool.commonPool();
     }
@@ -56,8 +56,8 @@ public class DecoderCodecWithCacheManagerTest {
     @Test
     public void addRequest() throws InterruptedException {
         final CountDownLatch signal = new CountDownLatch(1);
-
-        decoderCodecWithCacheManager.startDecoding(25000);
+        decoderCodecWithCacheManager.setNewSampleDuration(25000);
+        decoderCodecWithCacheManager.startDecoding();
         int RequestsNumber = decoderCodecWithCacheManager.getSampleLength();
 
         TestResult[] TestsResults = new TestResult[RequestsNumber];

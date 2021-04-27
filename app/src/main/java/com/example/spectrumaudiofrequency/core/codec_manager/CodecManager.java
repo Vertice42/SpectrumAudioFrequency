@@ -12,6 +12,7 @@ import org.jetbrains.annotations.NotNull;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
+import java.util.concurrent.CountDownLatch;
 
 public class CodecManager {
     interface IdListener {
@@ -41,20 +42,27 @@ public class CodecManager {
         }
     }//todo simplifly ?
 
-    public interface ProcessListener {
+    public interface OutputListener {
         void OnProceed(CodecManagerResult codecResult);
+    }
+
+    static class OutputListenerCustum {
+        boolean IsConsumable = false;
+        OutputListener outputListener;
+
+        public OutputListenerCustum(boolean isConsumable, OutputListener outputListener) {
+            IsConsumable = isConsumable;
+            this.outputListener = outputListener;
+        }
     }
 
     public static class CodecManagerRequest {
         public final int BufferId;
         public final MediaCodec.BufferInfo bufferInfo;
-        ProcessListener ProcessListener;
 
-        public CodecManagerRequest(int bufferId, MediaCodec.BufferInfo bufferInfo,
-                                   CodecManager.ProcessListener processListener) {
+        public CodecManagerRequest(int bufferId, MediaCodec.BufferInfo bufferInfo) {
             BufferId = bufferId;
             this.bufferInfo = bufferInfo;
-            ProcessListener = processListener;
         }
 
         @Override
@@ -65,19 +73,20 @@ public class CodecManager {
                     "size=" + bufferInfo.size +
                     ", presentationTimeUs=" + bufferInfo.presentationTimeUs +
                     ", flags=" + bufferInfo.flags + '}' +
-                    ", DecoderProcessListener=" + ProcessListener.toString() +
                     '}';
         }
     }
 
     private MediaCodec Codec = null;
+    private int bufferLimit = 0;
+
     public MediaFormat mediaFormat;
     public long MediaDuration;
     public int EncoderPadding = 0;
 
     public final ArrayList<Integer> InputIds = new ArrayList<>();
     public final ArrayList<IdListener> InputIDListeners = new ArrayList<>();
-    public final ArrayList<CodecManagerRequest> OutputPromises = new ArrayList<>();
+    public final ArrayList<OutputListenerCustum> outputListenersCustum = new ArrayList<>();
 
     public static MediaFormat copyMediaFormat(MediaFormat mediaFormat) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -110,17 +119,6 @@ public class CodecManager {
         }
     }
 
-    public CodecManagerRequest getOutputPromise(int BufferId) {
-        for (int i = 0; i < OutputPromises.size(); i++) {
-            if (OutputPromises.get(i).BufferId == BufferId) {
-                CodecManagerRequest codecManagerRequest = OutputPromises.get(i);
-                OutputPromises.remove(i);
-                return codecManagerRequest;
-            }
-        }
-        return null;
-    }
-
     public MediaFormat getOutputFormat() {
         return Codec.getOutputFormat();
     }
@@ -135,11 +133,32 @@ public class CodecManager {
         }
     }
 
-    public CodecManager(MediaFormat mediaFormat, boolean IsDecoder) {
-        PrepareEndStart(mediaFormat,IsDecoder);
+    private void executeOutputListeners(int outputBufferId, MediaCodec.BufferInfo bufferInfo) {
+        for (int i = 0; i < outputListenersCustum.size(); i++) {
+            OutputListenerCustum listener = outputListenersCustum.get(i);
+            listener.outputListener.OnProceed(new CodecManagerResult
+                    (Codec.getOutputBuffer(outputBufferId), bufferInfo));
+            if (listener.IsConsumable) removeOnOutput(listener);
+        }
     }
 
-    CodecManager(){
+    public CodecManager(MediaFormat mediaFormat, boolean IsDecoder) {
+        PrepareEndStart(mediaFormat, IsDecoder);
+    }
+
+    CodecManager() {
+    }
+
+    public int getInputBufferLimit() throws InterruptedException {
+        if (bufferLimit == 0) {
+            CountDownLatch countDownLatch = new CountDownLatch(1);
+            this.getInputBufferId(Id -> {
+                bufferLimit = getInputBuffer(Id).limit();
+                countDownLatch.countDown();
+            });
+            countDownLatch.await();
+        }
+        return bufferLimit;
     }
 
     void PrepareEndStart(MediaFormat mediaFormat, boolean IsDecoder) {
@@ -169,12 +188,7 @@ public class CodecManager {
                 public void onOutputBufferAvailable(@NonNull final MediaCodec mediaCodec,
                                                     final int outputBufferId,
                                                     @NonNull final MediaCodec.BufferInfo bufferInfo) {
-                    CodecManagerRequest promise = getOutputPromise(outputBufferId);
-                    if (promise == null) {
-                        Log.e("OnOutputAvailable", "Not are promises but are a output");
-                    } else {
-                        promise.ProcessListener.OnProceed(new CodecManagerResult(Codec.getOutputBuffer(outputBufferId), bufferInfo));
-                    }
+                    executeOutputListeners(outputBufferId, bufferInfo);
                     Codec.releaseOutputBuffer(outputBufferId, false);
                 }
 
@@ -218,8 +232,7 @@ public class CodecManager {
         return Codec.getInputBuffer(inputID);
     }
 
-    public void processInput(CodecManagerRequest codecManagerRequest) {
-        OutputPromises.add(codecManagerRequest);
+    public void putInput(CodecManagerRequest codecManagerRequest) {
         Codec.queueInputBuffer(codecManagerRequest.BufferId,
                 codecManagerRequest.bufferInfo.offset,
                 codecManagerRequest.bufferInfo.size,
@@ -227,4 +240,15 @@ public class CodecManager {
                 codecManagerRequest.bufferInfo.flags);
     }
 
+    public void addOnOutputListener(OutputListener outputListener) {
+        outputListenersCustum.add(new OutputListenerCustum(false, outputListener));
+    }
+
+    public void addOnOutputListenerConsumable(OutputListener outputListener) {
+        outputListenersCustum.add(new OutputListenerCustum(true, outputListener));
+    }
+
+    public void removeOnOutput(OutputListenerCustum outputListenerCustum) {
+        outputListenersCustum.remove(outputListenerCustum);
+    }
 }

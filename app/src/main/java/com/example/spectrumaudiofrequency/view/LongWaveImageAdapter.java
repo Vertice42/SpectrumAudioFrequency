@@ -9,8 +9,8 @@ import androidx.annotation.NonNull;
 import androidx.annotation.RequiresApi;
 import androidx.recyclerview.widget.RecyclerView;
 
-import com.example.spectrumaudiofrequency.core.codec_manager.DecoderCodec;
-import com.example.spectrumaudiofrequency.core.codec_manager.DecoderCodecWithCacheManager;
+import com.example.spectrumaudiofrequency.core.codec_manager.DecoderManager;
+import com.example.spectrumaudiofrequency.core.codec_manager.DecoderManagerWithSaveData;
 import com.example.spectrumaudiofrequency.sinusoid_converter.Rearrange.SuperSimplifySinusoid;
 import com.example.spectrumaudiofrequency.util.CalculatePerformance;
 import com.example.spectrumaudiofrequency.util.CalculatePerformance.Performance;
@@ -19,7 +19,7 @@ import static com.example.spectrumaudiofrequency.util.CalculatePerformance.SomeP
 import static com.example.spectrumaudiofrequency.view.activity.MainActivity.InfoTextView;
 
 public class LongWaveImageAdapter extends RecyclerView.Adapter<WaveViewHolder> {
-    public DecoderCodecWithCacheManager DecoderCodecWithCacheManager;
+    public DecoderManagerWithSaveData DecoderCodecWithCacheManager;
     public SinusoidDrawn sinusoidDrawn;
 
     public int WaveLength = 0;
@@ -38,7 +38,7 @@ public class LongWaveImageAdapter extends RecyclerView.Adapter<WaveViewHolder> {
         UpdateLength();
     }
 
-    public LongWaveImageAdapter(DecoderCodecWithCacheManager decoderCodecWithCacheManager, SinusoidDrawn sinusoidDrawn) {
+    public LongWaveImageAdapter(DecoderManagerWithSaveData decoderCodecWithCacheManager, SinusoidDrawn sinusoidDrawn) {
         this.DecoderCodecWithCacheManager = decoderCodecWithCacheManager;
         this.sinusoidDrawn = sinusoidDrawn;
 
@@ -74,7 +74,7 @@ public class LongWaveImageAdapter extends RecyclerView.Adapter<WaveViewHolder> {
     void nextAudioPeriodsToSimplify(SuperSimplifySinusoid superSimplifySinusoid, long Time,
                                     int ObtainedPeriods, int NumberOfPeriods,
                                     getAudioPeriodsSimplifiedListener processListener) {
-        DecoderCodecWithCacheManager.addRequest(new DecoderCodec.PeriodRequest((int) (Time/25000), decoderResult -> {
+        DecoderCodecWithCacheManager.addRequest(new DecoderManager.PeriodRequest((int) (Time/25000), decoderResult -> {
             superSimplifySinusoid.Simplify(decoderResult.getSampleChannels(DecoderCodecWithCacheManager));
 
             if (ObtainedPeriods > NumberOfPeriods) {
@@ -91,7 +91,7 @@ public class LongWaveImageAdapter extends RecyclerView.Adapter<WaveViewHolder> {
     void getAudioPeriodsSimplified(long Time, int NumberOfPeriods,
                                    getAudioPeriodsSimplifiedListener processListener) {
 
-        DecoderCodecWithCacheManager.addRequest(new DecoderCodec.PeriodRequest((int) (Time/25000),
+        DecoderCodecWithCacheManager.addRequest(new DecoderManager.PeriodRequest((int) (Time/25000),
                 decoderResult -> {
                     short[][] sampleChannels = decoderResult.getSampleChannels(DecoderCodecWithCacheManager);
 
@@ -115,7 +115,7 @@ public class LongWaveImageAdapter extends RecyclerView.Adapter<WaveViewHolder> {
         if (Zoom == 1) {
             RequestPerformance.start();
 
-            DecoderCodecWithCacheManager.addRequest(new DecoderCodec.PeriodRequest((int) (Time/25000), decoderResult -> {
+            DecoderCodecWithCacheManager.addRequest(new DecoderManager.PeriodRequest((int) (Time/25000), decoderResult -> {
 
                 Performance requestPerformance = RequestPerformance.stop();
                 RenderPerformance.start();
@@ -149,7 +149,7 @@ public class LongWaveImageAdapter extends RecyclerView.Adapter<WaveViewHolder> {
         inUpdate = true;
 
         RequestPerformance.start();
-        DecoderCodecWithCacheManager.addRequest(new DecoderCodec.PeriodRequest((int) (Time/25000), decoderResult -> {
+        DecoderCodecWithCacheManager.addRequest(new DecoderManager.PeriodRequest((int) (Time/25000), decoderResult -> {
             Performance requestPerformance = RequestPerformance.stop();
 
             RenderPerformance.start();
