@@ -40,32 +40,36 @@ public class MediaMuxerTest {
             time += cutTime;
         }
 
-        MediaExtractor extraAudioExtractor = new MediaExtractor();
-        extraAudioExtractor.setDataSource(context, getUriFromResourceId(context, AudioId), null);
-        MediaFormat originalFormat = extraAudioExtractor.getTrackFormat(0);
+        MediaExtractor extraExtractor = new MediaExtractor();
+        extraExtractor.setDataSource(context, getUriFromResourceId(context, AudioId), null);
+        MediaFormat originalFormat = extraExtractor.getTrackFormat(0);
 
         Log.i("originalFormat", originalFormat + "");
         MediaFormat newAudioFormat = CodecManager.copyMediaFormat(originalFormat);
         newAudioFormat.setString(MediaFormat.KEY_MIME, MediaFormat.MIMETYPE_AUDIO_AAC);
-        MediaFormatConverter mediaFormatConverter = new MediaFormatConverter(context, AudioId, newAudioFormat);
+        MediaFormatConverter FormatConverter = new MediaFormatConverter(context, AudioId,
+                newAudioFormat);
 
         final CountDownLatch signal = new CountDownLatch(1);
-        mediaFormatConverter.setOnConvert(ConverterResult -> {
+        FormatConverter.setOnConvert(ConverterResult -> {
             if (!MediaMuxerManager.IsPrepared()) {
-                MediaFormat outputFormat = mediaFormatConverter.getOutputFormat();
+                MediaFormat outputFormat = FormatConverter.getOutputFormat();
                 Log.i("outputFormat", outputFormat.toString());
 
                 MediaMuxerManager.prepare(cutoffs, outputFormat);
                 MediaMuxerManager.putExtractorData();
             }
-            MediaMuxerManager.writeSampleData(ConverterResult.bufferInfo, ConverterResult.OutputBuffer);
-
+            Log.i("ConverterProgress", (double)
+                    ConverterResult.bufferInfo.presentationTimeUs
+                    / FormatConverter.TrueMediaDuration()*100 + "%");
+            MediaMuxerManager.writeSampleData(ConverterResult.bufferInfo,
+                    ConverterResult.OutputBuffer);
         });
-        mediaFormatConverter.setFinishListener(() -> {
+        FormatConverter.setFinishListener(() -> {
             signal.countDown();
             MediaMuxerManager.stop();
         });
-        mediaFormatConverter.start();
+        FormatConverter.start();
         signal.await();
     }
 }

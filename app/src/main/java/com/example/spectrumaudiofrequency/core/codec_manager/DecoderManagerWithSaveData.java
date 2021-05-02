@@ -56,7 +56,7 @@ public class DecoderManagerWithSaveData extends DecoderManager {
         if (DecodingFinish) {
             MediaSpecs mediaSpecs = dbOfDecoder.getMediaSpecs();
             this.TrueMediaDuration = mediaSpecs.TrueMediaDuration;
-            this.NewSampleDuration = mediaSpecs.SampleDuration;
+            this.NewSampleDuration = (int) mediaSpecs.SampleDuration;
         }
 
         addOnDecodeListener(decoderResult -> {

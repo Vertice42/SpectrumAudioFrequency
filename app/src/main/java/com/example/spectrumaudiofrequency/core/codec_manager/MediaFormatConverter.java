@@ -8,7 +8,9 @@ import android.util.Log;
 import com.example.spectrumaudiofrequency.core.codec_manager.CodecManager.CodecManagerRequest;
 import com.example.spectrumaudiofrequency.core.codec_manager.CodecManager.CodecManagerResult;
 
+import java.nio.ByteBuffer;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 
 import static com.example.spectrumaudiofrequency.util.Math.CalculatePercentage;
 
@@ -21,8 +23,19 @@ public class MediaFormatConverter {
         void OnFinish();
     }
 
+    static class CodecSample {
+        MediaCodec.BufferInfo bufferInfo;
+        byte[] bytes;
+
+        public CodecSample(MediaCodec.BufferInfo bufferInfo, byte[] bytes) {
+            this.bufferInfo = bufferInfo;
+            this.bytes = bytes;
+        }
+
+    }
+
     private MediaFormatConverterFinishListener FinishListener;
-    private MediaFormatConverterListener mediaFormatConverterListener;
+    private MediaFormatConverterListener ConverterListener;
 
     private final DecoderManager decoder;
     private final EncoderCodecManager encoder;
@@ -33,11 +46,15 @@ public class MediaFormatConverter {
     }
 
     public void setOnConvert(MediaFormatConverterListener onConvert) {
-        mediaFormatConverterListener = onConvert;
+        ConverterListener = onConvert;
     }
 
     public void setFinishListener(MediaFormatConverterFinishListener finishListener) {
         this.FinishListener = finishListener;
+    }
+
+    public long TrueMediaDuration() {
+        return decoder.TrueMediaDuration();
     }
 
     private void LogPercentage(CodecManagerResult codecResult, String Type) {
@@ -50,6 +67,7 @@ public class MediaFormatConverter {
     public void start() throws InterruptedException {
         AtomicInteger Outputs = new AtomicInteger();
         AtomicInteger inputs = new AtomicInteger();
+
         decoder.addOnDecodeListener(decoderResult -> {
             inputs.getAndIncrement();
             LogPercentage(decoderResult, "Decoder " + inputs.get());
@@ -57,19 +75,17 @@ public class MediaFormatConverter {
                 byteBuffer.put(decoderResult.Sample);
                 if (decoderResult.IsLastSample)
                     decoderResult.bufferInfo.flags = MediaCodec.BUFFER_FLAG_END_OF_STREAM;
-                encoder.putInput(new CodecManagerRequest(bufferId, decoderResult.bufferInfo));
+                encoder.processInput(new CodecManagerRequest(bufferId, decoderResult.bufferInfo));
             });
         });
 
+
         encoder.addOnOutputListener(encoderResult -> {
-            Outputs.getAndIncrement();
-            LogPercentage(encoderResult, "Encoder " + Outputs.get());
-            mediaFormatConverterListener.onConvert(new CodecManagerResult(
-                    encoderResult.OutputBuffer,
-                    encoderResult.bufferInfo));
+            ConverterListener.onConvert(encoderResult);
             if (encoderResult.bufferInfo.flags == MediaCodec.BUFFER_FLAG_END_OF_STREAM)
                 FinishListener.OnFinish();
         });
+
         decoder.setNewSampleSize(encoder.getInputBufferLimit());
         decoder.startDecoding();
     }

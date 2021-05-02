@@ -27,7 +27,7 @@ import static com.example.spectrumaudiofrequency.util.Files.getUriFromResourceId
 @RunWith(AndroidJUnit4.class)
 public class EncoderCodecManagerTest {
     private final EncoderCodecManager Encoder;
-    private static final int TEST_RAW_ID = R.raw.stardew_valley_ost_sam_s_band_bluegrass;
+    private static final int TEST_RAW_ID = R.raw.stardew_valley;
 
     public EncoderCodecManagerTest() throws IOException {
         Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();
@@ -67,7 +67,7 @@ public class EncoderCodecManagerTest {
                 inputBuffer.clear();
                 inputBuffer.put(inputData);
                 bufferInfo.size = inputData.length;
-                Encoder.putInput(new CodecManager.CodecManagerRequest(bufferId,bufferInfo));
+                Encoder.processInput(new CodecManager.CodecManagerRequest(bufferId,bufferInfo));
             });
 
             Encoder.addOnOutputListener(encoderResult -> {

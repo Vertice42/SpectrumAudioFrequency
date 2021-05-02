@@ -86,7 +86,8 @@ public class DecoderManagerWithSaveDataTest {
                         " BytesSamplesChannels.length = " +
                         decoderResult.Sample.length);
 
-                TestsResults[SampleId] = new TestResult(IsError, Message);
+                TestsResults[SampleId] = new TestResult(IsError,
+                        decoderResult.bufferInfo.presentationTimeUs, Message);
 
                 if (AllNotNull(TestsResults)) signal.countDown();
                 TimeOutPass = true;
