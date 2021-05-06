@@ -23,7 +23,7 @@ import static com.example.spectrumaudiofrequency.util.Files.getUriFromResourceId
 
 @RunWith(AndroidJUnit4.class)
 public class MediaMuxerTest {
-    public static final int AudioId = R.raw.hollow;
+    public static final int AudioId = R.raw.simcity1;
 
     @Test
     public void MainTest() throws IOException, InterruptedException {
@@ -59,11 +59,11 @@ public class MediaMuxerTest {
                 MediaMuxerManager.prepare(cutoffs, outputFormat);
                 MediaMuxerManager.putExtractorData();
             }
+
             Log.i("ConverterProgress", (double)
                     ConverterResult.bufferInfo.presentationTimeUs
-                    / FormatConverter.TrueMediaDuration()*100 + "%");
-            MediaMuxerManager.writeSampleData(ConverterResult.bufferInfo,
-                    ConverterResult.OutputBuffer);
+                    / FormatConverter.TrueMediaDuration() * 100 + "%");
+            MediaMuxerManager.writeSampleData(ConverterResult.bufferInfo, ConverterResult.bytes);
         });
         FormatConverter.setFinishListener(() -> {
             signal.countDown();

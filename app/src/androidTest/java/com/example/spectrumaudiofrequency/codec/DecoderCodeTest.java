@@ -17,20 +17,17 @@ import java.util.ArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ForkJoinPool;
 
-import static org.junit.Assert.fail;
-
 @RunWith(AndroidJUnit4.class)
 public class DecoderCodeTest {
     private final ForkJoinPool forkJoinPool;
     private final DecoderManager decoderManager;
-    private static final long MAX_TIME_OUT = 500;
+    private static final long MAX_TIME_OUT = 50000;
 
     public DecoderCodeTest() {
         Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();
 
         int id = R.raw.choose;
         decoderManager = new DecoderManager(context, id);
-
         forkJoinPool = ForkJoinPool.commonPool();
     }
 
@@ -83,8 +80,8 @@ public class DecoderCodeTest {
             testResults.add(new TestResult(IsError, presentationTimeUs, message));
         });
 
-        decoderManager.addOnEndListener(() -> {
-            Log.i("OnEndListener", "END");
+        decoderManager.addOnFinishListener(() -> {
+            Log.i("OnFinishListener", "END");
             countDownLatch.countDown();
         });
 

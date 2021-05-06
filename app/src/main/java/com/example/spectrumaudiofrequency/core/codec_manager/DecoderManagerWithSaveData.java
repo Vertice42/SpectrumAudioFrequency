@@ -63,10 +63,8 @@ public class DecoderManagerWithSaveData extends DecoderManager {
             dbOfDecoder.addSamplePiece(decoderResult.SampleId, decoderResult.Sample);
             KeepPromises(decoderResult);
         });
-        addOnEndListener(() -> {
-            dbOfDecoder.setDecoded(new MediaSpecs(MediaName, TrueMediaDuration(),
-                    NewSampleDuration));
-        });
+        addOnFinishListener(() -> dbOfDecoder.setDecoded(
+                new MediaSpecs(MediaName, TrueMediaDuration(), NewSampleDuration)));
     }
 
     public void addRequest(PeriodRequest periodRequest) {
@@ -76,10 +74,8 @@ public class DecoderManagerWithSaveData extends DecoderManager {
             bufferInfo.set(0, dbSampleBytes.length,
                     (long) (periodRequest.RequiredSampleId * NewSampleDuration),
                     BUFFER_FLAG_KEY_FRAME);
-            periodRequest.DecoderListener.OnProceed(new DecoderResult(
-                    (periodRequest.RequiredSampleId == dbOfDecoder.getSamplesLength() - 1),
-                    periodRequest.RequiredSampleId,
-                    dbSampleBytes, bufferInfo));
+            periodRequest.DecoderListener.OnProceed(
+                    new DecoderResult(periodRequest.RequiredSampleId, dbSampleBytes, bufferInfo));
         } else if (DecodingFinish) {
             periodRequest.DecoderListener.OnProceed(new DecoderResult());
         } else RequestsPromises.add(periodRequest);

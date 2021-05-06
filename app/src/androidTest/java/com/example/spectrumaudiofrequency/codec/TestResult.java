@@ -7,7 +7,7 @@ class TestResult {
     long SampleTime;
     String Message;
 
-    public TestResult(boolean isError,long sampleTime, String message) {
+    public TestResult(boolean isError, long sampleTime, String message) {
         IsError = isError;
         SampleTime = sampleTime;
         Message = message;
@@ -15,6 +15,6 @@ class TestResult {
 
     @Override
     public @NotNull String toString() {
-        return (IsError) ? "ERROR " : "" + Message;
+        return (IsError) ? "ERROR " + Message : Message;
     }
 }

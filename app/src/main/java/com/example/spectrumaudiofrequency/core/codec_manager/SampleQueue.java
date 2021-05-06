@@ -1,13 +1,14 @@
 package com.example.spectrumaudiofrequency.core.codec_manager;
 
-import android.media.MediaCodec;
 import android.os.Build;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.RequiresApi;
 
-import com.example.spectrumaudiofrequency.core.codec_manager.MediaFormatConverter.CodecSample;
+import com.example.spectrumaudiofrequency.core.codec_manager.CodecManager.CodecSample;
+
+import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -58,25 +59,21 @@ class SampleQueue implements Queue<CodecSample> {
     @NonNull
     @Override
     public CodecSample[] toArray() {
-        return (MediaFormatConverter.CodecSample[]) codecSampleArrayList.toArray();
+        return (CodecSample[]) codecSampleArrayList.toArray();
     }
 
     @NonNull
     @Override
-    public MediaFormatConverter.CodecSample[] toArray(@NonNull Object[] a) {
-        return (MediaFormatConverter.CodecSample[]) codecSampleArrayList.toArray(a);
-    }
-
-    boolean isBigger(MediaCodec.BufferInfo a, MediaCodec.BufferInfo b) {
-        if (a.presentationTimeUs > b.presentationTimeUs) return true;
-        else return a.presentationTimeUs == b.presentationTimeUs && a.size < b.size;
+    public CodecSample[] toArray(@NonNull Object[] a) {
+        return (CodecSample[]) codecSampleArrayList.toArray(a);
     }
 
     @Override
     public boolean add(CodecSample codecSample) {
         int index = 0;
         while (index < codecSampleArrayList.size()) {
-            if (isBigger(codecSample.bufferInfo, codecSampleArrayList.get(index).bufferInfo)) {
+            if (codecSample.bufferInfo.presentationTimeUs >
+                    codecSampleArrayList.get(index).bufferInfo.presentationTimeUs) {
                 index++;
             } else break;
         }
@@ -84,9 +81,9 @@ class SampleQueue implements Queue<CodecSample> {
         return true;
     }
 
-    public boolean add(MediaFormatConverter.CodecSample[] codecSamples) {
+    public boolean add(CodecSample[] codecSamples) {
         boolean add = false;
-        for (MediaFormatConverter.CodecSample codecSample : codecSamples)
+        for (CodecSample codecSample : codecSamples)
             add = codecSampleArrayList.add(codecSample);
         return add;
     }
@@ -123,7 +120,7 @@ class SampleQueue implements Queue<CodecSample> {
 
     @Override
     public boolean offer(CodecSample o) {
-        return codecSampleArrayList.add((MediaFormatConverter.CodecSample) o);
+        return codecSampleArrayList.add((CodecSample) o);
     }
 
     @Override
@@ -134,31 +131,31 @@ class SampleQueue implements Queue<CodecSample> {
     @Nullable
     @Override
     public CodecSample poll() {
-        MediaFormatConverter.CodecSample CodecSample = codecSampleArrayList.get(codecSampleArrayList.size() - 1);
+        CodecSample CodecSample = codecSampleArrayList.get(codecSampleArrayList.size() - 1);
         codecSampleArrayList.remove(CodecSample);
         return CodecSample;
     }
 
     @Override
-    public MediaFormatConverter.CodecSample element() {
+    public CodecSample element() {
         return codecSampleArrayList.get(0);
     }
 
-    public MediaFormatConverter.CodecSample get(int index) {
+    public CodecSample get(int index) {
         return codecSampleArrayList.get(index);
     }
 
     @Nullable
     @Override
-    public MediaFormatConverter.CodecSample peek() {
+    public CodecSample peek() {
         CodecSample codecSample = codecSampleArrayList.get(0);
         codecSampleArrayList.remove(codecSample);
         return codecSample;
     }
 
-    public MediaFormatConverter.CodecSample[] peekList(int length) {
+    public CodecSample[] peekList(int length) {
         if (length > this.size()) length = this.size();
-        CodecSample[] codecSample = new MediaFormatConverter.CodecSample[length];
+        CodecSample[] codecSample = new CodecSample[length];
 
         for (int i = 0; i < length; i++) {
             CodecSample peek = peek();
@@ -167,4 +164,8 @@ class SampleQueue implements Queue<CodecSample> {
         return codecSample;
     }
 
+    @Override
+    public @NotNull String toString() {
+        return codecSampleArrayList.toString();
+    }
 }
