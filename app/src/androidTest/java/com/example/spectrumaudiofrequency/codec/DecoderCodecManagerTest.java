@@ -8,6 +8,7 @@ import androidx.test.platform.app.InstrumentationRegistry;
 
 import com.example.spectrumaudiofrequency.R;
 import com.example.spectrumaudiofrequency.core.codec_manager.DecoderManager;
+import com.example.spectrumaudiofrequency.util.CalculatePerformance;
 
 import org.junit.Assert;
 import org.junit.Test;
@@ -18,20 +19,22 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ForkJoinPool;
 
 @RunWith(AndroidJUnit4.class)
-public class DecoderCodeTest {
-    private final ForkJoinPool forkJoinPool;
-    private final DecoderManager decoderManager;
+public class DecoderCodecManagerTest {
     private static final long MAX_TIME_OUT = 50000;
+    private final ForkJoinPool forkJoinPool;
+    private final DecoderManager decoder;
+    private boolean TimeOutPass = false;
 
-    public DecoderCodeTest() {
+    public DecoderCodecManagerTest() {
         Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();
 
         int id = R.raw.choose;
-        decoderManager = new DecoderManager(context, id);
+        decoder = new DecoderManager(context, id);
         forkJoinPool = ForkJoinPool.commonPool();
-    }
 
-    private boolean TimeOutPass = false;
+        System.out.println("LUL");
+
+    }
 
     void CountTimeout(CountDownLatch countDownLatch) {
         forkJoinPool.execute(() -> {
@@ -41,7 +44,7 @@ public class DecoderCodeTest {
                 e.printStackTrace();
             }
             if (TimeOutPass) CountTimeout(countDownLatch);
-            //else countDownLatch.countDown();
+            else countDownLatch.countDown();
             TimeOutPass = false;
         });
     }
@@ -60,14 +63,20 @@ public class DecoderCodeTest {
         ArrayList<TestResult> testResults = new ArrayList<>();
         CountDownLatch countDownLatch = new CountDownLatch(1);
 
-        decoderManager.addOnDecodeListener(decoderResult -> {
+        android.util.Log.d("Wat", "TATA");
+
+        Assert.assertFalse(decoder.IsStarted());
+
+        decoder.addOnDecodeListener(decoderResult -> {
             long presentationTimeUs = decoderResult.bufferInfo.presentationTimeUs;
-            double progress = ((double) presentationTimeUs /
-                    decoderManager.TrueMediaDuration()) * 100;
-            Log.i("DecoderProgress", progress + "%");
+
+            CalculatePerformance.LogPercentage("DecoderProgress",
+                    presentationTimeUs,
+                    decoder.TrueMediaDuration());
+
             boolean IsError = false;
             String message = "";
-            if (decoderResult.Sample.length == 0) {
+            if (decoderResult.bytes.length == 0) {
                 IsError = true;
                 message += " Sample length Error == 0";
             }
@@ -80,14 +89,14 @@ public class DecoderCodeTest {
             testResults.add(new TestResult(IsError, presentationTimeUs, message));
         });
 
-        decoderManager.addOnFinishListener(() -> {
+        decoder.addOnFinishListener(() -> {
             Log.i("OnFinishListener", "END");
             countDownLatch.countDown();
         });
 
         CountTimeout(countDownLatch);
-        decoderManager.setNewSampleDuration(25000);
-        decoderManager.startDecoding();
+        decoder.setNewSampleDuration(25000);
+        decoder.startDecoding();
 
         countDownLatch.await();
         Assert.assertTrue(testResults.size() > 0);
@@ -98,5 +107,13 @@ public class DecoderCodeTest {
                 Assert.assertFalse(testResult.IsError);
             }
         }
+    }
+
+    public void removeOutputListener() {
+        DecoderManager.OnDecodedListener onDecodedListener = codecSample ->
+                Log.e("removeOutputListenerError", "lambda should not be called: ");
+        decoder.addOnDecodeListener(onDecodedListener);
+        decoder.removeOnDecodeListener(onDecodedListener);
+        Assert.assertEquals(0, decoder.getDecodeListenersListSize());
     }
 }

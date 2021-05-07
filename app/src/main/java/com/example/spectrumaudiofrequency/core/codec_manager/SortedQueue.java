@@ -6,8 +6,6 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.RequiresApi;
 
-import com.example.spectrumaudiofrequency.core.codec_manager.CodecManager.CodecSample;
-
 import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
@@ -17,10 +15,14 @@ import java.util.Objects;
 import java.util.Queue;
 import java.util.function.Consumer;
 
-class SampleQueue implements Queue<CodecSample> {
-    private final ArrayList<CodecSample> codecSampleArrayList;
+interface QueueElement {
+    public long getIndex();
+}
 
-    public SampleQueue() {
+class SortedQueue implements Queue<QueueElement> {
+    private final ArrayList<QueueElement> codecSampleArrayList;
+
+    public SortedQueue() {
         codecSampleArrayList = new ArrayList<>();
     }
 
@@ -44,47 +46,43 @@ class SampleQueue implements Queue<CodecSample> {
 
     @NonNull
     @Override
-    public Iterator iterator() {
+    public Iterator<QueueElement> iterator() {
         return codecSampleArrayList.iterator();
     }
 
     @RequiresApi(api = Build.VERSION_CODES.N)
     @Override
-    public void forEach(@NonNull Consumer action) {
-        for (int i = 0; i < codecSampleArrayList.size(); i++) {
-            action.accept(codecSampleArrayList.get(i));
-        }
+    public void forEach(@NonNull Consumer consumer) {
+        for (int i = 0; i < codecSampleArrayList.size(); i++)
+            consumer.accept(codecSampleArrayList.get(i));
     }
 
     @NonNull
     @Override
-    public CodecSample[] toArray() {
-        return (CodecSample[]) codecSampleArrayList.toArray();
-    }
-
-    @NonNull
-    @Override
-    public CodecSample[] toArray(@NonNull Object[] a) {
-        return (CodecSample[]) codecSampleArrayList.toArray(a);
+    public QueueElement[] toArray() {
+        return (QueueElement[]) codecSampleArrayList.toArray();
     }
 
     @Override
-    public boolean add(CodecSample codecSample) {
-        int index = 0;
-        while (index < codecSampleArrayList.size()) {
-            if (codecSample.bufferInfo.presentationTimeUs >
-                    codecSampleArrayList.get(index).bufferInfo.presentationTimeUs) {
-                index++;
-            } else break;
+    public QueueElement[] toArray(@NonNull Object[] a) {
+        return (QueueElement[]) codecSampleArrayList.toArray(a);
+    }
+
+    @Override
+    public boolean add(QueueElement queueElement) {
+        int i = 0;
+        while (i < codecSampleArrayList.size()) {
+            if (queueElement.getIndex() > codecSampleArrayList.get(i).getIndex()) i++;
+            else break;
         }
-        codecSampleArrayList.add(index, codecSample);
+        codecSampleArrayList.add(i, (QueueElement) queueElement);
         return true;
     }
 
-    public boolean add(CodecSample[] codecSamples) {
+    public boolean add(Object[] codecSamples) {
         boolean add = false;
-        for (CodecSample codecSample : codecSamples)
-            add = codecSampleArrayList.add(codecSample);
+        for (Object codecSample : codecSamples)
+            add = codecSampleArrayList.add((QueueElement) codecSample);
         return add;
     }
 
@@ -119,46 +117,46 @@ class SampleQueue implements Queue<CodecSample> {
     }
 
     @Override
-    public boolean offer(CodecSample o) {
-        return codecSampleArrayList.add((CodecSample) o);
+    public boolean offer(QueueElement o) {
+        return codecSampleArrayList.add((QueueElement) o);
     }
 
     @Override
-    public CodecSample remove() {
+    public QueueElement remove() {
         return codecSampleArrayList.remove(0);
     }
 
     @Nullable
     @Override
-    public CodecSample poll() {
-        CodecSample CodecSample = codecSampleArrayList.get(codecSampleArrayList.size() - 1);
-        codecSampleArrayList.remove(CodecSample);
-        return CodecSample;
+    public QueueElement poll() {
+        QueueElement QueueElement = codecSampleArrayList.get(codecSampleArrayList.size() - 1);
+        codecSampleArrayList.remove(QueueElement);
+        return QueueElement;
     }
 
     @Override
-    public CodecSample element() {
+    public QueueElement element() {
         return codecSampleArrayList.get(0);
     }
 
-    public CodecSample get(int index) {
+    public QueueElement get(int index) {
         return codecSampleArrayList.get(index);
     }
 
     @Nullable
     @Override
-    public CodecSample peek() {
-        CodecSample codecSample = codecSampleArrayList.get(0);
+    public QueueElement peek() {
+        QueueElement codecSample = codecSampleArrayList.get(0);
         codecSampleArrayList.remove(codecSample);
         return codecSample;
     }
 
-    public CodecSample[] peekList(int length) {
+    public QueueElement[] peekList(int length) {
         if (length > this.size()) length = this.size();
-        CodecSample[] codecSample = new CodecSample[length];
+        QueueElement[] codecSample = new QueueElement[length];
 
         for (int i = 0; i < length; i++) {
-            CodecSample peek = peek();
+            QueueElement peek = peek();
             if (peek != null) codecSample[i] = peek;
         }
         return codecSample;

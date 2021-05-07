@@ -1,22 +1,9 @@
 package com.example.spectrumaudiofrequency.util;
 
-import android.content.Context;
-import android.content.ContextWrapper;
-import android.net.Uri;
 import android.os.Build;
-import android.util.Log;
 
-import org.jetbrains.annotations.NotNull;
-
-import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileFilter;
-import java.io.FileNotFoundException;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.InputStreamReader;
-import java.io.OutputStreamWriter;
 import java.util.regex.Pattern;
 
 public class CPU {
@@ -51,5 +38,4 @@ public class CPU {
             return getNumCoresOldPhones();
         }
     }
-
 }

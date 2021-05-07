@@ -4,6 +4,8 @@ import android.util.Log;
 
 import org.jetbrains.annotations.NotNull;
 
+import java.text.DecimalFormat;
+
 public class CalculatePerformance {
     public static class Performance {
         String Name;
@@ -84,5 +86,11 @@ public class CalculatePerformance {
         long Media = ProcessingTimeSome / count;
 
         return new Performance(Name, ProcessingTime, Media);
+    }
+
+    public static void LogPercentage(String text, long now, long total) {
+        float percentage = Math.CalculatePercentage(now, total);
+        String percentage_formatted = new DecimalFormat("0.00").format(percentage);
+        Log.d(text, percentage_formatted + "%");
     }
 }

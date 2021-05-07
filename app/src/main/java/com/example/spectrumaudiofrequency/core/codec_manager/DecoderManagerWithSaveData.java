@@ -60,7 +60,7 @@ public class DecoderManagerWithSaveData extends DecoderManager {
         }
 
         addOnDecodeListener(decoderResult -> {
-            dbOfDecoder.addSamplePiece(decoderResult.SampleId, decoderResult.Sample);
+            dbOfDecoder.addSamplePiece(decoderResult.SampleId, decoderResult.bytes);
             KeepPromises(decoderResult);
         });
         addOnFinishListener(() -> dbOfDecoder.setDecoded(
@@ -77,7 +77,7 @@ public class DecoderManagerWithSaveData extends DecoderManager {
             periodRequest.DecoderListener.OnProceed(
                     new DecoderResult(periodRequest.RequiredSampleId, dbSampleBytes, bufferInfo));
         } else if (DecodingFinish) {
-            periodRequest.DecoderListener.OnProceed(new DecoderResult());
+            periodRequest.DecoderListener.OnProceed(null);
         } else RequestsPromises.add(periodRequest);
     }
 

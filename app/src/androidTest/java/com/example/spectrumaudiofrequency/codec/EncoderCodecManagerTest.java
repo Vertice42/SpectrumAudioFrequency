@@ -12,6 +12,7 @@ import androidx.test.platform.app.InstrumentationRegistry;
 import com.example.spectrumaudiofrequency.R;
 import com.example.spectrumaudiofrequency.core.codec_manager.CodecManager;
 import com.example.spectrumaudiofrequency.core.codec_manager.EncoderCodecManager;
+import com.example.spectrumaudiofrequency.util.CalculatePerformance;
 
 import org.junit.Assert;
 import org.junit.Test;
@@ -25,8 +26,8 @@ import static com.example.spectrumaudiofrequency.util.Files.getUriFromResourceId
 
 @RunWith(AndroidJUnit4.class)
 public class EncoderCodecManagerTest {
-    private final EncoderCodecManager Encoder;
     private static final int TEST_RAW_ID = R.raw.stardew_valley;
+    private final EncoderCodecManager Encoder;
 
     public EncoderCodecManagerTest() throws IOException {
         Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();
@@ -65,10 +66,12 @@ public class EncoderCodecManagerTest {
         for (int i = 0; i < inputData.length; i++) inputData[i] = (byte) (i + i / 2);
 
         int Samples = 100;
-
+        int SampleDuration = 25000;
         Encoder.addOutputListener(codecSample -> {
 
-            Log.i("OutputListener", "" + codecSample.bufferInfo.presentationTimeUs);
+            CalculatePerformance.LogPercentage("EncoderProgress",
+                    codecSample.bufferInfo.presentationTimeUs,
+                    Samples * SampleDuration);
 
             boolean IsError = false;
             String message = "";
@@ -86,18 +89,26 @@ public class EncoderCodecManagerTest {
         });
 
         for (int i = 0; i < Samples - 1; i++) {
-            int finalI = i;
-            Encoder.getInputBufferID(Id -> {
+            int Sample = i;
+            Encoder.addInputIdRequest(Id -> {
                 MediaCodec.BufferInfo bufferInfo = new MediaCodec.BufferInfo();
-                Log.i("put", "time: " + finalI * 1000);
-                bufferInfo.set(0, inputData.length, finalI * 1000, MediaCodec.BUFFER_FLAG_KEY_FRAME);
+                bufferInfo.set(0,
+                        inputData.length,
+                        Sample * SampleDuration,
+                        MediaCodec.BUFFER_FLAG_KEY_FRAME);
                 Encoder.putData(Id, bufferInfo, inputData);
             });
         }
-        Encoder.getInputBufferID(Id -> {
+
+        //add final Request with a no complete buffer and a BUFFER_FLAG_END_OF_STREAM flag
+        Encoder.addInputIdRequest(Id -> {
+
             byte[] lastInputData = new byte[inputData.length / 2];
             MediaCodec.BufferInfo bufferInfo = new MediaCodec.BufferInfo();
-            bufferInfo.set(0, lastInputData.length, Samples * 1000, MediaCodec.BUFFER_FLAG_END_OF_STREAM);
+            bufferInfo.set(0,
+                    lastInputData.length,
+                    Samples * SampleDuration,
+                    MediaCodec.BUFFER_FLAG_END_OF_STREAM);
             Encoder.putData(Id, bufferInfo, lastInputData);
         });
         Encoder.stop();
@@ -119,5 +130,26 @@ public class EncoderCodecManagerTest {
         }
 
         Assert.assertEquals(testResults.size(), Samples);
+    }
+
+    @Test
+    public void removeListenersTests() {
+        CodecManager.CodecFinishListener codecFinishListener = () ->
+                Log.e("removeListenerErro", "lambda should not be called: ");
+        Encoder.addOnFinishListener(codecFinishListener);
+        Encoder.removeOnFinishListener(codecFinishListener);
+        Assert.assertEquals(0, Encoder.getFinishListenerSize());
+
+        CodecManager.OnReadyListener onReadyListener = (SampleDuration, SampleSize) ->
+                Log.e("removeOnReadyListenerError", "lambda should not be called: ");
+        Encoder.addOnReadyListener(onReadyListener);
+        Encoder.removeOnReadyListener(onReadyListener);
+        Assert.assertEquals(0, Encoder.getReadyListenersSize());
+
+        CodecManager.ResultPromiseListener resultPromiseListener = codecSample ->
+                Log.e("removeOutputListenerError", "lambda should not be called: ");
+        Encoder.addOutputListener(resultPromiseListener);
+        Encoder.removeOutputListener(resultPromiseListener);
+        Assert.assertEquals(0, Encoder.getEncoderPromisesSize());
     }
 }

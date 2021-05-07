@@ -54,7 +54,7 @@ public class DecoderManagerWithSaveDataTest {
     }
 
     @Test
-    public void addRequest() throws InterruptedException {
+    public void addRequests() throws InterruptedException {
         final CountDownLatch signal = new CountDownLatch(1);
         decoderCodecWithCacheManager.setNewSampleDuration(25000);
         decoderCodecWithCacheManager.startDecoding();
@@ -70,7 +70,7 @@ public class DecoderManagerWithSaveDataTest {
                 boolean IsError = false;
                 String Message = "{" + SampleId;
                 if (!decoderResult.SampleTimeNotExist()) {
-                    if (decoderResult.Sample.length <= 0) {
+                    if (decoderResult.bytes.length <= 0) {
                         Message += "size 0";
                         IsError = true;
                     }
@@ -84,7 +84,7 @@ public class DecoderManagerWithSaveDataTest {
                         decoderResult.bufferInfo.presentationTimeUs +
                         " RequestTime: " + SampleId +
                         " BytesSamplesChannels.length = " +
-                        decoderResult.Sample.length);
+                        decoderResult.bytes.length);
 
                 TestsResults[SampleId] = new TestResult(IsError,
                         decoderResult.bufferInfo.presentationTimeUs, Message);

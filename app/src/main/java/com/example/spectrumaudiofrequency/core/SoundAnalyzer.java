@@ -3,8 +3,8 @@ package com.example.spectrumaudiofrequency.core;
 import android.os.Build;
 import android.util.Log;
 
-import com.example.spectrumaudiofrequency.core.SoundAnalyzer.AudioPeakAnalyzer.Peak;
 import com.example.spectrumaudiofrequency.core.MediaMuxerManager.Cutoff;
+import com.example.spectrumaudiofrequency.core.SoundAnalyzer.AudioPeakAnalyzer.Peak;
 import com.example.spectrumaudiofrequency.core.codec_manager.DecoderManager;
 import com.example.spectrumaudiofrequency.core.codec_manager.DecoderManagerWithSaveData;
 
@@ -20,7 +20,7 @@ public class SoundAnalyzer {
     private final DecoderManagerWithSaveData DecoderCodecWithCacheManager;
 
     private SoundAnalyzerProgressListener progressListener;
-    private DecoderManager.DecoderProcessListener decoderProcessListener;
+    private DecoderManager.OnDecodedListener onDecodedListener;
 
     private int Time;
     private int iterations;
@@ -140,7 +140,7 @@ public class SoundAnalyzer {
         this.iterationsMax = (int) (1000 / DecoderCodecWithCacheManager.MediaDuration) + 1;
         this.Time = 0;
         AudioPeakAnalyzer audioPeakAnalyzer = new AudioPeakAnalyzer(this.SpikesCollectionSize, DecoderCodecWithCacheManager.MediaDuration);
-        this.decoderProcessListener = decoderResult -> {
+        this.onDecodedListener = decoderResult -> {
 
             if (Time != decoderResult.bufferInfo.presentationTimeUs)
                 Log.e("Time is !==", Time + "!=" + decoderResult.bufferInfo.presentationTimeUs);
@@ -155,7 +155,7 @@ public class SoundAnalyzer {
                 soundAnalyzerListener.OnFinishedAnalysis(audioPeakAnalyzer.peaks);
             } else {
                 DecoderCodecWithCacheManager.addRequest(new DecoderManagerWithSaveData.PeriodRequest
-                        (Time, decoderProcessListener));
+                        (Time, onDecodedListener));
 
                 iterations++;
                 if (iterations > iterationsMax) {
@@ -168,6 +168,6 @@ public class SoundAnalyzer {
             }
         };
 
-        DecoderCodecWithCacheManager.addRequest(new DecoderManagerWithSaveData.PeriodRequest(Time, decoderProcessListener));
+        DecoderCodecWithCacheManager.addRequest(new DecoderManagerWithSaveData.PeriodRequest(Time, onDecodedListener));
     }
 }

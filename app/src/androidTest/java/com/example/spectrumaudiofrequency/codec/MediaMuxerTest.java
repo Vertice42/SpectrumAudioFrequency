@@ -26,7 +26,7 @@ public class MediaMuxerTest {
     public static final int AudioId = R.raw.simcity1;
 
     @Test
-    public void MainTest() throws IOException, InterruptedException {
+    public void Mux() throws IOException, InterruptedException {
         Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();
         MediaMuxerManager MediaMuxerManager = new MediaMuxerManager(context,
                 getUriFromResourceId(context, R.raw.video_input3));
