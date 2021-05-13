@@ -4,14 +4,15 @@ import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
 
-public class Rearrange {
+public class SamplingResize {
 
     /**
      * Decrease the Sample by averaging the values.
      * If the new length is greater than or equal to the old one,
      * returns the sample without modification.
      */
-    public static short[] SimplifySinusoid(short @NotNull [] Sample, int NewLength) {
+
+    private static short[] resizeBilinear(short @NotNull [] Sample, int NewLength) {
         if (NewLength >= Sample.length) return Sample;
 
         short[] result = new short[NewLength];
@@ -27,56 +28,53 @@ public class Rearrange {
         return result;
     }
 
-    public static float[] SimplifySinusoid(float @NotNull [] Sample, int NewLength) {
+    private static short[] resizeNotBilinear(short @NotNull [] Sample, int NewLength) {
         if (NewLength >= Sample.length) return Sample;
 
-        float[] result = new float[NewLength];
-        int simplificationLength = Sample.length / NewLength;
+        short[] result = new short[NewLength];
 
         for (int i = 0; i < result.length; i++) {
-            float media = 0;
-
-            for (int j = 0; j < simplificationLength; j++)
-                media += Sample[i * simplificationLength + j];
-
-            media /= simplificationLength;
-
-            result[i] = media;
+            result[i] = (short) ((Sample[i] * NewLength / (double) Sample.length) + Sample[i + 1] * (Sample.length % NewLength) / (double) Sample.length);
         }
         return result;
     }
 
-    public static class SuperSimplifySinusoid {
-        ArrayList<ArrayList<Short>> SinusoidChannelSimplify = new ArrayList<>();
-        private final int NewSampleLength;
+    public static short[] ResizeSampling(short @NotNull [] Sample, int NewLength) {
+        if (Sample.length % NewLength == 0) return resizeBilinear(Sample, NewLength);
+        return resizeNotBilinear(Sample, NewLength);
+    }
 
-        public SuperSimplifySinusoid(int NewSampleLength) {
+    public static class SuperResize {
+        private final int NewSampleLength;
+        ArrayList<ArrayList<Short>> SinusoidChannels = new ArrayList<>();
+
+        public SuperResize(int NewSampleLength) {
             this.NewSampleLength = NewSampleLength;
         }
 
-        public short[][] getSinusoidChannelSimplify() {
-            short[][] SinusoidChannels = new short[SinusoidChannelSimplify.size()][];
+        public short[][] getSinusoidChannels() {
+            short[][] SinusoidChannels = new short[this.SinusoidChannels.size()][];
 
             for (int i = 0; i < SinusoidChannels.length; i++) {
-                ArrayList<Short> list = SinusoidChannelSimplify.get(i);
+                ArrayList<Short> list = this.SinusoidChannels.get(i);
                 SinusoidChannels[i] = new short[list.size()];
                 for (int j = 0; j < SinusoidChannels[i].length; j++) {
-                    SinusoidChannels[i][j] = SinusoidChannelSimplify.get(i).get(j);
+                    SinusoidChannels[i][j] = this.SinusoidChannels.get(i).get(j);
                 }
             }
             return SinusoidChannels;
         }
 
-        public void Simplify(short[][] SampleChannels) {
+        public void resize(short[][] SampleChannels) {
             for (int channel = 0; channel < SampleChannels.length; channel++) {
-                SinusoidChannelSimplify.add(new ArrayList<>());
+                SinusoidChannels.add(new ArrayList<>());
                 int simplificationLength = SampleChannels[channel].length / NewSampleLength;
                 short media = 0;
                 for (int i = 0; i < NewSampleLength; i++) {
                     for (int j = 0; j < simplificationLength; j++)
                         media += SampleChannels[channel][i * simplificationLength + j];
                     media /= simplificationLength;
-                    SinusoidChannelSimplify.get(channel).add(media);
+                    SinusoidChannels.get(channel).add(media);
                 }
             }
         }

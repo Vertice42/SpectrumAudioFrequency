@@ -6,62 +6,15 @@ import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteOpenHelper;
 
+import org.jetbrains.annotations.NotNull;
+
 
 public class dbDecoderManager extends SQLiteOpenHelper {
-    private static class DecodedMedias {
-        private static final String ID = "ID";
-        private static final String TABLE_NAME = "DECODED_MEDIAS";
-        private static final String MEDIA_NAME = "MEDIA_NAME";
-        private static final String SAMPLE_PEACE_DURATION = "SAMPLE_PEACE_DURATION";
-        private static final String TRUE_MEDIA_DURATION = "TRUE_MEDIA_DURATION";
-        private static final String IS_COMPLETE = "IS_COMPLETE";
-
-        private static final String SQL_CREATE_ENTRIES =
-                "CREATE TABLE " + TABLE_NAME + " (" +
-                        ID + " INTEGER PRIMARY KEY AUTOINCREMENT, " +
-                        MEDIA_NAME + " TEXT NOT NULL, " +
-                        SAMPLE_PEACE_DURATION + " REAL ," +
-                        TRUE_MEDIA_DURATION + " BIGINT ," +
-                        IS_COMPLETE + " INTEGER DEFAULT 0);";
-
-        private static final String SQL_DELETE_ENTRIES =
-                "DROP TABLE IF EXISTS " + TABLE_NAME;
-    }
-
-    private static class SamplesTable {
-        private static final String SAMPLE_PIECE = "SAMPLE_PIECE";
-        private static final String SAMPLE_DATA = "SAMPLE_DATA";
-
-        static String getCreateEntries(String MediaName) {
-            return "CREATE TABLE " + MediaName + " (" +
-                    SAMPLE_PIECE + " INTERGER PRIMARY KEY," +
-                    SAMPLE_DATA + " BLOB )";
-        }
-
-        static String getDeleteEntries(String MediaName) {
-            return "DROP TABLE IF EXISTS " + MediaName;
-        }
-    }
-
-    public static class MediaSpecs {
-        public String MediaName;
-        public long TrueMediaDuration;
-        public double SampleDuration;
-
-        public MediaSpecs(String mediaName, long trueMediaDuration, double sampleDuration) {
-            MediaName = mediaName;
-            TrueMediaDuration = trueMediaDuration;
-            SampleDuration = sampleDuration;
-        }
-    }
-
-    public static final int DATABASE_VERSION = 1;
+    public static final int DATABASE_VERSION = 2;
     public static final String DATABASE_NAME = "FeedReader.db";
-
     private final String MediaName;
     private final SQLiteDatabase sqLiteDatabase;
-
-    private int SamplesLength = 0;
+    private int NumberOfSamples = 0;
 
     public dbDecoderManager(Context context, String MediaName) {
         super(context, DATABASE_NAME, null, DATABASE_VERSION);
@@ -76,8 +29,6 @@ public class dbDecoderManager extends SQLiteOpenHelper {
     }
 
     public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {
-        // This database is only a cache for online data, so its upgrade policy is
-        // to simply to discard the data and start over
         db.execSQL(DecodedMedias.SQL_DELETE_ENTRIES);
         onCreate(db);
     }
@@ -121,15 +72,19 @@ public class dbDecoderManager extends SQLiteOpenHelper {
 
         int SampleIdDuration = -1;
         long trueMediaDuration = -1;
+        int SampleSize = -1;
         while (cursor.moveToNext()) {
+            SampleSize = cursor.getInt(cursor.getColumnIndex(
+                    DecodedMedias.SAMPLE_PEACE_SIZE));
             SampleIdDuration = cursor.getInt(cursor.getColumnIndex(
                     DecodedMedias.SAMPLE_PEACE_DURATION));
             trueMediaDuration = cursor.getInt(cursor.getColumnIndex(
                     DecodedMedias.TRUE_MEDIA_DURATION));
+
         }
 
         cursor.close();
-        return new MediaSpecs(MediaName, trueMediaDuration, SampleIdDuration);
+        return new MediaSpecs(MediaName, trueMediaDuration, SampleIdDuration, SampleSize);
     }
 
     private void createMediaDecoded(String MediaName) {
@@ -148,7 +103,9 @@ public class dbDecoderManager extends SQLiteOpenHelper {
         ContentValues values = new ContentValues();
         values.put(DecodedMedias.IS_COMPLETE, true);
         values.put(DecodedMedias.SAMPLE_PEACE_DURATION, mediaSpecs.SampleDuration);
+        values.put(DecodedMedias.SAMPLE_PEACE_SIZE, mediaSpecs.SampleSize);
         values.put(DecodedMedias.TRUE_MEDIA_DURATION, mediaSpecs.TrueMediaDuration);
+
         sqLiteDatabase.update(DecodedMedias.TABLE_NAME, values, selection, selectionArgs);
     }
 
@@ -167,8 +124,8 @@ public class dbDecoderManager extends SQLiteOpenHelper {
         );
     }
 
-    public int getSamplesLength() {
-        if (SamplesLength == 0) {
+    public int getNumberOfSamples() {
+        if (NumberOfSamples == 0) {
             String selection = SamplesTable.SAMPLE_PIECE + " = ?";
             String[] selectionArgs = {""};
 
@@ -181,10 +138,10 @@ public class dbDecoderManager extends SQLiteOpenHelper {
                     null,           // don't filter by row groups
                     null           // The sort order
             );
-            SamplesLength = query.getCount();
+            NumberOfSamples = query.getCount();
             query.close();
         }
-        return SamplesLength;
+        return NumberOfSamples;
     }
 
     public byte[] getSamplePiece(long SamplePiece) {
@@ -233,6 +190,81 @@ public class dbDecoderManager extends SQLiteOpenHelper {
 
     public void close() {
         sqLiteDatabase.close();
+    }
+
+    private static class DecodedMedias {
+        private static final String ID = "ID";
+        private static final String TABLE_NAME = "DECODED_MEDIAS";
+        private static final String MEDIA_NAME = "MEDIA_NAME";
+        private static final String SAMPLE_PEACE_DURATION = "SAMPLE_PEACE_DURATION";
+        private static final String SAMPLE_PEACE_SIZE = "SAMPLE_PEACE_SIZE";
+        private static final String TRUE_MEDIA_DURATION = "TRUE_MEDIA_DURATION";
+        private static final String IS_COMPLETE = "IS_COMPLETE";
+
+        private static final String SQL_CREATE_ENTRIES =
+                "CREATE TABLE " + TABLE_NAME + " (" +
+                        ID + " INTEGER PRIMARY KEY AUTOINCREMENT, " +
+                        MEDIA_NAME + " TEXT NOT NULL, " +
+                        SAMPLE_PEACE_DURATION + " REAL ," +
+                        SAMPLE_PEACE_SIZE + " INTEGER ," +
+                        TRUE_MEDIA_DURATION + " BIGINT ," +
+                        IS_COMPLETE + " INTEGER DEFAULT 0);";
+
+        private static final String SQL_DELETE_ENTRIES =
+                "DROP TABLE IF EXISTS " + TABLE_NAME;
+    }
+
+    private static class SamplesTable {
+        private static final String SAMPLE_PIECE = "SAMPLE_PIECE";
+        private static final String SAMPLE_DATA = "SAMPLE_DATA";
+
+        static String getCreateEntries(String MediaName) {
+            return "CREATE TABLE " + MediaName + " (" +
+                    SAMPLE_PIECE + " INTERGER PRIMARY KEY," +
+                    SAMPLE_DATA + " BLOB )";
+        }
+
+        static String getDeleteEntries(String MediaName) {
+            return "DROP TABLE IF EXISTS " + MediaName;
+        }
+    }
+
+    public static class MediaSpecs {
+        public String MediaName;
+        public long TrueMediaDuration;
+        public double SampleDuration;
+        public int SampleSize;
+
+        public MediaSpecs(String mediaName,
+                          long trueMediaDuration,
+                          double sampleDuration,
+                          int sampleSize) {
+            MediaName = mediaName;
+            TrueMediaDuration = trueMediaDuration;
+            SampleDuration = sampleDuration;
+            SampleSize = sampleSize;
+        }
+
+        @Override
+        public @NotNull String toString() {
+            return "MediaSpecs{" +
+                    "MediaName='" + MediaName + '\'' +
+                    ", TrueMediaDuration=" + TrueMediaDuration +
+                    ", SampleDuration=" + SampleDuration +
+                    ", SampleSize=" + SampleSize +
+                    '}';
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+            MediaSpecs that = (MediaSpecs) o;
+            return TrueMediaDuration == that.TrueMediaDuration &&
+                    Double.compare(that.SampleDuration, SampleDuration) == 0 &&
+                    SampleSize == that.SampleSize &&
+                    MediaName.equals(that.MediaName);
+        }
     }
 
 }

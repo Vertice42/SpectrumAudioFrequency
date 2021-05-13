@@ -18,16 +18,16 @@ import static android.media.MediaCodec.BUFFER_FLAG_KEY_FRAME;
  * The samples are saved in a database.
  */
 @RequiresApi(api = Build.VERSION_CODES.LOLLIPOP)
-public class DecoderManagerWithSaveData extends DecoderManager {
+public class DecoderManagerWithStorage extends DecoderManager {
     private final ArrayList<PeriodRequest> RequestsPromises = new ArrayList<>();
     private dbDecoderManager dbOfDecoder;
 
-    public DecoderManagerWithSaveData(Context context, int ResourceId) {
+    public DecoderManagerWithStorage(Context context, int ResourceId) {
         super(context, ResourceId);
         PrepareDataBase();
     }
 
-    public DecoderManagerWithSaveData(Context context, String AudioPath) {
+    public DecoderManagerWithStorage(Context context, String AudioPath) {
         super(context, AudioPath);
         PrepareDataBase();
     }
@@ -41,7 +41,7 @@ public class DecoderManagerWithSaveData extends DecoderManager {
             if (request.RequiredSampleId == decoderResult.SampleId) {
                 RequestsPromises.remove(request);
                 request.DecoderListener.OnProceed(decoderResult);
-            } else if (request.RequiredSampleId < decoderResult.SampleId || DecodingFinish) {
+            } else if (request.RequiredSampleId < decoderResult.SampleId || IsDecoded) {
                 RequestsPromises.remove(request);
                 addRequest(request);
             } else {
@@ -52,8 +52,8 @@ public class DecoderManagerWithSaveData extends DecoderManager {
 
     private void PrepareDataBase() {
         dbOfDecoder = new dbDecoderManager(context, MediaName);
-        DecodingFinish = dbOfDecoder.MediaIsDecoded(MediaName);
-        if (DecodingFinish) {
+        IsDecoded = dbOfDecoder.MediaIsDecoded(MediaName);
+        if (IsDecoded) {
             MediaSpecs mediaSpecs = dbOfDecoder.getMediaSpecs();
             this.TrueMediaDuration = mediaSpecs.TrueMediaDuration;
             this.NewSampleDuration = (int) mediaSpecs.SampleDuration;
@@ -63,8 +63,26 @@ public class DecoderManagerWithSaveData extends DecoderManager {
             dbOfDecoder.addSamplePiece(decoderResult.SampleId, decoderResult.bytes);
             KeepPromises(decoderResult);
         });
-        addOnFinishListener(() -> dbOfDecoder.setDecoded(
-                new MediaSpecs(MediaName, TrueMediaDuration(), NewSampleDuration)));
+
+        addOnFinishListener(() -> {
+            dbOfDecoder.setDecoded(
+                    new MediaSpecs(MediaName,
+                            getTrueMediaDuration(),
+                            NewSampleDuration,
+                            getNewSampleSize()));
+            KeepPromises(new DecoderResult(getNumberOfSamples(), null, null));
+        });
+    }
+
+
+    @Override
+    public int getNumberOfSamples() {
+        if (IsDecoded) return dbOfDecoder.getNumberOfSamples();
+        else return super.getNumberOfSamples();
+    }
+
+    public int getSampleDuration() {
+        return this.NewSampleDuration;
     }
 
     public void addRequest(PeriodRequest periodRequest) {
@@ -72,12 +90,11 @@ public class DecoderManagerWithSaveData extends DecoderManager {
         if (dbSampleBytes != null) {
             BufferInfo bufferInfo = new BufferInfo();
             bufferInfo.set(0, dbSampleBytes.length,
-                    (long) (periodRequest.RequiredSampleId * NewSampleDuration),
+                    ((long) periodRequest.RequiredSampleId * NewSampleDuration),
                     BUFFER_FLAG_KEY_FRAME);
-            periodRequest.DecoderListener.OnProceed(
-                    new DecoderResult(periodRequest.RequiredSampleId, dbSampleBytes, bufferInfo));
-        } else if (DecodingFinish) {
-            periodRequest.DecoderListener.OnProceed(null);
+            periodRequest.DecoderListener.OnProceed(new DecoderResult(periodRequest.RequiredSampleId, dbSampleBytes, bufferInfo));
+        } else if (IsDecoded) {
+            periodRequest.DecoderListener.OnProceed(new DecoderResult(periodRequest.RequiredSampleId, null, null));
         } else RequestsPromises.add(periodRequest);
     }
 

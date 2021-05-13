@@ -67,7 +67,7 @@ public class EncoderCodecManagerTest {
 
         int Samples = 100;
         int SampleDuration = 25000;
-        Encoder.addOutputListener(codecSample -> {
+        Encoder.addEncoderListener(codecSample -> {
 
             CalculatePerformance.LogPercentage("EncoderProgress",
                     codecSample.bufferInfo.presentationTimeUs,
@@ -89,28 +89,24 @@ public class EncoderCodecManagerTest {
         });
 
         for (int i = 0; i < Samples - 1; i++) {
-            int Sample = i;
-            Encoder.addInputIdRequest(Id -> {
-                MediaCodec.BufferInfo bufferInfo = new MediaCodec.BufferInfo();
-                bufferInfo.set(0,
-                        inputData.length,
-                        Sample * SampleDuration,
-                        MediaCodec.BUFFER_FLAG_KEY_FRAME);
-                Encoder.putData(Id, bufferInfo, inputData);
-            });
+            MediaCodec.BufferInfo bufferInfo = new MediaCodec.BufferInfo();
+            bufferInfo.set(0,
+                    inputData.length,
+                    i * SampleDuration,
+                    MediaCodec.BUFFER_FLAG_KEY_FRAME);
+            Encoder.addPutInputRequest(bufferInfo, inputData);
         }
 
         //add final Request with a no complete buffer and a BUFFER_FLAG_END_OF_STREAM flag
-        Encoder.addInputIdRequest(Id -> {
+        byte[] lastInputData = new byte[inputData.length / 2];
+        MediaCodec.BufferInfo bufferInfo = new MediaCodec.BufferInfo();
+        bufferInfo.set(0,
+                lastInputData.length,
+                Samples * SampleDuration,
+                MediaCodec.BUFFER_FLAG_END_OF_STREAM);
 
-            byte[] lastInputData = new byte[inputData.length / 2];
-            MediaCodec.BufferInfo bufferInfo = new MediaCodec.BufferInfo();
-            bufferInfo.set(0,
-                    lastInputData.length,
-                    Samples * SampleDuration,
-                    MediaCodec.BUFFER_FLAG_END_OF_STREAM);
-            Encoder.putData(Id, bufferInfo, lastInputData);
-        });
+        Encoder.addPutInputRequest(bufferInfo, lastInputData);
+
         Encoder.stop();
 
         Encoder.addOnFinishListener(signal::countDown);
@@ -148,7 +144,7 @@ public class EncoderCodecManagerTest {
 
         CodecManager.ResultPromiseListener resultPromiseListener = codecSample ->
                 Log.e("removeOutputListenerError", "lambda should not be called: ");
-        Encoder.addOutputListener(resultPromiseListener);
+        Encoder.addEncoderListener(resultPromiseListener);
         Encoder.removeOutputListener(resultPromiseListener);
         Assert.assertEquals(0, Encoder.getEncoderPromisesSize());
     }

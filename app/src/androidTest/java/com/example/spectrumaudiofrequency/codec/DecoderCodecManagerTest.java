@@ -15,8 +15,13 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Random;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ForkJoinPool;
+
+import static com.example.spectrumaudiofrequency.core.codec_manager.DecoderManager.DecoderResult.joiningSampleChannels;
+import static com.example.spectrumaudiofrequency.core.codec_manager.DecoderManager.DecoderResult.separateSampleChannels;
 
 @RunWith(AndroidJUnit4.class)
 public class DecoderCodecManagerTest {
@@ -31,9 +36,6 @@ public class DecoderCodecManagerTest {
         int id = R.raw.choose;
         decoder = new DecoderManager(context, id);
         forkJoinPool = ForkJoinPool.commonPool();
-
-        System.out.println("LUL");
-
     }
 
     void CountTimeout(CountDownLatch countDownLatch) {
@@ -44,7 +46,10 @@ public class DecoderCodecManagerTest {
                 e.printStackTrace();
             }
             if (TimeOutPass) CountTimeout(countDownLatch);
-            else countDownLatch.countDown();
+            else {
+                Log.e("countDownLatch", "Time Limit ");
+                countDownLatch.countDown();
+            }
             TimeOutPass = false;
         });
     }
@@ -63,16 +68,12 @@ public class DecoderCodecManagerTest {
         ArrayList<TestResult> testResults = new ArrayList<>();
         CountDownLatch countDownLatch = new CountDownLatch(1);
 
-        android.util.Log.d("Wat", "TATA");
-
-        Assert.assertFalse(decoder.IsStarted());
-
         decoder.addOnDecodeListener(decoderResult -> {
             long presentationTimeUs = decoderResult.bufferInfo.presentationTimeUs;
 
             CalculatePerformance.LogPercentage("DecoderProgress",
                     presentationTimeUs,
-                    decoder.TrueMediaDuration());
+                    decoder.getTrueMediaDuration());
 
             boolean IsError = false;
             String message = "";
@@ -90,7 +91,7 @@ public class DecoderCodecManagerTest {
         });
 
         decoder.addOnFinishListener(() -> {
-            Log.i("OnFinishListener", "END");
+            Log.i("OnFinishListener", "Finish");
             countDownLatch.countDown();
         });
 
@@ -115,5 +116,23 @@ public class DecoderCodecManagerTest {
         decoder.addOnDecodeListener(onDecodedListener);
         decoder.removeOnDecodeListener(onDecodedListener);
         Assert.assertEquals(0, decoder.getDecodeListenersListSize());
+    }
+
+    @Test
+    public void separateAndJoiningSampleChannelsTest() {
+        byte[] original = new byte[16];
+        int ChannelsNumber = 2;
+        Random random = new Random();
+        random.nextBytes(original);
+
+        short[][] separateSample = separateSampleChannels(original, ChannelsNumber);
+        byte[] unitedSample = joiningSampleChannels(separateSample, ChannelsNumber);
+
+        Log.i("byte[] original", Arrays.toString(original));
+        Log.i("separate", Arrays.deepToString(separateSample));
+        Log.i("united__", Arrays.toString(unitedSample));
+
+        Assert.assertArrayEquals(original, unitedSample);
+
     }
 }

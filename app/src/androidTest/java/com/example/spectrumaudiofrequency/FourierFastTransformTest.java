@@ -8,8 +8,8 @@ import androidx.test.core.app.ApplicationProvider;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
 
 import com.example.spectrumaudiofrequency.core.FourierFastTransform;
-import com.example.spectrumaudiofrequency.core.codec_manager.DecoderManager;
-import com.example.spectrumaudiofrequency.core.codec_manager.DecoderManagerWithSaveData;
+import com.example.spectrumaudiofrequency.core.codec_manager.DecoderManager.PeriodRequest;
+import com.example.spectrumaudiofrequency.core.codec_manager.DecoderManagerWithStorage;
 
 import org.junit.Assert;
 import org.junit.Before;
@@ -19,6 +19,7 @@ import org.junit.runner.RunWith;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ForkJoinPool;
 
+import static com.example.spectrumaudiofrequency.core.codec_manager.DecoderManager.DecoderResult.separateSampleChannels;
 import static com.example.spectrumaudiofrequency.util.Array.calculateEquity;
 
 @RunWith(AndroidJUnit4.class)
@@ -36,7 +37,7 @@ public class FourierFastTransformTest {
 
         RenderScript rs = RenderScript.create(context);
 
-        DecoderManagerWithSaveData decoderCodecWithCacheManager = new DecoderManagerWithSaveData(context, R.raw.choose);
+        DecoderManagerWithStorage decoder = new DecoderManagerWithStorage(context, R.raw.choose);
 
         fft_Default = new FourierFastTransform.Default(rs, ForkJoinPool.commonPool());
         fft_Native = new FourierFastTransform.Native(ForkJoinPool.commonPool());
@@ -44,8 +45,8 @@ public class FourierFastTransformTest {
         fft_Precise = new FourierFastTransform.Precise(rs, ForkJoinPool.commonPool());
 
         final CountDownLatch signal = new CountDownLatch(1);
-        decoderCodecWithCacheManager.addRequest(new DecoderManager.PeriodRequest(2, decoderResult -> {
-            Sample = decoderResult.getSampleChannels(decoderCodecWithCacheManager)[0];
+        decoder.addRequest(new PeriodRequest((2), decoderResult -> {
+            Sample = separateSampleChannels(decoderResult.bytes, decoder.ChannelsNumber)[0];
             signal.countDown();
         }));
         signal.await();

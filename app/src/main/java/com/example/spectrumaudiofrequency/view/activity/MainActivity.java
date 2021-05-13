@@ -1,6 +1,5 @@
 package com.example.spectrumaudiofrequency.view.activity;
 
-import android.Manifest;
 import android.Manifest.permission;
 import android.annotation.SuppressLint;
 import android.app.Activity;
@@ -25,7 +24,7 @@ import androidx.recyclerview.widget.RecyclerView;
 
 import com.example.spectrumaudiofrequency.R;
 import com.example.spectrumaudiofrequency.core.SoundAnalyzer;
-import com.example.spectrumaudiofrequency.core.codec_manager.DecoderManagerWithSaveData;
+import com.example.spectrumaudiofrequency.core.codec_manager.DecoderManagerWithStorage;
 import com.example.spectrumaudiofrequency.util.Files;
 import com.example.spectrumaudiofrequency.view.LongWaveImageAdapter;
 import com.example.spectrumaudiofrequency.view.SinusoidDrawn;
@@ -42,28 +41,23 @@ import static com.example.spectrumaudiofrequency.util.Files.ReadJsonFile;
 import static com.example.spectrumaudiofrequency.util.Files.getUriFromResourceId;
 
 public class MainActivity extends AppCompatActivity {
-    public static int MANAGE_EXTERNAL_STORAGE_REQUEST = 120;
+    private static final int AUDIO_ID = R.raw.hollow;
 
+    private static final int SAMPLE_DURATION = 25000;
+    public static int MANAGE_EXTERNAL_STORAGE_REQUEST = 120;
     @SuppressLint("StaticFieldLeak")
     public static TextView InfoTextView;
-
+    private static boolean onAnalysis = false;
     public LongWaveImageAdapter WaveAdapter;
-
-    private DecoderManagerWithSaveData decoderCodecWithCacheManager;
+    private DecoderManagerWithStorage decoderCodecWithCacheManager;
     private MediaPlayer mediaPlayer;
     private SinusoidDrawn sinusoidDrawn;
-    private View.OnClickListener onClickPlayButton;
     private ProgressBar AnalysisProgressBar;
     private TextView ProgressText;
     private LinearLayout ProgressLayout;
     private int Peak = 0;
 
     public void RequestPermissions(Activity activity) {
-        try {
-            Process p = Runtime.getRuntime().exec("su");
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
         if (ContextCompat.checkSelfPermission(activity, permission.READ_EXTERNAL_STORAGE)
                 != PackageManager.PERMISSION_GRANTED ||
                 ContextCompat.checkSelfPermission(activity, permission.WRITE_EXTERNAL_STORAGE)
@@ -75,26 +69,28 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    private static boolean onAnalysis = false;
-
     public void startAnalyzeAudio(String AudioName) {
         if (onAnalysis) return;
         onAnalysis = true;
 
         ProgressLayout.setVisibility(View.VISIBLE);
+        SoundAnalyzer soundAnalyzer = new SoundAnalyzer(decoderCodecWithCacheManager,
+                20,
+                SAMPLE_DURATION);
 
-        SoundAnalyzer soundAnalyzer = new SoundAnalyzer(decoderCodecWithCacheManager, 20);
         soundAnalyzer.setOnProgressChange(progress -> AnalysisProgressBar.post(() -> {
             ProgressText.setText((progress + "%"));
             AnalysisProgressBar.setProgress((int) (progress));
         }));
 
-        soundAnalyzer.start(peaks -> {
+        soundAnalyzer.setOnFinish(peaks -> {
+            onAnalysis = false;
             ProgressLayout.post(() -> ProgressLayout.setVisibility(View.GONE));
             sinusoidDrawn.Peaks = peaks;
             Files.SaveJsonFile(this, AudioName, PeakArrayToJsonString(peaks));
-            onAnalysis = false;
         });
+
+        soundAnalyzer.start();
     }
 
     @RequiresApi(api = Build.VERSION_CODES.LOLLIPOP)
@@ -106,7 +102,6 @@ public class MainActivity extends AppCompatActivity {
         setContentView(R.layout.activity_main);
         RequestPermissions(this);
 
-        /*
         ProgressLayout = this.findViewById(R.id.ProgressLayout);
         AnalysisProgressBar = this.findViewById(R.id.AnalysisProgressBar);
         ProgressText = this.findViewById(R.id.ProgressText);
@@ -118,9 +113,8 @@ public class MainActivity extends AppCompatActivity {
         Button reanalyzeButton = this.findViewById(R.id.ReanalyzeButton);
         SeekBar scaleInput = this.findViewById(R.id.scaleInput);
 
-        int AudioResourceChoseId = R.raw.hollow;
-
-        decoderCodecWithCacheManager = new DecoderManagerWithSaveData(this, AudioResourceChoseId);
+        decoderCodecWithCacheManager = new DecoderManagerWithStorage(this, AUDIO_ID);
+        decoderCodecWithCacheManager.setNewSampleDuration(SAMPLE_DURATION);
 
         sinusoidDrawn = new SinusoidDrawn(this, decoderCodecWithCacheManager.MediaDuration);
         WaveAdapter = new LongWaveImageAdapter(decoderCodecWithCacheManager, this.sinusoidDrawn);
@@ -132,8 +126,8 @@ public class MainActivity extends AppCompatActivity {
         waveRecyclerView.setAdapter(WaveAdapter);
 
 
-        String FileName = String.valueOf(AudioResourceChoseId);
-        if (ReadJsonFile(this, FileName).equals("")) {//todo change to true validation
+        String FileName = String.valueOf(AUDIO_ID);
+        if (ReadJsonFile(this, FileName).equals("")) {//not decoded//todo change to true validation
             startAnalyzeAudio(FileName);
         } else {
             ProgressLayout.setVisibility(View.GONE);
@@ -152,7 +146,8 @@ public class MainActivity extends AppCompatActivity {
         scaleInput.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
             @Override
             public void onProgressChanged(SeekBar seekBar, int newScale, boolean fromUser) {
-                if (newScale < 1) newScale = 1;
+                newScale /= 10;
+                if (newScale == 0) newScale = 1;
                 WaveAdapter.setZoom(newScale);
             }
 
@@ -170,7 +165,7 @@ public class MainActivity extends AppCompatActivity {
         mediaPlayer = new MediaPlayer();
         try {
             mediaPlayer.setAudioStreamType(AudioManager.STREAM_MUSIC);
-            mediaPlayer.setDataSource(this, getUriFromResourceId(this, AudioResourceChoseId));
+            mediaPlayer.setDataSource(this, getUriFromResourceId(this, AUDIO_ID));
 
         } catch (IOException e) {
             e.printStackTrace();
@@ -226,7 +221,6 @@ public class MainActivity extends AppCompatActivity {
         };
         playButton.setOnClickListener(PlayWithMusic);
 
-         */
     }
 
     @Override

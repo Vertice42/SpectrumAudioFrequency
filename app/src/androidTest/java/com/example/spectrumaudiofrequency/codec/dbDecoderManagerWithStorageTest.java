@@ -16,11 +16,11 @@ import org.junit.runner.RunWith;
 import java.util.Random;
 
 @RunWith(AndroidJUnit4.class)
-public class dbDecoderManagerWithSaveDataTest {
+public class dbDecoderManagerWithStorageTest {
     private final String MediaName = "choose";
     private final dbDecoderManager dbManager;
 
-    public dbDecoderManagerWithSaveDataTest() {
+    public dbDecoderManagerWithStorageTest() {
         Context context = ApplicationProvider.getApplicationContext();
         dbManager = new dbDecoderManager(context, MediaName);
     }
@@ -43,7 +43,10 @@ public class dbDecoderManagerWithSaveDataTest {
 
     @Test
     public void setDecoded() {
-        MediaSpecs mediaSpecs = new MediaSpecs(MediaName, 1800000, 24000);
+        MediaSpecs mediaSpecs = new MediaSpecs(MediaName,
+                1800000,
+                24000,
+                1024);
         dbManager.setDecoded(mediaSpecs);
         Assert.assertTrue(dbManager.MediaIsDecoded(MediaName));
         Assert.assertEquals(dbManager.getMediaSpecs(), mediaSpecs);

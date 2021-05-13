@@ -6,9 +6,11 @@ import android.media.MediaExtractor;
 import android.media.MediaFormat;
 import android.net.Uri;
 import android.os.Build;
+import android.util.Log;
 
 import androidx.annotation.RequiresApi;
 
+import com.example.spectrumaudiofrequency.BuildConfig;
 import com.example.spectrumaudiofrequency.core.ByteQueue;
 
 import org.jetbrains.annotations.NotNull;
@@ -31,12 +33,12 @@ public class DecoderManager extends CodecManager {
     public final String MediaName;
     private final ArrayList<CodecFinishListener> OnDecoderFinishListeners = new ArrayList<>();
     private final ArrayList<OnDecodedListener> OnDecoderListeners = new ArrayList<>();
-    private final ByteQueue byteQueue = new ByteQueue();
+    private final ByteQueue byteQueue = new ByteQueue();//todo realocasão pode gerar erros já que as amostras na verdade são shorts , com o numeo de canais > 2 > 5 refatorar
     public int ChannelsNumber;
-    protected boolean DecodingFinish = false;
+    public boolean IsDecoded = false;
     protected int NewSampleDuration;
     protected double TrueMediaDuration;
-    private ResultPromiseListener OnOrderlyPromiseKeep;
+    private ResultPromiseListener OnKeepSortedSamplePromise;
     private Uri uri;
     private String AudioPath = null;
     private MediaExtractor extractor;
@@ -64,23 +66,23 @@ public class DecoderManager extends CodecManager {
             OnDecoderFinishListeners.get(i).OnFinish();
     }
 
-    public boolean IsStarted() {
-        return (NewSampleDuration > 0);
-    }
-
-    public int getSampleLength() {
-        int Length = (int) Math.ceil(TrueMediaDuration() / (double) NewSampleDuration);
-        if (DecodingFinish) Length++;
+    public int getNumberOfSamples() {
+        if (BuildConfig.DEBUG && NewSampleDuration <= 0) {
+            throw new AssertionError("Assertion failed");
+        }
+        int Length = (int) Math.ceil(getTrueMediaDuration() / (double) NewSampleDuration);
+        if (IsDecoded) Length++;
         else Length--;
         return Length;
     }
 
-    public long TrueMediaDuration() {
-        return (DecodingFinish) ? (long) TrueMediaDuration : MediaDuration;
+    public long getTrueMediaDuration() {
+        return (IsDecoded) ? (long) TrueMediaDuration : MediaDuration;
     }
 
-    private void rearrangeSamplesSize(CodecSample codecSample) {
+    private void rearrangeSampleSize(CodecSample codecSample) {
         boolean isLastPeace = codecSample.bufferInfo.flags == BUFFER_FLAG_END_OF_STREAM;
+
         byteQueue.add(codecSample.bytes);
 
         while (true) {
@@ -106,9 +108,9 @@ public class DecoderManager extends CodecManager {
 
             executeDecodeListeners(new DecoderResult(SampleId, bytes, bufferInfo));
 
-            int sampleLength = getSampleLength();
-
             /*
+            int sampleLength = getNumberOfSamples();
+
             Log.i("RearrangeSamplesSize", "Sample " + (SampleId + 1) + "/"
                     + ((NewSampleDuration > 0) ? getSampleLength() : "?")
                     + " percentage " + new DecimalFormat("0.00")
@@ -116,7 +118,6 @@ public class DecoderManager extends CodecManager {
                     + " byteQueueSize: " + byteQueueSize
                     + " bytesDuration:" + bytesDuration
                     + " bytes.length:" + bytes.length);*/
-
 
             TrueMediaDuration += bytesDuration;
             SampleId++;
@@ -145,16 +146,16 @@ public class DecoderManager extends CodecManager {
             ChannelsNumber = Format.getInteger(MediaFormat.KEY_CHANNEL_COUNT);
         }//todo add
 
-        OnOrderlyPromiseKeep = codecSample -> byteQueue.add(codecSample.bytes);
+        OnKeepSortedSamplePromise = codecSample -> byteQueue.add(codecSample.bytes);
 
         addOnReadyListener((SampleDuration, SampleSize) -> {
-            calculateResizing(SampleDuration, SampleSize);
-            OnOrderlyPromiseKeep = this::rearrangeSamplesSize;
+            calculateReallocation(SampleDuration, SampleSize);
+            OnKeepSortedSamplePromise = this::rearrangeSampleSize;
         });
-        addOnFinishListener(() -> DecodingFinish = true);
+        addOnFinishListener(() -> IsDecoded = true);
     }
 
-    private void calculateResizing(int SampleDuration, int SampleSize) {
+    private void calculateReallocation(int SampleDuration, int SampleSize) {
         if (NewSampleDuration > 0) {
             double r = SampleSize * NewSampleDuration;
             NewSampleSize = (int) Math.ceil(r / SampleDuration);
@@ -174,6 +175,10 @@ public class DecoderManager extends CodecManager {
         this.NewSampleDuration = NewSampleDuration;
     }
 
+    public int getNewSampleSize() {
+        return NewSampleSize;
+    }
+
     public void setNewSampleSize(int NewSampleSize) {
         this.NewSampleSize = NewSampleSize;
     }
@@ -186,29 +191,38 @@ public class DecoderManager extends CodecManager {
         ForkJoinPool pool;
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) pool = ForkJoinPool.commonPool();
         else pool = new ForkJoinPool();
-        while (RemainingBuffers() > 0) pool.execute(this::onSampleSorted);
+        pool.execute(this::onSampleSorted);
     }
 
     private void putData(int InputID) {
-        long extractorSampleTime = extractor.getSampleTime();
-        int offset = 0;
-        int extractorSize = extractor.readSampleData(getInputBuffer(InputID), offset);
+        if (!IsDecoded) {
+            long extractorSampleTime = extractor.getSampleTime();
+            int offset = 0;
+            int extractorSize = extractor.readSampleData(getInputBuffer(InputID), offset);
 
-        if (extractorSampleTime > -1) {
-            BufferInfo BufferInfo = new BufferInfo();
-            BufferInfo.set(offset, extractorSize, extractorSampleTime, extractor.getSampleFlags());
-            addOrderlyOutputPromise(new OutputPromise(extractorSampleTime, OnOrderlyPromiseKeep));
-            processInput(new CodecManagerRequest(InputID, BufferInfo));
-            extractor.advance();
+            if (extractorSampleTime > -1) {
+                BufferInfo BufferInfo = new BufferInfo();
+                BufferInfo.set(offset, extractorSize, extractorSampleTime, extractor.getSampleFlags());
+                addOrderlyOutputPromise(new OutputPromise(extractorSampleTime, OnKeepSortedSamplePromise));
+                processInput(new CodecManagerRequest(InputID, BufferInfo));
+                extractor.advance();
+            } else {
+                stop();
+                GiveBackInputID(InputID);
+            }
         } else {
-            stop();
             GiveBackInputID(InputID);
         }
     }
 
     @Override
     public void onSampleSorted() {
-        addInputIdRequest(this::putData);
+        int i = 0;
+        int numberOfInputsIdsAvailable = getNumberOfInputsIdsAvailable() + 1;
+        do {
+            addInputIdRequest(this::putData);
+            i++;
+        } while (i < numberOfInputsIdsAvailable);
     }
 
     public void addOnFinishListener(CodecFinishListener onFinish) {
@@ -255,25 +269,41 @@ public class DecoderManager extends CodecManager {
             this.bufferInfo = bufferInfo;
         }
 
-        public boolean SampleTimeNotExist() {
-            return (bufferInfo == null);
-        }
 
-        public short[][] getSampleChannels(DecoderManager decoderManager) {
-            short[] shorts = new short[bytes.length / 2];
-            ByteBuffer.wrap(bytes).order(ByteOrder.nativeOrder()).asShortBuffer().get(shorts);
+        public static short[][] separateSampleChannels(byte[] sampleData, int ChannelsNumber) {
+            short[] shorts = new short[sampleData.length / 2];
+            ByteBuffer.wrap(sampleData).order(ByteOrder.nativeOrder()).asShortBuffer().get(shorts);
 
             short[][] SamplesChannels;
-            SamplesChannels = new short[decoderManager.ChannelsNumber]
-                    [shorts.length / decoderManager.ChannelsNumber];
+            SamplesChannels = new short[ChannelsNumber]
+                    [shorts.length / ChannelsNumber];
             for (int i = 0; i < SamplesChannels.length; ++i) {
                 for (int j = 0; j < SamplesChannels[i].length; j++) {
-                    SamplesChannels[i][j] = shorts[j * decoderManager.ChannelsNumber + i];
+                    SamplesChannels[i][j] = shorts[j * ChannelsNumber + i];
                 }
             }
 
             if (SamplesChannels[0].length < 1) SamplesChannels = new short[2][200];
             return SamplesChannels;
+        }
+
+        public static byte[] joiningSampleChannels(short[][] sampleData, int ChannelsNumber) {
+            ByteBuffer byteBuffer = ByteBuffer.allocate((sampleData[0].length * ChannelsNumber) * 2);
+            byteBuffer.order(ByteOrder.nativeOrder());
+
+            for (int i = 0; i < sampleData[1].length; i++) {
+                for (int j = 0; j < ChannelsNumber; j++) {
+                    byteBuffer.putShort(sampleData[j][i]);
+                }
+            }
+            Log.i("remaining", "" + byteBuffer.remaining());
+            byteBuffer.flip();
+
+            byte[] result = new byte[byteBuffer.limit()];
+            byteBuffer.get(result);
+            return result;
+
+
         }
 
         @Override

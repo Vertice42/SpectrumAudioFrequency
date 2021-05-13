@@ -99,7 +99,9 @@ public abstract class CodecManager implements CodecManagerInterface {
             while (SamplesSortedQueue.size() > 1)
                 KeepOrderedPromises((CodecSample) SamplesSortedQueue.peek());
             CodecSample sample = (CodecSample) SamplesSortedQueue.peek();
-            if (OutputPromises.size() == 0) {
+            assert sample != null;
+
+            if (OutputPromises.size() == 0 || sample.bufferInfo.flags == BUFFER_FLAG_END_OF_STREAM) {
                 sample.bufferInfo.flags = BUFFER_FLAG_END_OF_STREAM;
                 KeepOrderedPromises(sample);
                 executeFinishListeners();
@@ -243,11 +245,15 @@ public abstract class CodecManager implements CodecManagerInterface {
         return bufferLimit;
     }
 
+    public int getNumberOfInputsIdsAvailable() {
+        return InputIdsAvailable.size();
+    }
+
     public MediaFormat getOutputFormat() {
         return Codec.getOutputFormat();
     }
 
-    public synchronized void addInputIdRequest(IdListener idListener) {
+    protected synchronized void addInputIdRequest(IdListener idListener) {
         if (InputIdsAvailable.size() > 0) {
             int InputId = InputIdsAvailable.get(0);
             InputIdsAvailable.remove(0);

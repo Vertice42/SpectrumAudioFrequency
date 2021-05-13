@@ -15,36 +15,27 @@ import androidx.renderscript.RenderScript;
 import com.example.spectrumaudiofrequency.core.FourierFastTransform.Adapted;
 import com.example.spectrumaudiofrequency.core.FourierFastTransform.Default;
 import com.example.spectrumaudiofrequency.core.FourierFastTransform.FFTAbstract;
-import com.example.spectrumaudiofrequency.core.FourierFastTransform.Precise;
 import com.example.spectrumaudiofrequency.core.FourierFastTransform.Native;
+import com.example.spectrumaudiofrequency.core.FourierFastTransform.Precise;
 import com.example.spectrumaudiofrequency.core.SoundAnalyzer.AudioPeakAnalyzer.Peak;
 import com.example.spectrumaudiofrequency.sinusoid_converter.Converter;
 
 import java.io.File;
 import java.io.FileOutputStream;
-
 import java.util.Date;
 import java.util.concurrent.ForkJoinPool;
 
-import static com.example.spectrumaudiofrequency.sinusoid_converter.Rearrange.SimplifySinusoid;
+import static com.example.spectrumaudiofrequency.sinusoid_converter.SamplingResize.ResizeSampling;
 
 public class SinusoidDrawn {
+    private static final String Folder = "WavePieces";
     //private final FFTAbstract[] ffts;
     private final FFTAbstract fft;
-
-    interface WaveRenderListeners {
-        void onFinish(Bitmap bitmap);
-    }
-
+    private final RenderScript rs;
+    private final ForkJoinPool pool;
     public boolean AntiAlias = false;
     public Peak[] Peaks = new Peak[0];
     public long SpectrumSize;
-
-    private static final String Folder = "WavePieces";
-
-    private final RenderScript rs;
-    private final ForkJoinPool pool;
-
     public int Height;
     public int Width;
 
@@ -90,6 +81,10 @@ public class SinusoidDrawn {
     public static String getImageCacheAbsolutePath(long ImageID) {
         return Environment.getExternalStorageDirectory() +
                 File.separator + Folder + File.separator + getImageFileName(ImageID);
+    }
+
+    public static boolean Clear() {
+        return new File(Environment.getExternalStorageDirectory() + Folder).delete();
     }
 
     private void SaveFileImage(long FrameID, Bitmap imageBitmap) {
@@ -441,8 +436,10 @@ public class SinusoidDrawn {
 
             if (SampleChannels[0].length > 10) {
                 // DrawAnalyzer(canvas, SampleChannels[0], Time, SampleDuration, Height / 2f, Height / 2f);
-                //DrawSinusoid(canvas, SampleChannels[0], Height / 2f, Color.BLACK, Height / 5f);
-                DrawWave(canvas, SimplifySinusoid(SampleChannels[0], Width), Height / 3f, Color.BLACK, Height / 2f);
+                DrawSinusoid(canvas, SampleChannels[0], Height / 1.3f, Color.BLUE, Height / 2f);
+                DrawSinusoid(canvas, ResizeSampling(SampleChannels[0], (int) (SampleChannels[0].length / 2)), Height / 2.5f, Color.BLACK, Height / 2f);
+
+                //DrawWave(canvas, resizeSinusoid(SampleChannels[0], Width), Height / 3f, Color.BLACK, Height / 2f);
 
                 //DrawFFT(canvas, fft.Transform(SampleChannels[0]), Height / 1.2f, Color.BLUE, Height / 100f);
 
@@ -451,12 +448,12 @@ public class SinusoidDrawn {
         });
     }
 
-    public static boolean Clear() {
-        return new File(Environment.getExternalStorageDirectory() + Folder).delete();
-    }
-
     public void destroy() {
         this.rs.destroy();
+    }
+
+    interface WaveRenderListeners {
+        void onFinish(Bitmap bitmap);
     }
 
 }

@@ -17,11 +17,11 @@ public class EncoderCodecManager extends CodecManager {
     public void onSampleSorted() {
     }
 
-    public void addInputIdRequest(IdListener idListener) {
-        super.addInputIdRequest(idListener);
+    public void addPutInputRequest(BufferInfo bufferInfo, byte[] data) {
+        super.addInputIdRequest(Id -> putData(Id, bufferInfo, data));
     }
 
-    public synchronized void putData(int InputID, BufferInfo bufferInfo, byte[] data) {
+    private synchronized void putData(int InputID, BufferInfo bufferInfo, byte[] data) {
         addOrderlyOutputPromise(new OutputPromise(bufferInfo.presentationTimeUs, codecSample -> {
             for (int i = 0; i < ResultsPromises.size(); i++)
                 ResultsPromises.get(i).onKeep(codecSample);
@@ -33,7 +33,7 @@ public class EncoderCodecManager extends CodecManager {
         processInput(new CodecManager.CodecManagerRequest(InputID, bufferInfo));
     }
 
-    public void addOutputListener(ResultPromiseListener resultPromiseListener) {
+    public void addEncoderListener(ResultPromiseListener resultPromiseListener) {
         ResultsPromises.add(resultPromiseListener);
     }
 

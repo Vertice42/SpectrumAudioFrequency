@@ -2,8 +2,13 @@ package com.example.spectrumaudiofrequency.core.codec_manager;
 
 import android.content.Context;
 import android.media.MediaFormat;
+import android.util.Log;
 
 import com.example.spectrumaudiofrequency.util.CalculatePerformance;
+
+import static com.example.spectrumaudiofrequency.core.codec_manager.DecoderManager.DecoderResult.joiningSampleChannels;
+import static com.example.spectrumaudiofrequency.core.codec_manager.DecoderManager.DecoderResult.separateSampleChannels;
+import static com.example.spectrumaudiofrequency.sinusoid_converter.SamplingResize.ResizeSampling;
 
 public class MediaFormatConverter {
     private final DecoderManager decoder;
@@ -13,6 +18,8 @@ public class MediaFormatConverter {
 
     public MediaFormatConverter(Context context, int MediaToConvertId, MediaFormat newMediaFormat) {
         decoder = new DecoderManager(context, MediaToConvertId);
+        newMediaFormat.setInteger(MediaFormat.KEY_SAMPLE_RATE, newMediaFormat.getInteger(MediaFormat.KEY_SAMPLE_RATE) / 2);
+        //newMediaFormat.setInteger(MediaFormat.KEY_BIT_RATE, newMediaFormat.getInteger(MediaFormat.KEY_BIT_RATE) / 2);
         encoder = new EncoderCodecManager(newMediaFormat);
     }
 
@@ -20,14 +27,33 @@ public class MediaFormatConverter {
         decoder.addOnDecodeListener(decoderResult -> {
             CalculatePerformance.LogPercentage("Decoder ",
                     decoderResult.bufferInfo.presentationTimeUs,
-                    decoder.TrueMediaDuration());
-            encoder.addInputIdRequest(InputID ->
-                    encoder.putData(InputID, decoderResult.bufferInfo, decoderResult.bytes));
+                    decoder.getTrueMediaDuration());
+
+            int channelsNumber = decoder.ChannelsNumber;
+
+            short[][] sampleChannels = separateSampleChannels(decoderResult.bytes, channelsNumber);
+            short[][] resizedSamples = new short[sampleChannels.length][];
+            int NewSize = sampleChannels[0].length / 2;
+            for (int i = 0; i < sampleChannels.length; i++) {
+                resizedSamples[i] = ResizeSampling(sampleChannels[i], NewSize);
+            }
+            byte[] bytes = joiningSampleChannels(resizedSamples, channelsNumber);
+            decoderResult.bufferInfo.size = bytes.length;
+
+            encoder.addPutInputRequest(decoderResult.bufferInfo, bytes);
+            // encoder.addPutInputRequest(decoderResult.bufferInfo,decoderResult.bytes);
+
         });
 
         decoder.addOnFinishListener(encoder::stop);
-        encoder.addOutputListener(encoderResult -> {
-            CalculatePerformance.LogPercentage("Decoder ",
+        //decoder.addOnFinishListener(() -> Log.i("OnFinish", "OnFinish: "));
+        encoder.addEncoderListener(encoderResult -> {
+            try {
+                Log.i("limit", "" + encoder.getInputBufferLimit());
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+            CalculatePerformance.LogPercentage("Encoder ",
                     encoderResult.bufferInfo.presentationTimeUs,
                     encoder.MediaDuration);
             ConverterListener.onConvert(encoderResult);
@@ -47,7 +73,7 @@ public class MediaFormatConverter {
     }
 
     public long TrueMediaDuration() {
-        return decoder.TrueMediaDuration();
+        return decoder.getTrueMediaDuration();
     }
 
     public MediaFormat getOutputFormat() {

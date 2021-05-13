@@ -1,15 +1,10 @@
 package com.example.spectrumaudiofrequency;
-
-import android.util.Log;
-
-import com.example.spectrumaudiofrequency.core.codec_manager.MediaFormatConverter;
 import com.example.spectrumaudiofrequency.util.Files;
 
 import org.junit.Assert;
 import org.junit.Test;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Random;
 
 /**
