@@ -7,7 +7,7 @@ import org.junit.Test;
 
 import java.util.Arrays;
 
-import static com.example.spectrumaudiofrequency.sinusoid_converter.SamplingResize.ResizeSampling;
+import static com.example.spectrumaudiofrequency.sinusoid_converter.SamplingResize.ResizeSample;
 
 public class SamplingResizeTest {
     public void simplifySinusoidTest(int size, int newSize) {
@@ -19,7 +19,7 @@ public class SamplingResizeTest {
         short[] expectedResult = new short[newSize];
         Arrays.fill(expectedResult, value);
 
-        short[] result = ResizeSampling(sample, expectedResult.length);
+        short[] result = ResizeSample(sample, expectedResult.length);
 
         Log.i("result", Arrays.toString(result));
         Assert.assertArrayEquals(result, expectedResult);
@@ -37,13 +37,18 @@ public class SamplingResizeTest {
     }
 
     @Test
-    public void resizeSinusoidSize8To5() {
-        simplifySinusoidTest(8, 5);
+    public void resizeSinusoidSize8To6() {
+        simplifySinusoidTest(8, 6);
     }
 
     @Test
     public void resizeSinusoidSize80To60() {
         simplifySinusoidTest(80, 60);
+    }
+
+    @Test
+    public void resizeSinusoidSize81To61() {
+        simplifySinusoidTest(81, 61);
     }
 
     @Test

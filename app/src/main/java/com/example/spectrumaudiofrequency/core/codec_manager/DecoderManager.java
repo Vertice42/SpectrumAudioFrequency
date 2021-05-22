@@ -20,7 +20,6 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.concurrent.ForkJoinPool;
 
 import static android.media.MediaCodec.BUFFER_FLAG_END_OF_STREAM;
 import static android.media.MediaCodec.BUFFER_FLAG_KEY_FRAME;
@@ -32,18 +31,18 @@ public class DecoderManager extends CodecManager {
     public final Context context;
     public final String MediaName;
     private final ArrayList<CodecFinishListener> OnDecoderFinishListeners = new ArrayList<>();
-    private final ArrayList<OnDecodedListener> OnDecoderListeners = new ArrayList<>();
+    private final ArrayList<DecodingListener> OnDecoderListeners = new ArrayList<>();
     private final ByteQueue byteQueue = new ByteQueue();//todo realocasão pode gerar erros já que as amostras na verdade são shorts , com o numeo de canais > 2 > 5 refatorar
     public int ChannelsNumber;
     public boolean IsDecoded = false;
     protected int NewSampleDuration;
     protected double TrueMediaDuration;
+    int NewSampleSize;
     private ResultPromiseListener OnKeepSortedSamplePromise;
     private Uri uri;
     private String AudioPath = null;
     private MediaExtractor extractor;
     private int SampleId;
-    private int NewSampleSize;
 
     public DecoderManager(Context context, int ResourceId) {
         super();
@@ -83,6 +82,7 @@ public class DecoderManager extends CodecManager {
     private void rearrangeSampleSize(CodecSample codecSample) {
         boolean isLastPeace = codecSample.bufferInfo.flags == BUFFER_FLAG_END_OF_STREAM;
 
+        Log.i("rearrangeSampleSize", " bytes.length" + codecSample.bytes.length);
         byteQueue.add(codecSample.bytes);
 
         while (true) {
@@ -98,7 +98,7 @@ public class DecoderManager extends CodecManager {
 
             double bytesDuration = ((bytes.length * NewSampleDuration) / (double) NewSampleSize);
 
-            boolean TrueLastSample = (size < NewSampleSize && isLastPeace);
+            boolean TrueLastSample = (byteQueue.size() == 0 && isLastPeace);
 
             int flag = (TrueLastSample) ? BUFFER_FLAG_END_OF_STREAM : BUFFER_FLAG_KEY_FRAME;
             bufferInfo.set(0,
@@ -107,10 +107,12 @@ public class DecoderManager extends CodecManager {
                     flag);
 
             executeDecodeListeners(new DecoderResult(SampleId, bytes, bufferInfo));
-
+            if (TrueLastSample) {
+                Log.i("TrueLastSample", "rearrangeSampleSize: ");
+                executeOnFinishListener();
+            }
             /*
             int sampleLength = getNumberOfSamples();
-
             Log.i("RearrangeSamplesSize", "Sample " + (SampleId + 1) + "/"
                     + ((NewSampleDuration > 0) ? getSampleLength() : "?")
                     + " percentage " + new DecimalFormat("0.00")
@@ -122,12 +124,14 @@ public class DecoderManager extends CodecManager {
             TrueMediaDuration += bytesDuration;
             SampleId++;
         }
-        if (isLastPeace) executeOnFinishListener();
     }
 
     private void executeDecodeListeners(DecoderResult decoderResult) {
-        for (int i = 0; i < OnDecoderListeners.size(); i++)
-            OnDecoderListeners.get(i).OnProceed(decoderResult);
+        for (int i = 0; i < OnDecoderListeners.size(); i++) {
+            Log.i("TAG", "executeDecodeListeners: " + executorService.isShutdown() + executorService.toString());
+            DecodingListener decodingListener = OnDecoderListeners.get(i);
+            executorService.submit(() -> decodingListener.onDecoded(decoderResult));
+        }
     }
 
     private void prepare() {
@@ -152,7 +156,7 @@ public class DecoderManager extends CodecManager {
             calculateReallocation(SampleDuration, SampleSize);
             OnKeepSortedSamplePromise = this::rearrangeSampleSize;
         });
-        addOnFinishListener(() -> IsDecoded = true);
+        addFinishListener(() -> IsDecoded = true);
     }
 
     private void calculateReallocation(int SampleDuration, int SampleSize) {
@@ -179,20 +183,10 @@ public class DecoderManager extends CodecManager {
         return NewSampleSize;
     }
 
-    public void setNewSampleSize(int NewSampleSize) {
-        this.NewSampleSize = NewSampleSize;
-    }
-
     /**
      * Decoding starts, the sample size must be defined.
      * The sample time must be greater than 0.
      */
-    public void startDecoding() {
-        ForkJoinPool pool;
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) pool = ForkJoinPool.commonPool();
-        else pool = new ForkJoinPool();
-        pool.execute(this::onSampleSorted);
-    }
 
     private void putData(int InputID) {
         if (!IsDecoded) {
@@ -215,26 +209,31 @@ public class DecoderManager extends CodecManager {
         }
     }
 
-    @Override
-    public void onSampleSorted() {
+    void addPutDataRequests() {
         int i = 0;
-        int numberOfInputsIdsAvailable = getNumberOfInputsIdsAvailable() + 1;
+        int interations = 1;
+        interations += getNumberOfInputsIdsAvailable();
         do {
             addInputIdRequest(this::putData);
             i++;
-        } while (i < numberOfInputsIdsAvailable);
+        } while (i < interations);
     }
 
-    public void addOnFinishListener(CodecFinishListener onFinish) {
+    public void startDecoding() {
+        addPutDataRequests();
+        this.onInputReliased = InputID -> addPutDataRequests();
+    }
+
+    public void addFinishListener(CodecFinishListener onFinish) {
         OnDecoderFinishListeners.add(onFinish);
     }
 
-    public void addOnDecodeListener(OnDecodedListener onDecodedListener) {
-        OnDecoderListeners.add(onDecodedListener);
+    public void addDecodingListener(DecodingListener decodingListener) {
+        OnDecoderListeners.add(decodingListener);
     }
 
-    public void removeOnDecodeListener(OnDecodedListener onDecodedListener) {
-        OnDecoderListeners.remove(onDecodedListener);
+    public void removeOnDecodeListener(DecodingListener decodingListener) {
+        OnDecoderListeners.remove(decodingListener);
     }
 
     public int getDecodeListenersListSize() {
@@ -245,17 +244,17 @@ public class DecoderManager extends CodecManager {
         OnDecoderFinishListeners.remove(codecFinishListener);
     }
 
-    public interface OnDecodedListener {
-        void OnProceed(DecoderResult decoderResult);
+    public interface DecodingListener {
+        void onDecoded(DecoderResult decoderResult);
     }
 
     public static class PeriodRequest {
         int RequiredSampleId;
-        OnDecodedListener DecoderListener;
+        DecoderManager.DecodingListener DecodingListener;
 
-        public PeriodRequest(int RequiredSampleId, OnDecodedListener DecoderListener) {
+        public PeriodRequest(int RequiredSampleId, DecoderManager.DecodingListener DecodingListener) {
             this.RequiredSampleId = RequiredSampleId;
-            this.DecoderListener = DecoderListener;
+            this.DecodingListener = DecodingListener;
         }
     }
 
@@ -287,7 +286,7 @@ public class DecoderManager extends CodecManager {
             return SamplesChannels;
         }
 
-        public static byte[] joiningSampleChannels(short[][] sampleData, int ChannelsNumber) {
+        public static byte[] SampleChannelsToBytes(short[][] sampleData, int ChannelsNumber) {
             ByteBuffer byteBuffer = ByteBuffer.allocate((sampleData[0].length * ChannelsNumber) * 2);
             byteBuffer.order(ByteOrder.nativeOrder());
 
@@ -296,7 +295,6 @@ public class DecoderManager extends CodecManager {
                     byteBuffer.putShort(sampleData[j][i]);
                 }
             }
-            Log.i("remaining", "" + byteBuffer.remaining());
             byteBuffer.flip();
 
             byte[] result = new byte[byteBuffer.limit()];

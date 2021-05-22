@@ -19,7 +19,7 @@ interface QueueElement {
     public long getIndex();
 }
 
-class SortedQueue implements Queue<QueueElement> {
+public class SortedQueue implements Queue<QueueElement> {
     private final ArrayList<QueueElement> codecSampleArrayList;
 
     public SortedQueue() {

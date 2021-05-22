@@ -33,15 +33,23 @@ public class SamplingResize {
 
         short[] result = new short[NewLength];
 
-        for (int i = 0; i < result.length; i++) {
-            result[i] = (short) ((Sample[i] * NewLength / (double) Sample.length) + Sample[i + 1] * (Sample.length % NewLength) / (double) Sample.length);
+        for (int i = result.length - 1; i > 0; i--) {
+            result[i] = (short) ((Sample[i] * NewLength / (double) Sample.length) + Sample[i - 1] * (Sample.length % NewLength) / (double) Sample.length);
         }
         return result;
     }
 
-    public static short[] ResizeSampling(short @NotNull [] Sample, int NewLength) {
+    public static short[] ResizeSample(short @NotNull [] Sample, int NewLength) {
         if (Sample.length % NewLength == 0) return resizeBilinear(Sample, NewLength);
         return resizeNotBilinear(Sample, NewLength);
+    }
+
+    public static short[][] ResizeSamplesChannels(short @NotNull [][] SampleChannels, int NewLength) {
+        short[][] ResizedSamples = new short[SampleChannels.length][];
+        for (int i = 0; i < SampleChannels.length; i++) {
+            ResizedSamples[i] = ResizeSample(SampleChannels[i], NewLength);
+        }
+        return ResizedSamples;
     }
 
     public static class SuperResize {

@@ -14,6 +14,8 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -24,12 +26,7 @@ import static android.media.MediaFormat.KEY_CAPTURE_RATE;
 import static android.media.MediaFormat.KEY_DURATION;
 import static android.media.MediaFormat.KEY_FRAME_RATE;
 
-interface CodecManagerInterface {
-    void onSampleSorted();
-}
-
-public abstract class CodecManager implements CodecManagerInterface {
-
+public abstract class CodecManager {
     private final ArrayList<Integer> InputIdsAvailable = new ArrayList<>();
     private final ArrayList<OnReadyListener> onOnReadyListeners = new ArrayList<>();
     private final ArrayList<IdListener> RequestsOfInputID = new ArrayList<>();
@@ -40,12 +37,16 @@ public abstract class CodecManager implements CodecManagerInterface {
     private final SortedQueue SamplesSortedQueue = new SortedQueue();
     public MediaFormat mediaFormat;
     public long MediaDuration;
+    protected ExecutorService executorService;
     boolean IsStopped = false;
+    InputIDAvailableListener onInputReliased = id -> {
+    };
     private MediaCodec Codec = null;
     private int bufferLimit = 0;
     private int AmountOfBuffers;
     private ResultPromiseListener onPromiseKept;
     private InputIDAvailableListener onInputBufferAvailable;
+    private boolean IsReady = false;
 
     public CodecManager(MediaFormat mediaFormat, boolean IsDecoder) {
         PrepareEndStart(mediaFormat, IsDecoder);
@@ -85,6 +86,10 @@ public abstract class CodecManager implements CodecManagerInterface {
         }
     }
 
+    public boolean IsReady() {
+        return IsReady;
+    }
+
     public synchronized void GiveBackInputID(int BufferId) {
         if (RequestsOfInputID.size() > 0) {
             IdListener idListener = RequestsOfInputID.get(0);
@@ -95,22 +100,26 @@ public abstract class CodecManager implements CodecManagerInterface {
 
     private void OrderSamples(CodecSample codecSample) {
         SamplesSortedQueue.add(codecSample);
-        if (IsStopped && RequestsOfInputID.size() == 0) {
-            while (SamplesSortedQueue.size() > 1)
-                KeepOrderedPromises((CodecSample) SamplesSortedQueue.peek());
+        if (IsStopped && PromisesOfSortedOutputs.size() == SamplesSortedQueue.size()) {
+            while (SamplesSortedQueue.size() > 1) {
+                CodecSample sample = (CodecSample) SamplesSortedQueue.peek();
+                assert sample != null;
+                keepPromisesOfSortedOutputs(sample);
+            }
             CodecSample sample = (CodecSample) SamplesSortedQueue.peek();
             assert sample != null;
+            sample.bufferInfo.flags = BUFFER_FLAG_END_OF_STREAM;
+            keepPromisesOfSortedOutputs(sample);
+            executeFinishListeners();
 
-            if (OutputPromises.size() == 0 || sample.bufferInfo.flags == BUFFER_FLAG_END_OF_STREAM) {
-                sample.bufferInfo.flags = BUFFER_FLAG_END_OF_STREAM;
-                KeepOrderedPromises(sample);
-                executeFinishListeners();
-            } else KeepOrderedPromises(sample);
-        } else if (SamplesSortedQueue.size() > AmountOfBuffers) {
-            for (int i = 0; i < AmountOfBuffers; i++)
-                KeepOrderedPromises((CodecSample) SamplesSortedQueue.peek());
+        } else if (SamplesSortedQueue.size() >= AmountOfBuffers) {
+            for (int i = 0; i < AmountOfBuffers; i++) {
+                CodecSample sample = (CodecSample) SamplesSortedQueue.peek();
+                assert sample != null;
+                keepPromisesOfSortedOutputs(sample);
+            }
         }
-        onSampleSorted();
+        //onSampleSorted();
     }
 
     private void ExecuteDecoderReadyListeners(int sampleDuration, int sampleLength) {
@@ -124,25 +133,34 @@ public abstract class CodecManager implements CodecManagerInterface {
             OutputPromise outputPromise = OutputPromises.get(i);
             if (outputPromise.SampleTime == bufferInfo.presentationTimeUs) {
                 OutputPromises.remove(outputPromise);
-                outputPromise.resultPromiseListener.onKeep(new CodecSample(bufferInfo,
-                        Codec.getOutputBuffer(outputBufferId)));
+                ByteBuffer outputBuffer = Codec.getOutputBuffer(outputBufferId);
+                byte[] bytes = new byte[outputBuffer.remaining()];
+                outputBuffer.get(bytes);
+                Codec.releaseOutputBuffer(outputBufferId, false);
+                onInputReliased.onAvailable(5);
+                executorService.execute(() ->
+                        outputPromise.resultPromiseListener.
+                                onKeep(new CodecSample(bufferInfo, bytes)));
+
             } else i++;
         }
     }
 
-    private void KeepOrderedPromises(CodecSample codecSample) {
+    private void keepPromisesOfSortedOutputs(CodecSample codecSample) {
         int i = 0;
         while (i < PromisesOfSortedOutputs.size()) {
             OutputPromise promise = PromisesOfSortedOutputs.get(i);
             if (promise.SampleTime == codecSample.bufferInfo.presentationTimeUs) {
-                promise.resultPromiseListener.onKeep(codecSample);
+                executorService.execute(() -> promise.resultPromiseListener.onKeep(codecSample));
                 PromisesOfSortedOutputs.remove(promise);
             } else i++;
         }
     }
 
-    void PrepareEndStart(MediaFormat mediaFormat, boolean IsDecoder) {
+    protected void PrepareEndStart(MediaFormat mediaFormat, boolean IsDecoder) {
         this.mediaFormat = mediaFormat;
+        this.executorService = Executors.newSingleThreadExecutor();//todo aqui
+
         try {
             if (IsDecoder)
                 Codec = MediaCodec.createDecoderByType(mediaFormat.getString(MediaFormat.KEY_MIME));
@@ -178,9 +196,10 @@ public abstract class CodecManager implements CodecManagerInterface {
                         codecSample.bytes.length > 0 &&
                         sampleTime > sampleDuration * 4) {
                     ExecuteDecoderReadyListeners(sampleDuration, codecSample.bytes.length);
+                    IsReady = true;
                     onPromiseKept = this::OrderSamples;
                 }
-            onSampleSorted();
+            // onSampleSorted();
         };
 
         Codec.setCallback(new MediaCodec.Callback() {
@@ -196,7 +215,6 @@ public abstract class CodecManager implements CodecManagerInterface {
                                                 final int outputBufferId,
                                                 @NonNull final BufferInfo bufferInfo) {
                 KeepOutputPromises(outputBufferId, bufferInfo);
-                Codec.releaseOutputBuffer(outputBufferId, false);
             }
 
             @Override
@@ -219,10 +237,10 @@ public abstract class CodecManager implements CodecManagerInterface {
             Codec.configure(mediaFormat, null, null, CONFIGURE_FLAG_ENCODE);
         }
         Codec.start();
-    }
 
-    public int RemainingBuffers() {
-        return InputIdsAvailable.size();
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            Log.i("CodecInfo", Codec.getCodecInfo().getCanonicalName());
+        }
     }
 
     public int getFinishListenerSize() {
@@ -233,19 +251,25 @@ public abstract class CodecManager implements CodecManagerInterface {
         return onOnReadyListeners.size();
     }
 
-    public int getInputBufferLimit() throws InterruptedException {
+    public int getInputBufferLimit() {
         if (bufferLimit == 0) {
             CountDownLatch countDownLatch = new CountDownLatch(1);
             this.addInputIdRequest(Id -> {
                 bufferLimit = getInputBuffer(Id).limit();
                 countDownLatch.countDown();
             });
-            countDownLatch.await();
+            try {
+                countDownLatch.await();
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+                Log.wtf("awaitInputBufferLimit", e);
+            }
         }
         return bufferLimit;
     }
 
     public int getNumberOfInputsIdsAvailable() {
+        //  Log.i("Ids", "InputsIdsAvailable = " + InputIdsAvailable.size() + " RequestsOfInputID = " + RequestsOfInputID.size());
         return InputIdsAvailable.size();
     }
 
@@ -253,7 +277,7 @@ public abstract class CodecManager implements CodecManagerInterface {
         return Codec.getOutputFormat();
     }
 
-    protected synchronized void addInputIdRequest(IdListener idListener) {
+    synchronized void addInputIdRequest(IdListener idListener) {
         if (InputIdsAvailable.size() > 0) {
             int InputId = InputIdsAvailable.get(0);
             InputIdsAvailable.remove(0);
@@ -284,7 +308,7 @@ public abstract class CodecManager implements CodecManagerInterface {
         PromisesOfSortedOutputs.add(outputPromise);
     }
 
-    public void addOnFinishListener(CodecFinishListener finishListener) {
+    public void addFinishListener(CodecFinishListener finishListener) {
         FinishListeners.add(finishListener);
     }
 
@@ -295,7 +319,7 @@ public abstract class CodecManager implements CodecManagerInterface {
     private void executeFinishListeners() {
         for (int i = 0; i < FinishListeners.size(); i++) {
             CodecFinishListener codecFinishListener = FinishListeners.get(i);
-            codecFinishListener.OnFinish();
+            executorService.execute(codecFinishListener::OnFinish);
         }
     }
 
@@ -365,12 +389,6 @@ public abstract class CodecManager implements CodecManagerInterface {
         public CodecSample(BufferInfo bufferInfo, byte[] bytes) {
             this.bufferInfo = bufferInfo;
             this.bytes = bytes;
-        }
-
-        public CodecSample(BufferInfo bufferInfo, ByteBuffer byteBuffer) {
-            this.bufferInfo = bufferInfo;
-            this.bytes = new byte[byteBuffer.remaining()];
-            byteBuffer.get(this.bytes);
         }
 
         @Override

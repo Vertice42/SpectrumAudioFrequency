@@ -126,14 +126,11 @@ public class dbDecoderManager extends SQLiteOpenHelper {
 
     public int getNumberOfSamples() {
         if (NumberOfSamples == 0) {
-            String selection = SamplesTable.SAMPLE_PIECE + " = ?";
-            String[] selectionArgs = {""};
-
             Cursor query = sqLiteDatabase.query(
                     MediaName,          // The table to query
                     null,      // The array of columns to return (pass null to get all)
-                    selection,              // The columns for the WHERE clause
-                    selectionArgs,          // The values for the WHERE clause
+                    null,              // The columns for the WHERE clause
+                    null,          // The values for the WHERE clause
                     null,          // don't group the rows
                     null,           // don't filter by row groups
                     null           // The sort order

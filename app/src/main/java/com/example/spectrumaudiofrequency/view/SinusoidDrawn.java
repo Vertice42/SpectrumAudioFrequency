@@ -25,7 +25,7 @@ import java.io.FileOutputStream;
 import java.util.Date;
 import java.util.concurrent.ForkJoinPool;
 
-import static com.example.spectrumaudiofrequency.sinusoid_converter.SamplingResize.ResizeSampling;
+import static com.example.spectrumaudiofrequency.sinusoid_converter.SamplingResize.ResizeSample;
 
 public class SinusoidDrawn {
     private static final String Folder = "WavePieces";
@@ -437,7 +437,7 @@ public class SinusoidDrawn {
             if (SampleChannels[0].length > 10) {
                 // DrawAnalyzer(canvas, SampleChannels[0], Time, SampleDuration, Height / 2f, Height / 2f);
                 DrawSinusoid(canvas, SampleChannels[0], Height / 1.3f, Color.BLUE, Height / 2f);
-                DrawSinusoid(canvas, ResizeSampling(SampleChannels[0], (int) (SampleChannels[0].length / 2)), Height / 2.5f, Color.BLACK, Height / 2f);
+                DrawSinusoid(canvas, ResizeSample(SampleChannels[0], (int) (SampleChannels[0].length / 2.2f)), Height / 2.5f, Color.BLACK, Height / 2f);
 
                 //DrawWave(canvas, resizeSinusoid(SampleChannels[0], Width), Height / 3f, Color.BLACK, Height / 2f);
 

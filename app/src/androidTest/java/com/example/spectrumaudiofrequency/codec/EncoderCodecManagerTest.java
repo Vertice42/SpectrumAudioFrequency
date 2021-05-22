@@ -1,7 +1,6 @@
 package com.example.spectrumaudiofrequency.codec;
 
 import android.content.Context;
-import android.media.MediaCodec;
 import android.media.MediaExtractor;
 import android.media.MediaFormat;
 import android.util.Log;
@@ -28,6 +27,7 @@ import static com.example.spectrumaudiofrequency.util.Files.getUriFromResourceId
 public class EncoderCodecManagerTest {
     private static final int TEST_RAW_ID = R.raw.stardew_valley;
     private final EncoderCodecManager Encoder;
+    int SampleDuration = 2000;
 
     public EncoderCodecManagerTest() throws IOException {
         Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();
@@ -44,7 +44,8 @@ public class EncoderCodecManagerTest {
         Log.i("oldFormat", oldFormat.toString());
         Log.i("newFormat", newFormat.toString());
 
-        this.Encoder = new EncoderCodecManager(newFormat);
+        Encoder = new EncoderCodecManager(newFormat);
+        Encoder.setSampleDuration(SampleDuration);
     }
 
     private boolean AlreadyCoded(ArrayList<TestResult> testResults, long SampleTime) {
@@ -65,19 +66,17 @@ public class EncoderCodecManagerTest {
         byte[] inputData = new byte[Encoder.getInputBufferLimit()];
         for (int i = 0; i < inputData.length; i++) inputData[i] = (byte) (i + i / 2);
 
-        int Samples = 100;
-        int SampleDuration = 25000;
-        Encoder.addEncoderListener(codecSample -> {
-
+        int NumberOfSamples = 100;
+        Encoder.addEncoderOutputListener(codecSample -> {
             CalculatePerformance.LogPercentage("EncoderProgress",
                     codecSample.bufferInfo.presentationTimeUs,
-                    Samples * SampleDuration);
+                    NumberOfSamples * SampleDuration);
 
             boolean IsError = false;
             String message = "";
             if (codecSample.bytes.length < 1) {
                 IsError = true;
-                message += " Sample Samples == 0";
+                message += " Sample NumberOfSamples == 0";
             }
             long timeUs = codecSample.bufferInfo.presentationTimeUs;
 
@@ -85,37 +84,18 @@ public class EncoderCodecManagerTest {
                 IsError = true;
                 message += " Sample Already Encoded " + timeUs;
             }
+            message += codecSample.bufferInfo.presentationTimeUs;
             testResults.add(new TestResult(IsError, timeUs, message));
         });
+        Encoder.addFinishListener(signal::countDown);
 
-        for (int i = 0; i < Samples - 1; i++) {
-            MediaCodec.BufferInfo bufferInfo = new MediaCodec.BufferInfo();
-            bufferInfo.set(0,
-                    inputData.length,
-                    i * SampleDuration,
-                    MediaCodec.BUFFER_FLAG_KEY_FRAME);
-            Encoder.addPutInputRequest(bufferInfo, inputData);
-        }
-
-        //add final Request with a no complete buffer and a BUFFER_FLAG_END_OF_STREAM flag
-        byte[] lastInputData = new byte[inputData.length / 2];
-        MediaCodec.BufferInfo bufferInfo = new MediaCodec.BufferInfo();
-        bufferInfo.set(0,
-                lastInputData.length,
-                Samples * SampleDuration,
-                MediaCodec.BUFFER_FLAG_END_OF_STREAM);
-
-        Encoder.addPutInputRequest(bufferInfo, lastInputData);
-
+        for (int i = 0; i < NumberOfSamples; i++) Encoder.addPutInputRequest(inputData);
         Encoder.stop();
-
-        Encoder.addOnFinishListener(signal::countDown);
 
         signal.await();
 
         for (int i = 0; i < testResults.size(); i++)
             Log.i("testResult", testResults.size() + " results " + testResults.get(i).toString());
-
 
         for (int i = 0; i < testResults.size(); i++) {
             TestResult testResult = testResults.get(i);
@@ -125,14 +105,16 @@ public class EncoderCodecManagerTest {
             }
         }
 
-        Assert.assertEquals(testResults.size(), Samples);
+        Log.i("testResults", testResults.toString());
+
+        Assert.assertEquals(testResults.size(), NumberOfSamples);
     }
 
     @Test
     public void removeListenersTests() {
         CodecManager.CodecFinishListener codecFinishListener = () ->
                 Log.e("removeListenerErro", "lambda should not be called: ");
-        Encoder.addOnFinishListener(codecFinishListener);
+        Encoder.addFinishListener(codecFinishListener);
         Encoder.removeOnFinishListener(codecFinishListener);
         Assert.assertEquals(0, Encoder.getFinishListenerSize());
 
@@ -144,8 +126,8 @@ public class EncoderCodecManagerTest {
 
         CodecManager.ResultPromiseListener resultPromiseListener = codecSample ->
                 Log.e("removeOutputListenerError", "lambda should not be called: ");
-        Encoder.addEncoderListener(resultPromiseListener);
-        Encoder.removeOutputListener(resultPromiseListener);
+        Encoder.addEncoderOutputListener(resultPromiseListener);
+        Encoder.removeEncoderOutputListener(resultPromiseListener);
         Assert.assertEquals(0, Encoder.getEncoderPromisesSize());
     }
 }

@@ -57,7 +57,7 @@ public class SoundAnalyzer {
     }
 
     public void setOnFinish(SoundAnalyzerListener soundAnalyzerListener) {
-        decoderManagerWithStorage.addOnFinishListener(() ->
+        decoderManagerWithStorage.addFinishListener(() ->
                 soundAnalyzerListener.OnFinishedAnalysis(audioPeakAnalyzer.peaks));
     }
 

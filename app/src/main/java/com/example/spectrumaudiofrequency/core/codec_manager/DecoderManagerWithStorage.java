@@ -40,7 +40,7 @@ public class DecoderManagerWithStorage extends DecoderManager {
 
             if (request.RequiredSampleId == decoderResult.SampleId) {
                 RequestsPromises.remove(request);
-                request.DecoderListener.OnProceed(decoderResult);
+                request.DecodingListener.onDecoded(decoderResult);
             } else if (request.RequiredSampleId < decoderResult.SampleId || IsDecoded) {
                 RequestsPromises.remove(request);
                 addRequest(request);
@@ -57,23 +57,22 @@ public class DecoderManagerWithStorage extends DecoderManager {
             MediaSpecs mediaSpecs = dbOfDecoder.getMediaSpecs();
             this.TrueMediaDuration = mediaSpecs.TrueMediaDuration;
             this.NewSampleDuration = (int) mediaSpecs.SampleDuration;
+            this.NewSampleSize = mediaSpecs.SampleSize;
         }
 
-        addOnDecodeListener(decoderResult -> {
+        addDecodingListener(decoderResult -> {
             dbOfDecoder.addSamplePiece(decoderResult.SampleId, decoderResult.bytes);
             KeepPromises(decoderResult);
         });
 
-        addOnFinishListener(() -> {
-            dbOfDecoder.setDecoded(
-                    new MediaSpecs(MediaName,
-                            getTrueMediaDuration(),
-                            NewSampleDuration,
-                            getNewSampleSize()));
+        addFinishListener(() -> {
+            dbOfDecoder.setDecoded(new MediaSpecs(MediaName,
+                    getTrueMediaDuration(),
+                    NewSampleDuration,
+                    getNewSampleSize()));
             KeepPromises(new DecoderResult(getNumberOfSamples(), null, null));
         });
     }
-
 
     @Override
     public int getNumberOfSamples() {
@@ -92,9 +91,11 @@ public class DecoderManagerWithStorage extends DecoderManager {
             bufferInfo.set(0, dbSampleBytes.length,
                     ((long) periodRequest.RequiredSampleId * NewSampleDuration),
                     BUFFER_FLAG_KEY_FRAME);
-            periodRequest.DecoderListener.OnProceed(new DecoderResult(periodRequest.RequiredSampleId, dbSampleBytes, bufferInfo));
+            periodRequest.DecodingListener.onDecoded(new
+                    DecoderResult(periodRequest.RequiredSampleId, dbSampleBytes, bufferInfo));
         } else if (IsDecoded) {
-            periodRequest.DecoderListener.OnProceed(new DecoderResult(periodRequest.RequiredSampleId, null, null));
+            periodRequest.DecodingListener.onDecoded(new DecoderResult
+                    (periodRequest.RequiredSampleId, new byte[0], null));
         } else RequestsPromises.add(periodRequest);
     }
 

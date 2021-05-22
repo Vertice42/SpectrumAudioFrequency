@@ -20,7 +20,7 @@ import java.util.Random;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ForkJoinPool;
 
-import static com.example.spectrumaudiofrequency.core.codec_manager.DecoderManager.DecoderResult.joiningSampleChannels;
+import static com.example.spectrumaudiofrequency.core.codec_manager.DecoderManager.DecoderResult.SampleChannelsToBytes;
 import static com.example.spectrumaudiofrequency.core.codec_manager.DecoderManager.DecoderResult.separateSampleChannels;
 
 @RunWith(AndroidJUnit4.class)
@@ -33,7 +33,7 @@ public class DecoderCodecManagerTest {
     public DecoderCodecManagerTest() {
         Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();
 
-        int id = R.raw.choose;
+        int id = R.raw.simcity1;// todo lmnrete para o futuroooo: a sigle thered parece star sento parada por alguma coisa? la na
         decoder = new DecoderManager(context, id);
         forkJoinPool = ForkJoinPool.commonPool();
     }
@@ -48,7 +48,7 @@ public class DecoderCodecManagerTest {
             if (TimeOutPass) CountTimeout(countDownLatch);
             else {
                 Log.e("countDownLatch", "Time Limit ");
-                countDownLatch.countDown();
+                //countDownLatch.countDown();
             }
             TimeOutPass = false;
         });
@@ -68,7 +68,8 @@ public class DecoderCodecManagerTest {
         ArrayList<TestResult> testResults = new ArrayList<>();
         CountDownLatch countDownLatch = new CountDownLatch(1);
 
-        decoder.addOnDecodeListener(decoderResult -> {
+        decoder.addDecodingListener(decoderResult -> {
+            Log.i("TAG", "start of call ");
             long presentationTimeUs = decoderResult.bufferInfo.presentationTimeUs;
 
             CalculatePerformance.LogPercentage("DecoderProgress",
@@ -88,9 +89,10 @@ public class DecoderCodecManagerTest {
 
             TimeOutPass = true;
             testResults.add(new TestResult(IsError, presentationTimeUs, message));
+            Log.i("TAG", "end of call ");
         });
 
-        decoder.addOnFinishListener(() -> {
+        decoder.addFinishListener(() -> {
             Log.i("OnFinishListener", "Finish");
             countDownLatch.countDown();
         });
@@ -111,10 +113,10 @@ public class DecoderCodecManagerTest {
     }
 
     public void removeOutputListener() {
-        DecoderManager.OnDecodedListener onDecodedListener = codecSample ->
+        DecoderManager.DecodingListener decodingListener = codecSample ->
                 Log.e("removeOutputListenerError", "lambda should not be called: ");
-        decoder.addOnDecodeListener(onDecodedListener);
-        decoder.removeOnDecodeListener(onDecodedListener);
+        decoder.addDecodingListener(decodingListener);
+        decoder.removeOnDecodeListener(decodingListener);
         Assert.assertEquals(0, decoder.getDecodeListenersListSize());
     }
 
@@ -126,7 +128,7 @@ public class DecoderCodecManagerTest {
         random.nextBytes(original);
 
         short[][] separateSample = separateSampleChannels(original, ChannelsNumber);
-        byte[] unitedSample = joiningSampleChannels(separateSample, ChannelsNumber);
+        byte[] unitedSample = SampleChannelsToBytes(separateSample, ChannelsNumber);
 
         Log.i("byte[] original", Arrays.toString(original));
         Log.i("separate", Arrays.deepToString(separateSample));
