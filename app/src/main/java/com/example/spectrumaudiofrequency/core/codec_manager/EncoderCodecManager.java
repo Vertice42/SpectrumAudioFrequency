@@ -1,6 +1,5 @@
 package com.example.spectrumaudiofrequency.core.codec_manager;
 
-import android.media.MediaCodec;
 import android.media.MediaCodec.BufferInfo;
 import android.media.MediaFormat;
 
@@ -10,7 +9,8 @@ import java.util.ArrayList;
 
 public class EncoderCodecManager extends CodecManager {
     private final ArrayList<ResultPromiseListener> ResultsPromises = new ArrayList<>();
-    private final ByteQueue byteQueue = new ByteQueue();//todo realocasão pode gerar erros já que as amostras na verdade são shorts , com o numeo de canais > 2 > 5 refatorar
+    private final ByteQueue byteQueue = new ByteQueue(1024 * 5000);
+
     private final int SampleSize;
     private int SampleDuration;
     private long PresentationTimeUs = 0;
@@ -25,16 +25,17 @@ public class EncoderCodecManager extends CodecManager {
     }
 
     public synchronized void addPutInputRequest(byte[] data) {
-        byteQueue.add(data);
-        if (byteQueue.size() >= this.getInputBufferLimit()) {
-            byte[] bytes = byteQueue.peekList(this.getInputBufferLimit());
-            putOnBuffer(MediaCodec.BUFFER_FLAG_KEY_FRAME, bytes);
+        byteQueue.put(data);
+        int inputBufferLimit = this.getInputBufferLimit();
+        if (byteQueue.size() >= inputBufferLimit) {
+            byte[] bytes = byteQueue.pollList(inputBufferLimit);
+            addInputBufferIdRequest(false, bytes);
         } else if (IsStopped) {
             while (byteQueue.size() > 0) {
-                int flags = MediaCodec.BUFFER_FLAG_KEY_FRAME;
-                byte[] bytes = byteQueue.peekList(this.getInputBufferLimit());
-                if (byteQueue.size() == 0) flags = MediaCodec.BUFFER_FLAG_END_OF_STREAM;
-                putOnBuffer(flags, bytes);
+                int size = byteQueue.size();
+                if (size >= inputBufferLimit) size = inputBufferLimit;
+                byte[] bytes = byteQueue.pollList(inputBufferLimit);
+                addInputBufferIdRequest(true, bytes);
             }
         }
     }
@@ -44,35 +45,43 @@ public class EncoderCodecManager extends CodecManager {
             ResultsPromises.get(i).onKeep(codecSample);
     }
 
-    private void putOnBuffer(int Flags, byte[] data) {
-        this.addInputIdRequest(InputID -> {
+    public void putData(int InputBufferId, boolean LastSample, byte[] data) {
+        if (byteQueue.size() >= getInputBufferLimit() || LastSample) {
             BufferInfo bufferInfo = new BufferInfo();
-
-            bufferInfo.set(0, SampleSize, PresentationTimeUs, Flags);
+            bufferInfo.set(0, SampleSize, PresentationTimeUs, 0);
             addOrderlyOutputPromise(new OutputPromise(bufferInfo.presentationTimeUs,
                     this::keepResultPromises));
 
-            if (Flags == MediaCodec.BUFFER_FLAG_END_OF_STREAM) {
+            if (LastSample) {
                 double bytesDuration = SampleDuration / (double) SampleSize;
                 PresentationTimeUs += data.length * bytesDuration;
             } else {
                 PresentationTimeUs += SampleDuration;
             }
-
-            getInputBuffer(InputID).put(data);
-            processInput(new CodecManagerRequest(InputID, bufferInfo));
-        });
+            getInputBuffer(InputBufferId).put(data);
+            processInput(new CodecManagerRequest(InputBufferId, bufferInfo));
+        } else {
+            GiveBackInputID(InputBufferId);
+        }
     }
 
-    public void addEncoderOutputListener(ResultPromiseListener resultPromiseListener) {
+    private void addInputBufferIdRequest(boolean LastSample, byte[] data) {
+        this.addInputIdRequest(InputID -> putData(InputID, LastSample, data));
+    }
+
+    public void addEncoderOutputPromise(ResultPromiseListener resultPromiseListener) {
         ResultsPromises.add(resultPromiseListener);
     }
 
-    public void removeEncoderOutputListener(ResultPromiseListener resultPromiseListener) {
+    public void removeEncoderOutputPromise(ResultPromiseListener resultPromiseListener) {
         ResultsPromises.remove(resultPromiseListener);
     }
 
     public int getEncoderPromisesSize() {
         return ResultsPromises.size();
+    }
+
+    public MediaFormat getOutputFormat() {
+        return super.getOutputFormat();
     }
 }

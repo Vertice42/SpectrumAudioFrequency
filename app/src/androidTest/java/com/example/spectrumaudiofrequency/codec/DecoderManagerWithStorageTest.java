@@ -33,7 +33,7 @@ public class DecoderManagerWithStorageTest {
     public DecoderManagerWithStorageTest() {
         Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();
 
-        int id = R.raw.choose;
+        int id = R.raw.hollow;
         decoderManagerWithStorage = new DecoderManagerWithStorage(context, id);
         forkJoinPool = ForkJoinPool.commonPool();
 
@@ -83,15 +83,13 @@ public class DecoderManagerWithStorageTest {
 
         int numberOfSamples = decoderManagerWithStorage.getNumberOfSamples();
         Assert.assertTrue(numberOfSamples > 0);
-
-        decoderManagerWithStorage.addDecodingListener(decoderResult ->
-                CalculatePerformance.LogPercentage("DecoderProgress",
-                        decoderResult.bufferInfo.presentationTimeUs,
-                        decoderManagerWithStorage.getTrueMediaDuration()));
-
+        CalculatePerformance calculatePerformance = new CalculatePerformance(("DecoderWithStorage"));
         for (int i = 0; i < numberOfSamples; i++) {
             decoderManagerWithStorage.addRequest(new PeriodRequest(i, decoderResult -> {
                 TimeOutPass = true;
+                calculatePerformance.stop(decoderResult.bufferInfo.presentationTimeUs,
+                        decoderManagerWithStorage.getTrueMediaDuration()).logPerformance();
+                calculatePerformance.start();
 
                 String message = verifyErrorsInDecodeResult(decoderResult);
                 long presentationTimeUs = -1;
@@ -112,7 +110,7 @@ public class DecoderManagerWithStorageTest {
                 decoderManagerWithStorage.addRequest(new PeriodRequest((numberOfSamples + 1),
                         decoderResult -> wantingResultOfRequest.countDown())));
 
-        decoderManagerWithStorage.startDecoding();
+        decoderManagerWithStorage.start();
 
         CountTimeout(wantingResultOfRequest);
 
@@ -129,6 +127,7 @@ public class DecoderManagerWithStorageTest {
         }
     }
 
+    @Test
     public void removeOutputListener() {
         DecoderManager.DecodingListener decodingListener = codecSample ->
                 Log.e("removeOutputListenerError", "lambda should not be called: ");
@@ -139,6 +138,6 @@ public class DecoderManagerWithStorageTest {
 
     @After
     public void clear() {
-        decoderManagerWithStorage.clear();
+        //decoderManagerWithStorage.clear();
     }
 }

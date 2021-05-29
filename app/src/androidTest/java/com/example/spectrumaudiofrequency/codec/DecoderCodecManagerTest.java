@@ -26,14 +26,14 @@ import static com.example.spectrumaudiofrequency.core.codec_manager.DecoderManag
 @RunWith(AndroidJUnit4.class)
 public class DecoderCodecManagerTest {
     private static final long MAX_TIME_OUT = 50000;
+    final int id = R.raw.hollow;
     private final ForkJoinPool forkJoinPool;
     private final DecoderManager decoder;
+    private final boolean TimeOutON = false;
     private boolean TimeOutPass = false;
 
     public DecoderCodecManagerTest() {
         Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();
-
-        int id = R.raw.simcity1;// todo lmnrete para o futuroooo: a sigle thered parece star sento parada por alguma coisa? la na
         decoder = new DecoderManager(context, id);
         forkJoinPool = ForkJoinPool.commonPool();
     }
@@ -48,7 +48,7 @@ public class DecoderCodecManagerTest {
             if (TimeOutPass) CountTimeout(countDownLatch);
             else {
                 Log.e("countDownLatch", "Time Limit ");
-                //countDownLatch.countDown();
+                if (TimeOutON) countDownLatch.countDown();
             }
             TimeOutPass = false;
         });
@@ -57,8 +57,9 @@ public class DecoderCodecManagerTest {
     private boolean AlreadyDecoded(ArrayList<TestResult> testResults, long SampleTime) {
         for (int i = 0; i < testResults.size(); i++) {
             TestResult testResult = testResults.get(i);
-            if (testResult.SampleTime == SampleTime) return true;
-            else if (testResult.SampleTime > SampleTime) return false;
+            if (testResult != null)
+                if (testResult.SampleTime == SampleTime) return true;
+                else if (testResult.SampleTime > SampleTime) return false;
         }
         return false;
     }
@@ -68,13 +69,14 @@ public class DecoderCodecManagerTest {
         ArrayList<TestResult> testResults = new ArrayList<>();
         CountDownLatch countDownLatch = new CountDownLatch(1);
 
+        CalculatePerformance calculatePerformance = new CalculatePerformance("Decoder");
+
         decoder.addDecodingListener(decoderResult -> {
-            Log.i("TAG", "start of call ");
             long presentationTimeUs = decoderResult.bufferInfo.presentationTimeUs;
 
-            CalculatePerformance.LogPercentage("DecoderProgress",
-                    presentationTimeUs,
-                    decoder.getTrueMediaDuration());
+            calculatePerformance.stop(presentationTimeUs,
+                    decoder.getTrueMediaDuration()).logPerformance();
+            calculatePerformance.start();
 
             boolean IsError = false;
             String message = "";
@@ -89,17 +91,13 @@ public class DecoderCodecManagerTest {
 
             TimeOutPass = true;
             testResults.add(new TestResult(IsError, presentationTimeUs, message));
-            Log.i("TAG", "end of call ");
         });
 
-        decoder.addFinishListener(() -> {
-            Log.i("OnFinishListener", "Finish");
-            countDownLatch.countDown();
-        });
+        decoder.addFinishListener(countDownLatch::countDown);
 
         CountTimeout(countDownLatch);
         decoder.setNewSampleDuration(25000);
-        decoder.startDecoding();
+        decoder.start();
 
         countDownLatch.await();
         Assert.assertTrue(testResults.size() > 0);
@@ -120,7 +118,6 @@ public class DecoderCodecManagerTest {
         Assert.assertEquals(0, decoder.getDecodeListenersListSize());
     }
 
-    @Test
     public void separateAndJoiningSampleChannelsTest() {
         byte[] original = new byte[16];
         int ChannelsNumber = 2;

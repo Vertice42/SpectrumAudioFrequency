@@ -43,16 +43,18 @@ public class SoundAnalyzer {
 
     private void getAudioSampleAndAnalise(AudioPeakAnalyzer audioPeakAnalyzer, int SampleId) {
         decoderManagerWithStorage.addRequest(new PeriodRequest(SampleId, decoderResult -> {
-            long sampleTime = decoderResult.bufferInfo.presentationTimeUs;
-            short[][] sampleChannels = separateSampleChannels(decoderResult.bytes,
-                    decoderManagerWithStorage.ChannelsNumber);
+            if (decoderResult.bufferInfo != null) {
+                long sampleTime = decoderResult.bufferInfo.presentationTimeUs;
+                short[][] sampleChannels = separateSampleChannels(decoderResult.bytes,
+                        decoderManagerWithStorage.ChannelsNumber);
 
-            audioPeakAnalyzer.analyzeData(sampleChannels[0], SampleId, SAMPLE_DURATION);
-            long trueMediaDuration = decoderManagerWithStorage.getTrueMediaDuration();
-            float progress = ((float) sampleTime / trueMediaDuration) * 100f;
-            Poll.execute(() -> progressListener.OnProgressChange(progress));
-            if (sampleTime < trueMediaDuration)
-                getAudioSampleAndAnalise(audioPeakAnalyzer, SampleId + 1);
+                audioPeakAnalyzer.analyzeData(sampleChannels[0], SampleId, SAMPLE_DURATION);
+                long trueMediaDuration = decoderManagerWithStorage.getTrueMediaDuration();
+                float progress = ((float) sampleTime / trueMediaDuration) * 100f;
+                Poll.execute(() -> progressListener.OnProgressChange(progress));
+                if (sampleTime < trueMediaDuration)
+                    getAudioSampleAndAnalise(audioPeakAnalyzer, SampleId + 1);
+            }
         }));
     }
 
@@ -62,7 +64,7 @@ public class SoundAnalyzer {
     }
 
     public void start() {
-        if (!decoderManagerWithStorage.IsDecoded) decoderManagerWithStorage.startDecoding();
+        if (!decoderManagerWithStorage.IsDecoded) decoderManagerWithStorage.start();
         getAudioSampleAndAnalise(audioPeakAnalyzer, 0);
     }
 

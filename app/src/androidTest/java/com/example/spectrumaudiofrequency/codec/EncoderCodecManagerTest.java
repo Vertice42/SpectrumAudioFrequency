@@ -67,10 +67,12 @@ public class EncoderCodecManagerTest {
         for (int i = 0; i < inputData.length; i++) inputData[i] = (byte) (i + i / 2);
 
         int NumberOfSamples = 100;
-        Encoder.addEncoderOutputListener(codecSample -> {
-            CalculatePerformance.LogPercentage("EncoderProgress",
-                    codecSample.bufferInfo.presentationTimeUs,
-                    NumberOfSamples * SampleDuration);
+        Encoder.addEncoderOutputPromise(codecSample -> {
+
+            CalculatePerformance calculatePerformance = new CalculatePerformance("Encode");
+            calculatePerformance.stop(codecSample.bufferInfo.presentationTimeUs,
+                    Encoder.MediaDuration).logPerformance();
+            calculatePerformance.start();
 
             boolean IsError = false;
             String message = "";
@@ -94,9 +96,6 @@ public class EncoderCodecManagerTest {
 
         signal.await();
 
-        for (int i = 0; i < testResults.size(); i++)
-            Log.i("testResult", testResults.size() + " results " + testResults.get(i).toString());
-
         for (int i = 0; i < testResults.size(); i++) {
             TestResult testResult = testResults.get(i);
             if (testResult.IsError) {
@@ -112,8 +111,8 @@ public class EncoderCodecManagerTest {
 
     @Test
     public void removeListenersTests() {
-        CodecManager.CodecFinishListener codecFinishListener = () ->
-                Log.e("removeListenerErro", "lambda should not be called: ");
+        Runnable codecFinishListener = () ->
+                Log.e("removeListenerError", "lambda should not be called: ");
         Encoder.addFinishListener(codecFinishListener);
         Encoder.removeOnFinishListener(codecFinishListener);
         Assert.assertEquals(0, Encoder.getFinishListenerSize());
@@ -126,8 +125,8 @@ public class EncoderCodecManagerTest {
 
         CodecManager.ResultPromiseListener resultPromiseListener = codecSample ->
                 Log.e("removeOutputListenerError", "lambda should not be called: ");
-        Encoder.addEncoderOutputListener(resultPromiseListener);
-        Encoder.removeEncoderOutputListener(resultPromiseListener);
+        Encoder.addEncoderOutputPromise(resultPromiseListener);
+        Encoder.removeEncoderOutputPromise(resultPromiseListener);
         Assert.assertEquals(0, Encoder.getEncoderPromisesSize());
     }
 }

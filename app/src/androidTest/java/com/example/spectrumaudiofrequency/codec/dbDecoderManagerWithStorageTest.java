@@ -34,7 +34,7 @@ public class dbDecoderManagerWithStorageTest {
 
         int SampleId = 55;
 
-        dbManager.addSamplePiece(SampleId, bytesToTest);
+        dbManager.add(SampleId, bytesToTest);
         byte[] dbSamplePiece = dbManager.getSamplePiece(SampleId);
         dbManager.deleteSamplePiece(SampleId);
 

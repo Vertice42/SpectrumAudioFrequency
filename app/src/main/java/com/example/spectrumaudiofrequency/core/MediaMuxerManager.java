@@ -12,11 +12,15 @@ import android.util.Log;
 
 import androidx.annotation.RequiresApi;
 
+import com.example.spectrumaudiofrequency.core.codec_manager.MediaFormatConverter;
+
 import org.jetbrains.annotations.NotNull;
 
 import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+
+import static android.media.MediaCodec.BUFFER_FLAG_KEY_FRAME;
 
 @RequiresApi(api = Build.VERSION_CODES.M)
 public class MediaMuxerManager {
@@ -28,30 +32,9 @@ public class MediaMuxerManager {
 
     private long outPutDuration;
     private ByteBuffer inputBuffer;
-    private MediaFormat ExternalMediaFormat;
-    private int ExternalMediaFormatId;
+    private int ExternalMediaTrackId;
     private boolean IsPrepared = false;
-
-    public static class Cutoff {
-        public long starTime;
-        public long endTime;
-
-        public Cutoff(long starTime, long endTime) {
-            this.starTime = starTime;
-            this.endTime = endTime;
-        }
-
-        public long getTimeSkip() {
-            return endTime - starTime;
-        }
-
-        @Override
-        public @NotNull String toString() {
-            return "Cutoff{" +
-                    "time=" + starTime +
-                    '}';
-        }
-    }
+    private int VideoTrackId;
 
     public MediaMuxerManager(Context context, Uri VideoUri) {
 
@@ -79,9 +62,8 @@ public class MediaMuxerManager {
 
     public void prepare(Cutoff[] cutoffs, MediaFormat ExternalMediaFormat) {
 
-        inputBuffer = ByteBuffer.allocate(500 * 1024);
+        inputBuffer = ByteBuffer.allocate(1024 * 5000);
 
-        this.ExternalMediaFormat = ExternalMediaFormat;
         this.cutoffs = cutoffs;
 
         String outputPath = createFile("test.mp4");
@@ -103,10 +85,10 @@ public class MediaMuxerManager {
             VideoFormat.setLong(MediaFormat.KEY_DURATION, outPutDuration);
         }
 
-        mediaMuxer.addTrack(VideoFormat);
+        VideoTrackId = mediaMuxer.addTrack(VideoFormat);
 
         if (ExternalMediaFormat != null) {
-            ExternalMediaFormatId = mediaMuxer.addTrack(ExternalMediaFormat);
+            ExternalMediaTrackId = mediaMuxer.addTrack(ExternalMediaFormat);
         }
 
         mediaMuxer.start();
@@ -139,7 +121,7 @@ public class MediaMuxerManager {
         return null;
     }
 
-    public void putExtractorData() {
+    public void putExtractorData(MediaFormatConverter.MediaFormatConverterFinishListener mediaFormatConverterFinishListener) {
         for (MediaExtractor mediaExtractor : mediaExtractors) mediaExtractor.selectTrack(0);
 
         long presentationTimeUs = mediaExtractors[0].getSampleTime();
@@ -152,24 +134,22 @@ public class MediaMuxerManager {
             float progress = ((float) presentationTimeUs / outPutDuration) * 100;
             int bufferSize = mediaExtractors[0].readSampleData(inputBuffer, 0);
 
+
             if (bufferSize > 0 && progress < 100) {
 
                 MediaCodec.BufferInfo bufferInfo = new MediaCodec.BufferInfo();
 
-                bufferInfo.set(0, bufferSize, presentationTimeUs,
-                        mediaExtractors[0].getSampleFlags());
+                bufferInfo.set(0, bufferSize, presentationTimeUs, BUFFER_FLAG_KEY_FRAME);
 
-                Log.i("Muxer progress",
+                Log.i("MuxerVideoProgress",
                         +progress + "%"
                                 + " presentationTimeUs: " + bufferInfo.presentationTimeUs
                                 + " mime:" + VideoFormat.getString(MediaFormat.KEY_MIME)
                                 + " flags " + bufferInfo.flags
-                                + " outPutDuration: " + outPutDuration
                                 + " bufferSize: " + bufferInfo.size
-                                + "sampleDuration" + sampleDuration + "microns"
                 );
 
-                mediaMuxer.writeSampleData(0, inputBuffer, bufferInfo);
+                writeSampleData(VideoTrackId, inputBuffer, bufferInfo);
 
                 sampleDuration = time_after - timeBefore;
                 presentationTimeUs += sampleDuration;
@@ -187,33 +167,48 @@ public class MediaMuxerManager {
             } else {
                 mediaExtractors[0].advance();
             }
-
             time_after = mediaExtractors[0].getSampleTime();
         }
+        mediaFormatConverterFinishListener.OnFinish();
     }
 
-    public ByteBuffer getInputBuffer() {
-        inputBuffer.clear();
-        return inputBuffer;
+    public synchronized void writeSampleData(int TrackId, ByteBuffer inputBuffer,
+                                             MediaCodec.BufferInfo bufferInfo) {
+        bufferInfo.flags = BUFFER_FLAG_KEY_FRAME;
+        // if (bufferInfo.presentationTimeUs != 0)
+        mediaMuxer.writeSampleData(TrackId, inputBuffer, bufferInfo);
     }
 
-    public void writeSampleData(MediaCodec.BufferInfo bufferInfo) {
-        writeSampleData(bufferInfo, inputBuffer);
-    }
-
-    public void writeSampleData(MediaCodec.BufferInfo bufferInfo, ByteBuffer inputBuffer) {
-        mediaMuxer.writeSampleData(ExternalMediaFormatId, inputBuffer, bufferInfo);
-    }
-
-    public void writeSampleData(MediaCodec.BufferInfo bufferInfo, byte[] data) {
+    public synchronized void writeSampleData(MediaCodec.BufferInfo bufferInfo, byte[] data) {
         inputBuffer.clear();
         inputBuffer.put(data);
-        mediaMuxer.writeSampleData(ExternalMediaFormatId, inputBuffer, bufferInfo);
+        writeSampleData(ExternalMediaTrackId, inputBuffer, bufferInfo);
     }
 
     public void stop() {
         mediaMuxer.stop();
         mediaMuxer.release();
+    }
+
+    public static class Cutoff {
+        public long starTime;
+        public long endTime;
+
+        public Cutoff(long starTime, long endTime) {
+            this.starTime = starTime;
+            this.endTime = endTime;
+        }
+
+        public long getTimeSkip() {
+            return endTime - starTime;
+        }
+
+        @Override
+        public @NotNull String toString() {
+            return "Cutoff{" +
+                    "time=" + starTime +
+                    '}';
+        }
     }
 
 }

@@ -5,8 +5,13 @@ import android.content.Context;
 import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteOpenHelper;
+import android.media.MediaCodec;
+
+import com.example.spectrumaudiofrequency.core.codec_manager.CodecManager;
 
 import org.jetbrains.annotations.NotNull;
+
+import static android.media.MediaCodec.BUFFER_FLAG_KEY_FRAME;
 
 
 public class dbDecoderManager extends SQLiteOpenHelper {
@@ -141,14 +146,24 @@ public class dbDecoderManager extends SQLiteOpenHelper {
         return NumberOfSamples;
     }
 
-    public byte[] getSamplePiece(long SamplePiece) {
-        Cursor cursor = getCursorSamplePiece(SamplePiece);
+    public byte[] getSamplePiece(int Id) {
+        Cursor cursor = getCursorSamplePiece(Id);
         byte[] blob = null;
         if (cursor.getCount() > 0)
             while (cursor.moveToNext())
                 blob = cursor.getBlob(cursor.getColumnIndex(SamplesTable.SAMPLE_DATA));
         cursor.close();
         return blob;
+    }
+
+    public CodecManager.CodecSample getCodecSample(int Id, int SampleDuration) {
+        byte[] sampleBytes = this.getSamplePiece(Id);
+        if (sampleBytes == null) return null;
+        MediaCodec.BufferInfo bufferInfo = new MediaCodec.BufferInfo();
+        bufferInfo.set(0, sampleBytes.length,
+                ((long) Id * SampleDuration),
+                BUFFER_FLAG_KEY_FRAME);
+        return new CodecManager.CodecSample(bufferInfo, sampleBytes);
     }
 
     public void deleteMediaDecoded(String MediaName) {
@@ -158,14 +173,14 @@ public class dbDecoderManager extends SQLiteOpenHelper {
         sqLiteDatabase.execSQL(SamplesTable.getDeleteEntries(MediaName));
     }
 
-    public boolean SampleAlreadyExistOnDataBase(int SamplePiece) {
+    public boolean SampleAlreadyExistOnDataBase(long SamplePiece) {
         Cursor cursor = getCursorSamplePiece(SamplePiece);
         boolean exist = cursor.getCount() > 0;
         cursor.close();
         return exist;
     }
 
-    public void addSamplePiece(int PieceSampleTime, byte[] bytes) {
+    public void add(long PieceSampleTime, byte[] bytes) {
         if (!SampleAlreadyExistOnDataBase(PieceSampleTime)) {//todo ineficiaen al checar exit a cada nova interção
             ContentValues values = new ContentValues();
             values.put(SamplesTable.SAMPLE_PIECE, PieceSampleTime);

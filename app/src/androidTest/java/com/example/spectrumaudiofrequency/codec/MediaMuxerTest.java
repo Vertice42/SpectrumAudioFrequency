@@ -1,6 +1,7 @@
 package com.example.spectrumaudiofrequency.codec;
 
 import android.content.Context;
+import android.media.MediaCodec;
 import android.media.MediaExtractor;
 import android.media.MediaFormat;
 import android.util.Log;
@@ -14,6 +15,7 @@ import com.example.spectrumaudiofrequency.core.codec_manager.CodecManager;
 import com.example.spectrumaudiofrequency.core.codec_manager.CodecManager.CodecSample;
 import com.example.spectrumaudiofrequency.core.codec_manager.MediaFormatConverter;
 import com.example.spectrumaudiofrequency.core.codec_manager.MediaFormatConverter.MediaFormatConverterListener;
+import com.example.spectrumaudiofrequency.util.CalculatePerformance;
 
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -26,7 +28,7 @@ import static com.example.spectrumaudiofrequency.util.Files.getUriFromResourceId
 
 @RunWith(AndroidJUnit4.class)
 public class MediaMuxerTest {
-    public static final int AudioId1 = R.raw.hollow;
+    public static final int AudioId1 = R.raw.stardew_valley_ost_distant_banjo;
     public static final int AudioId2 = R.raw.game_description;
 
     @Test
@@ -64,10 +66,13 @@ public class MediaMuxerTest {
 
         ArrayList<CodecSample> cacheOfSamples = new ArrayList<>();
 
+        CalculatePerformance performance = new CalculatePerformance("MuxTime");
         MediaFormatConverterListener PosMuxerStart = converterResult -> {
-            Log.i("ConverterProgress", (double)
-                    converterResult.bufferInfo.presentationTimeUs
-                    / FormatConverter.getMediaDuration() * 100 + "%");
+            converterResult.bufferInfo.flags = MediaCodec.BUFFER_FLAG_KEY_FRAME;
+            performance.stop(converterResult.bufferInfo.presentationTimeUs,
+                    FormatConverter.getMediaDuration())
+                    .logPerformance(" flag: " + converterResult.bufferInfo.flags + " size:" + converterResult.bufferInfo.size);
+            performance.start();
             MediaMuxerManager.writeSampleData(converterResult.bufferInfo, converterResult.bytes);
         };
 
@@ -95,7 +100,8 @@ public class MediaMuxerTest {
         MediaFormat outputFormat = FormatConverter.getOutputFormat();
         Log.i("outputFormat", outputFormat.toString());
         MediaMuxerManager.prepare(cutoffs, outputFormat);
-        MediaMuxerManager.putExtractorData();
+        FormatConverter.pause();
+        MediaMuxerManager.putExtractorData(FormatConverter::restart);
 
         signal.await();
     }

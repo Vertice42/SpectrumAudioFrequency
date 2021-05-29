@@ -8,38 +8,38 @@ import androidx.annotation.RequiresApi;
 
 import org.jetbrains.annotations.NotNull;
 
-import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Iterator;
+import java.util.LinkedList;
 import java.util.Objects;
 import java.util.Queue;
 import java.util.function.Consumer;
 
 interface QueueElement {
-    public long getIndex();
+    long getIndex();
 }
 
 public class SortedQueue implements Queue<QueueElement> {
-    private final ArrayList<QueueElement> codecSampleArrayList;
+    private final LinkedList<QueueElement> queueElements;
 
     public SortedQueue() {
-        codecSampleArrayList = new ArrayList<>();
+        queueElements = new LinkedList<>();
     }
 
     @Override
     public int size() {
-        return codecSampleArrayList.size();
+        return queueElements.size();
     }
 
     @Override
     public boolean isEmpty() {
-        return codecSampleArrayList.size() == 0;
+        return queueElements.size() == 0;
     }
 
     @Override
     public boolean contains(@Nullable Object o) {
-        for (int i = 0; i < codecSampleArrayList.size(); i++) {
-            if (Objects.equals(o, codecSampleArrayList.get(i))) return true;
+        for (int i = 0; i < queueElements.size(); i++) {
+            if (Objects.equals(o, queueElements.get(i))) return true;
         }
         return false;
     }
@@ -47,58 +47,51 @@ public class SortedQueue implements Queue<QueueElement> {
     @NonNull
     @Override
     public Iterator<QueueElement> iterator() {
-        return codecSampleArrayList.iterator();
+        return queueElements.iterator();
     }
 
     @RequiresApi(api = Build.VERSION_CODES.N)
     @Override
     public void forEach(@NonNull Consumer consumer) {
-        for (int i = 0; i < codecSampleArrayList.size(); i++)
-            consumer.accept(codecSampleArrayList.get(i));
+        for (int i = 0; i < queueElements.size(); i++)
+            consumer.accept(queueElements.get(i));
     }
 
     @NonNull
     @Override
     public QueueElement[] toArray() {
-        return (QueueElement[]) codecSampleArrayList.toArray();
+        return (QueueElement[]) queueElements.toArray();
     }
 
     @Override
     public QueueElement[] toArray(@NonNull Object[] a) {
-        return (QueueElement[]) codecSampleArrayList.toArray(a);
+        return (QueueElement[]) queueElements.toArray(a);
     }
 
     @Override
     public boolean add(QueueElement queueElement) {
         int i = 0;
-        while (i < codecSampleArrayList.size()) {
-            if (queueElement.getIndex() > codecSampleArrayList.get(i).getIndex()) i++;
+        while (i < queueElements.size()) {
+            if (queueElement.getIndex() > queueElements.get(i).getIndex()) i++;
             else break;
         }
-        codecSampleArrayList.add(i, (QueueElement) queueElement);
+        queueElements.add(i, (QueueElement) queueElement);
         return true;
-    }
-
-    public boolean add(Object[] codecSamples) {
-        boolean add = false;
-        for (Object codecSample : codecSamples)
-            add = codecSampleArrayList.add((QueueElement) codecSample);
-        return add;
     }
 
     @Override
     public boolean remove(@Nullable Object o) {
-        return codecSampleArrayList.remove(o);
+        return queueElements.remove(o);
     }
 
     @Override
     public boolean addAll(@NonNull Collection c) {
-        return codecSampleArrayList.addAll(c);
+        return queueElements.addAll(c);
     }
 
     @Override
     public void clear() {
-        codecSampleArrayList.clear();
+        queueElements.clear();
     }
 
     @Override
@@ -113,41 +106,42 @@ public class SortedQueue implements Queue<QueueElement> {
 
     @Override
     public boolean containsAll(@NonNull Collection c) {
-        return codecSampleArrayList.containsAll(c);
+        return queueElements.containsAll(c);
     }
 
     @Override
     public boolean offer(QueueElement o) {
-        return codecSampleArrayList.add((QueueElement) o);
+        return queueElements.add((QueueElement) o);
     }
 
     @Override
     public QueueElement remove() {
-        return codecSampleArrayList.remove(0);
+        return queueElements.remove(0);
     }
 
-    @Nullable
     @Override
     public QueueElement poll() {
-        QueueElement QueueElement = codecSampleArrayList.get(codecSampleArrayList.size() - 1);
-        codecSampleArrayList.remove(QueueElement);
-        return QueueElement;
+        return queueElements.poll();
+    }
+
+    public QueueElement pollFirst() {
+        return queueElements.pollFirst();
     }
 
     @Override
     public QueueElement element() {
-        return codecSampleArrayList.get(0);
+        return queueElements.get(0);
     }
 
     public QueueElement get(int index) {
-        return codecSampleArrayList.get(index);
+        return queueElements.get(index);
     }
 
     @Nullable
     @Override
     public QueueElement peek() {
-        QueueElement codecSample = codecSampleArrayList.get(0);
-        codecSampleArrayList.remove(codecSample);
+        QueueElement codecSample = queueElements.get(0);
+        queueElements.remove(codecSample);
         return codecSample;
     }
 
@@ -164,6 +158,6 @@ public class SortedQueue implements Queue<QueueElement> {
 
     @Override
     public @NotNull String toString() {
-        return codecSampleArrayList.toString();
+        return queueElements.toString();
     }
 }
