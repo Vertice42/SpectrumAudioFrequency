@@ -1,8 +1,10 @@
 package com.example.spectrumaudiofrequency.core.codec_manager;
 
+import android.media.MediaCodec;
 import android.media.MediaCodec.BufferInfo;
 import android.media.MediaFormat;
 
+import com.example.spectrumaudiofrequency.BuildConfig;
 import com.example.spectrumaudiofrequency.core.ByteQueue;
 
 import java.util.ArrayList;
@@ -11,8 +13,6 @@ public class EncoderCodecManager extends CodecManager {
     private final ArrayList<ResultPromiseListener> ResultsPromises = new ArrayList<>();
     private final ByteQueue byteQueue = new ByteQueue(1024 * 5000);
 
-    private final int SampleSize;
-    private int SampleDuration;
     private long PresentationTimeUs = 0;
 
     public EncoderCodecManager(MediaFormat mediaFormat) {
@@ -20,60 +20,54 @@ public class EncoderCodecManager extends CodecManager {
         this.SampleSize = getInputBufferLimit();
     }
 
-    public void setSampleDuration(int sampleDuration) {
-        SampleDuration = sampleDuration;
+    public void setSampleDuration(int SampleDuration) {
+        if (BuildConfig.DEBUG) assert SampleDuration != 0;
+        this.SampleDuration = SampleDuration;
     }
 
-    public synchronized void addPutInputRequest(byte[] data) {
+    public void addPutInputRequest(byte[] data) {
         byteQueue.put(data);
         int inputBufferLimit = this.getInputBufferLimit();
-        if (byteQueue.size() >= inputBufferLimit) {
+        if (byteQueue.getSize() >= inputBufferLimit) {
             byte[] bytes = byteQueue.pollList(inputBufferLimit);
-            addInputBufferIdRequest(false, bytes);
+            addPutInputRequest(false, bytes);
         } else if (IsStopped) {
-            while (byteQueue.size() > 0) {
-                int size = byteQueue.size();
-                if (size >= inputBufferLimit) size = inputBufferLimit;
+            while (byteQueue.getSize() > 0) {
                 byte[] bytes = byteQueue.pollList(inputBufferLimit);
-                addInputBufferIdRequest(true, bytes);
+                addPutInputRequest(true, bytes);
             }
         }
     }
 
     private void keepResultPromises(CodecSample codecSample) {
-        for (int i = 0; i < ResultsPromises.size(); i++)
-            ResultsPromises.get(i).onKeep(codecSample);
+        for (int i = 0; i < ResultsPromises.size(); i++) ResultsPromises.get(i).onKeep(codecSample);
     }
 
     public void putData(int InputBufferId, boolean LastSample, byte[] data) {
-        if (byteQueue.size() >= getInputBufferLimit() || LastSample) {
-            BufferInfo bufferInfo = new BufferInfo();
-            bufferInfo.set(0, SampleSize, PresentationTimeUs, 0);
-            addOrderlyOutputPromise(new OutputPromise(bufferInfo.presentationTimeUs,
-                    this::keepResultPromises));
+        BufferInfo bufferInfo = new BufferInfo();
+        bufferInfo.set(0, data.length, PresentationTimeUs, MediaCodec.BUFFER_FLAG_KEY_FRAME);
+        addOrderlyOutputPromise(new OutputPromise(bufferInfo.presentationTimeUs,
+                this::keepResultPromises));
 
-            if (LastSample) {
-                double bytesDuration = SampleDuration / (double) SampleSize;
-                PresentationTimeUs += data.length * bytesDuration;
-            } else {
-                PresentationTimeUs += SampleDuration;
-            }
-            getInputBuffer(InputBufferId).put(data);
-            processInput(new CodecManagerRequest(InputBufferId, bufferInfo));
+        if (LastSample) {
+            double bytesDuration = SampleDuration / (double) data.length;
+            PresentationTimeUs += data.length * bytesDuration;
         } else {
-            GiveBackInputID(InputBufferId);
+            PresentationTimeUs += SampleDuration;
         }
+        getInputBuffer(InputBufferId).put(data);
+        processInput(new CodecManagerRequest(InputBufferId, bufferInfo));
     }
 
-    private void addInputBufferIdRequest(boolean LastSample, byte[] data) {
+    private void addPutInputRequest(boolean LastSample, byte[] data) {
         this.addInputIdRequest(InputID -> putData(InputID, LastSample, data));
     }
 
-    public void addEncoderOutputPromise(ResultPromiseListener resultPromiseListener) {
+    private void addOutputPromise(ResultPromiseListener resultPromiseListener) {
         ResultsPromises.add(resultPromiseListener);
     }
 
-    public void removeEncoderOutputPromise(ResultPromiseListener resultPromiseListener) {
+    private void removeEncoderOutputPromise(ResultPromiseListener resultPromiseListener) {
         ResultsPromises.remove(resultPromiseListener);
     }
 

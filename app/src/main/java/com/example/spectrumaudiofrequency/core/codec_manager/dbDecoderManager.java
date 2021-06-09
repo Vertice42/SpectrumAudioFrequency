@@ -1,4 +1,4 @@
-package com.example.spectrumaudiofrequency.core.codec_manager.media_decoder;
+package com.example.spectrumaudiofrequency.core.codec_manager;
 
 import android.content.ContentValues;
 import android.content.Context;
@@ -7,26 +7,23 @@ import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteOpenHelper;
 import android.media.MediaCodec;
 
-import com.example.spectrumaudiofrequency.core.codec_manager.CodecManager;
-
 import org.jetbrains.annotations.NotNull;
 
 import static android.media.MediaCodec.BUFFER_FLAG_KEY_FRAME;
 
-
 public class dbDecoderManager extends SQLiteOpenHelper {
     public static final int DATABASE_VERSION = 2;
     public static final String DATABASE_NAME = "FeedReader.db";
-    private final String MediaName;
     private final SQLiteDatabase sqLiteDatabase;
+    private final DecoderManager decoder;
     private int NumberOfSamples = 0;
 
-    public dbDecoderManager(Context context, String MediaName) {
+    public dbDecoderManager(Context context, DecoderManager decoder) {
         super(context, DATABASE_NAME, null, DATABASE_VERSION);
-        this.MediaName = MediaName;
         sqLiteDatabase = this.getWritableDatabase();
+        this.decoder = decoder;
 
-        if (!TableExit(MediaName)) createMediaDecoded(MediaName);
+        if (!TableExit(decoder.MediaName)) createMediaDecoded(decoder.MediaName);
     }
 
     public void onCreate(SQLiteDatabase db) {
@@ -53,9 +50,9 @@ public class dbDecoderManager extends SQLiteOpenHelper {
         return exit;
     }
 
-    public boolean MediaIsDecoded(String MediaName) {
+    public boolean MediaIsDecoded() {
         String selection = DecodedMedias.MEDIA_NAME + " = ?";
-        String[] selectionArgs = {MediaName + ""};
+        String[] selectionArgs = {decoder.MediaName + ""};
 
         Cursor cursor = sqLiteDatabase.query(DecodedMedias.TABLE_NAME, null, selection,
                 selectionArgs, null, null, null);
@@ -70,7 +67,7 @@ public class dbDecoderManager extends SQLiteOpenHelper {
 
     public MediaSpecs getMediaSpecs() {
         String selection = DecodedMedias.MEDIA_NAME + " = ?";
-        String[] selectionArgs = {MediaName + ""};
+        String[] selectionArgs = {decoder.MediaName};
 
         Cursor cursor = sqLiteDatabase.query(DecodedMedias.TABLE_NAME, null, selection,
                 selectionArgs, null, null, null);
@@ -89,7 +86,7 @@ public class dbDecoderManager extends SQLiteOpenHelper {
         }
 
         cursor.close();
-        return new MediaSpecs(MediaName, trueMediaDuration, SampleIdDuration, SampleSize);
+        return new MediaSpecs(decoder.MediaName, trueMediaDuration, SampleIdDuration, SampleSize);
     }
 
     private void createMediaDecoded(String MediaName) {
@@ -101,9 +98,14 @@ public class dbDecoderManager extends SQLiteOpenHelper {
         sqLiteDatabase.insert(DecodedMedias.TABLE_NAME, null, values);
     }
 
-    public void setDecoded(MediaSpecs mediaSpecs) {
+    public void setDecoded() {
         String selection = DecodedMedias.MEDIA_NAME + " = ?";
-        String[] selectionArgs = {mediaSpecs.MediaName + ""};
+        String[] selectionArgs = {decoder.MediaName};
+
+        MediaSpecs mediaSpecs = new MediaSpecs(decoder.MediaName,
+                (long) decoder.getTrueMediaDuration(),
+                decoder.SampleDuration,
+                decoder.SampleSize);
 
         ContentValues values = new ContentValues();
         values.put(DecodedMedias.IS_COMPLETE, true);
@@ -119,7 +121,7 @@ public class dbDecoderManager extends SQLiteOpenHelper {
         String[] selectionArgs = {SamplePiece + ""};
 
         return sqLiteDatabase.query(
-                MediaName,          // The table to query
+                decoder.MediaName,          // The table to query
                 null,      // The array of columns to return (pass null to get all)
                 selection,              // The columns for the WHERE clause
                 selectionArgs,          // The values for the WHERE clause
@@ -132,7 +134,7 @@ public class dbDecoderManager extends SQLiteOpenHelper {
     public int getNumberOfSamples() {
         if (NumberOfSamples == 0) {
             Cursor query = sqLiteDatabase.query(
-                    MediaName,          // The table to query
+                    decoder.MediaName,          // The table to query
                     null,      // The array of columns to return (pass null to get all)
                     null,              // The columns for the WHERE clause
                     null,          // The values for the WHERE clause
@@ -156,21 +158,21 @@ public class dbDecoderManager extends SQLiteOpenHelper {
         return blob;
     }
 
-    public CodecManager.CodecSample getCodecSample(int Id, int SampleDuration) {
+    public CodecManager.CodecSample getCodecSample(int Id) {
         byte[] sampleBytes = this.getSamplePiece(Id);
         if (sampleBytes == null) return null;
         MediaCodec.BufferInfo bufferInfo = new MediaCodec.BufferInfo();
         bufferInfo.set(0, sampleBytes.length,
-                ((long) Id * SampleDuration),
+                ((long) Id * decoder.SampleDuration),
                 BUFFER_FLAG_KEY_FRAME);
         return new CodecManager.CodecSample(bufferInfo, sampleBytes);
     }
 
-    public void deleteMediaDecoded(String MediaName) {
+    public void clear() {
         String selection = DecodedMedias.MEDIA_NAME + " = ?";
-        String[] selectionArgs = {MediaName + ""};
+        String[] selectionArgs = {decoder.MediaName};
         sqLiteDatabase.delete(DecodedMedias.TABLE_NAME, selection, selectionArgs);
-        sqLiteDatabase.execSQL(SamplesTable.getDeleteEntries(MediaName));
+        sqLiteDatabase.execSQL(SamplesTable.getDeleteEntries(decoder.MediaName));
     }
 
     public boolean SampleAlreadyExistOnDataBase(long SamplePiece) {
@@ -185,7 +187,7 @@ public class dbDecoderManager extends SQLiteOpenHelper {
             ContentValues values = new ContentValues();
             values.put(SamplesTable.SAMPLE_PIECE, PieceSampleTime);
             values.put(SamplesTable.SAMPLE_DATA, bytes);
-            sqLiteDatabase.insert(MediaName, null, values);
+            sqLiteDatabase.insert(decoder.MediaName, null, values);
         }
     }
 
@@ -194,7 +196,7 @@ public class dbDecoderManager extends SQLiteOpenHelper {
         String[] selectionArgs = {SamplePiece + ""};
 
         sqLiteDatabase.delete(
-                MediaName,          // The table to query// The array of columns to return (pass null to get all)
+                decoder.MediaName,          // The table to query// The array of columns to return (pass null to get all)
                 selection,           // The columns for the WHERE clause
                 selectionArgs        // The values for the WHERE clause
         );

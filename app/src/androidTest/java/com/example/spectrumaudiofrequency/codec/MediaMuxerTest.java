@@ -15,7 +15,7 @@ import com.example.spectrumaudiofrequency.core.codec_manager.CodecManager;
 import com.example.spectrumaudiofrequency.core.codec_manager.CodecManager.CodecSample;
 import com.example.spectrumaudiofrequency.core.codec_manager.MediaFormatConverter;
 import com.example.spectrumaudiofrequency.core.codec_manager.MediaFormatConverter.MediaFormatConverterListener;
-import com.example.spectrumaudiofrequency.util.CalculatePerformance;
+import com.example.spectrumaudiofrequency.util.PerformanceCalculator;
 
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -28,17 +28,16 @@ import static com.example.spectrumaudiofrequency.util.Files.getUriFromResourceId
 
 @RunWith(AndroidJUnit4.class)
 public class MediaMuxerTest {
-    public static final int AudioId1 = R.raw.stardew_valley_ost_distant_banjo;
-    public static final int AudioId2 = R.raw.game_description;
+    public static final int[] IdsOfSounds = {R.raw.hollow, R.raw.game_description};
 
     @Test
     public void Mux() throws IOException, InterruptedException {
         Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();
-        MediaMuxerManager MediaMuxerManager = new MediaMuxerManager(context,
+        MediaMuxerManager mediaMuxerManager = new MediaMuxerManager(context,
                 getUriFromResourceId(context, R.raw.video_input3));
         MediaMuxerManager.Cutoff[] cutoffs = new MediaMuxerManager.Cutoff[5];
 
-        long cutTime = MediaMuxerManager.getVideoDuration() / cutoffs.length;
+        long cutTime = mediaMuxerManager.getVideoDuration() / cutoffs.length;
         long time = cutTime;
 
         for (int i = 0; i < cutoffs.length; i++) {
@@ -46,63 +45,60 @@ public class MediaMuxerTest {
             time += cutTime;
         }
 
-        MediaExtractor extraExtractor = new MediaExtractor();
-        extraExtractor.setDataSource(context, getUriFromResourceId(context, AudioId1), null);
-        MediaFormat format0 = extraExtractor.getTrackFormat(0);
+        MediaFormat[] mediaFormats = new MediaFormat[IdsOfSounds.length];
+        for (int i = 0; i < IdsOfSounds.length; i++) {
+            MediaExtractor extraExtractor = new MediaExtractor();
+            extraExtractor.setDataSource(context, getUriFromResourceId(context, IdsOfSounds[i]), null);
+            mediaFormats[i] = extraExtractor.getTrackFormat(0);
+            Log.i("Sound Format " + i, mediaFormats[i].toString());
+        }
 
-        MediaExtractor extraExtractor1 = new MediaExtractor();
-        extraExtractor1.setDataSource(context, getUriFromResourceId(context, AudioId2), null);
-        MediaFormat format1 = extraExtractor1.getTrackFormat(0);
+        MediaFormat newAudioFormat = CodecManager.copyMediaFormat(mediaFormats[0]);
 
-        Log.i("Formats0", format0.toString());
-        Log.i("Formats1", format1.toString());
-
-        MediaFormat newAudioFormat = CodecManager.copyMediaFormat(format0);
         newAudioFormat.setString(MediaFormat.KEY_MIME, MediaFormat.MIMETYPE_AUDIO_AAC);
 
         MediaFormatConverter FormatConverter = new MediaFormatConverter(context,
-                new int[]{AudioId1},
-                newAudioFormat);
+                new int[]{IdsOfSounds[0]}, newAudioFormat);
 
         ArrayList<CodecSample> cacheOfSamples = new ArrayList<>();
 
-        CalculatePerformance performance = new CalculatePerformance("MuxTime");
-        MediaFormatConverterListener PosMuxerStart = converterResult -> {
+        PerformanceCalculator performance = new PerformanceCalculator("MuxTime");
+        MediaFormatConverterListener converterListener = converterResult -> {
             converterResult.bufferInfo.flags = MediaCodec.BUFFER_FLAG_KEY_FRAME;
             performance.stop(converterResult.bufferInfo.presentationTimeUs,
                     FormatConverter.getMediaDuration())
-                    .logPerformance(" flag: " + converterResult.bufferInfo.flags + " size:" + converterResult.bufferInfo.size);
+                    .logPerformance(" flag: " + converterResult.bufferInfo.flags +
+                            " size:" + converterResult.bufferInfo.size);
             performance.start();
-            MediaMuxerManager.writeSampleData(converterResult.bufferInfo, converterResult.bytes);
+            mediaMuxerManager.writeSampleData(converterResult.bufferInfo, converterResult.bytes);
         };
 
-        MediaFormatConverterListener PreMuxerStart = converterResult -> {
-            if (MediaMuxerManager.IsPrepared()) {
+        MediaFormatConverterListener awaitingStart = converterResult -> {
+            if (mediaMuxerManager.IsPrepared()) {
                 while (cacheOfSamples.size() > 0) {
-                    PosMuxerStart.onConvert(cacheOfSamples.get(0));
+                    converterListener.onConvert(cacheOfSamples.get(0));
                     cacheOfSamples.remove(0);
                 }
-                PosMuxerStart.onConvert(converterResult);
-                FormatConverter.setOnConvert(PosMuxerStart);
+                converterListener.onConvert(converterResult);
+                FormatConverter.setOnConvert(converterListener);
             } else {
                 cacheOfSamples.add(converterResult);
             }
         };
+        FormatConverter.setOnConvert(awaitingStart);
 
-        FormatConverter.setOnConvert(PreMuxerStart);
-
-        final CountDownLatch signal = new CountDownLatch(1);
+        final CountDownLatch EndSignal = new CountDownLatch(1);
         FormatConverter.setFinishListener(() -> {
-            signal.countDown();
-            MediaMuxerManager.stop();
+            EndSignal.countDown();
+            mediaMuxerManager.stop();
         });
+
         FormatConverter.start();
         MediaFormat outputFormat = FormatConverter.getOutputFormat();
-        Log.i("outputFormat", outputFormat.toString());
-        MediaMuxerManager.prepare(cutoffs, outputFormat);
+        mediaMuxerManager.prepare(cutoffs, outputFormat);
         FormatConverter.pause();
-        MediaMuxerManager.putExtractorData(FormatConverter::restart);
+        mediaMuxerManager.putExtractorData(FormatConverter::restart);
 
-        signal.await();
+        EndSignal.await();
     }
 }

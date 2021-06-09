@@ -25,8 +25,6 @@ import java.io.FileOutputStream;
 import java.util.Date;
 import java.util.concurrent.ForkJoinPool;
 
-import static com.example.spectrumaudiofrequency.sinusoid_converter.SamplingResize.ResizeSample;
-
 public class SinusoidDrawn {
     private static final String Folder = "WavePieces";
     //private final FFTAbstract[] ffts;
@@ -49,7 +47,7 @@ public class SinusoidDrawn {
 
         this.rs = RenderScript.create(context);
 
-        switch (1) {
+        switch (0) {
             case 0:
                 this.fft = new Adapted(rs, pool);
                 break;
@@ -432,17 +430,16 @@ public class SinusoidDrawn {
             canvas.drawColor(Color.WHITE);
             //Draw background
 
-            DrawTime(canvas, Time, SampleDuration, Height / 20f);
+            //DrawTime(canvas, Time, SampleDuration, Height / 20f);
 
             if (SampleChannels[0].length > 10) {
                 // DrawAnalyzer(canvas, SampleChannels[0], Time, SampleDuration, Height / 2f, Height / 2f);
                 DrawSinusoid(canvas, SampleChannels[0], Height / 1.3f, Color.BLUE, Height / 2f);
-                DrawSinusoid(canvas, ResizeSample(SampleChannels[0], (int) (SampleChannels[0].length / 2.2f)), Height / 2.5f, Color.BLACK, Height / 2f);
+                //rawSinusoid(canvas, ResizeSample(SampleChannels[0], (int) (SampleChannels[0].length / 2.2f)), Height / 2.5f, Color.BLACK, Height / 2f);
 
                 //DrawWave(canvas, resizeSinusoid(SampleChannels[0], Width), Height / 3f, Color.BLACK, Height / 2f);
 
                 //DrawFFT(canvas, fft.Transform(SampleChannels[0]), Height / 1.2f, Color.BLUE, Height / 100f);
-
             }
             onRenderFinish.onFinish(imageBitmap);
         });

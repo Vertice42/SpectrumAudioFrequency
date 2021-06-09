@@ -12,7 +12,7 @@ public class ByteQueue {
 
     }
 
-    public int size() {
+    public int getSize() {
         if (mainBuffer.position() > 0) return mainBuffer.position();
         else return leftoversBuffer.position();
     }

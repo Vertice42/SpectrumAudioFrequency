@@ -75,7 +75,7 @@ public class SortedQueue implements Queue<QueueElement> {
             if (queueElement.getIndex() > queueElements.get(i).getIndex()) i++;
             else break;
         }
-        queueElements.add(i, (QueueElement) queueElement);
+        queueElements.add(i, queueElement);
         return true;
     }
 

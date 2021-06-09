@@ -12,7 +12,7 @@ import android.util.Log;
 
 import androidx.annotation.RequiresApi;
 
-import com.example.spectrumaudiofrequency.core.codec_manager.MediaFormatConverter;
+import com.example.spectrumaudiofrequency.core.codec_manager.MediaFormatConverter.MediaFormatConverterFinishListener;
 
 import org.jetbrains.annotations.NotNull;
 
@@ -121,7 +121,7 @@ public class MediaMuxerManager {
         return null;
     }
 
-    public void putExtractorData(MediaFormatConverter.MediaFormatConverterFinishListener mediaFormatConverterFinishListener) {
+    public void putExtractorData(MediaFormatConverterFinishListener formatConverterFinishListener) {
         for (MediaExtractor mediaExtractor : mediaExtractors) mediaExtractor.selectTrack(0);
 
         long presentationTimeUs = mediaExtractors[0].getSampleTime();
@@ -169,13 +169,11 @@ public class MediaMuxerManager {
             }
             time_after = mediaExtractors[0].getSampleTime();
         }
-        mediaFormatConverterFinishListener.OnFinish();
+        formatConverterFinishListener.OnFinish();
     }
 
     public synchronized void writeSampleData(int TrackId, ByteBuffer inputBuffer,
                                              MediaCodec.BufferInfo bufferInfo) {
-        bufferInfo.flags = BUFFER_FLAG_KEY_FRAME;
-        // if (bufferInfo.presentationTimeUs != 0)
         mediaMuxer.writeSampleData(TrackId, inputBuffer, bufferInfo);
     }
 

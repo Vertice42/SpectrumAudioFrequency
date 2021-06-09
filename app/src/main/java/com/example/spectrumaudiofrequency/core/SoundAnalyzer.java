@@ -42,14 +42,14 @@ public class SoundAnalyzer {
     }
 
     private void getAudioSampleAndAnalise(AudioPeakAnalyzer audioPeakAnalyzer, int SampleId) {
-        decoderManagerWithStorage.addRequest(new PeriodRequest(SampleId, decoderResult -> {
+        decoderManagerWithStorage.makeRequest(new PeriodRequest(SampleId, decoderResult -> {
             if (decoderResult.bufferInfo != null) {
                 long sampleTime = decoderResult.bufferInfo.presentationTimeUs;
                 short[][] sampleChannels = separateSampleChannels(decoderResult.bytes,
                         decoderManagerWithStorage.ChannelsNumber);
 
                 audioPeakAnalyzer.analyzeData(sampleChannels[0], SampleId, SAMPLE_DURATION);
-                long trueMediaDuration = decoderManagerWithStorage.getTrueMediaDuration();
+                long trueMediaDuration = (long) decoderManagerWithStorage.getTrueMediaDuration();
                 float progress = ((float) sampleTime / trueMediaDuration) * 100f;
                 Poll.execute(() -> progressListener.OnProgressChange(progress));
                 if (sampleTime < trueMediaDuration)
@@ -59,12 +59,12 @@ public class SoundAnalyzer {
     }
 
     public void setOnFinish(SoundAnalyzerListener soundAnalyzerListener) {
-        decoderManagerWithStorage.addFinishListener(() ->
+        decoderManagerWithStorage.addOnDecoderFinishListener(() ->
                 soundAnalyzerListener.OnFinishedAnalysis(audioPeakAnalyzer.peaks));
     }
 
     public void start() {
-        if (!decoderManagerWithStorage.IsDecoded) decoderManagerWithStorage.start();
+        if (!decoderManagerWithStorage.IsDecoded()) decoderManagerWithStorage.restart();
         getAudioSampleAndAnalise(audioPeakAnalyzer, 0);
     }
 

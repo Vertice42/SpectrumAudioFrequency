@@ -10,7 +10,7 @@ import com.example.spectrumaudiofrequency.ScriptC_fftGpu;
 import com.example.spectrumaudiofrequency.ScriptC_fftGpuAdapted;
 import com.example.spectrumaudiofrequency.ScriptC_fftGpuPrecise;
 import com.example.spectrumaudiofrequency.util.Array;
-import com.example.spectrumaudiofrequency.util.CalculatePerformance;
+import com.example.spectrumaudiofrequency.util.PerformanceCalculator;
 
 import java.util.ArrayList;
 import java.util.concurrent.ForkJoinPool;
@@ -45,7 +45,7 @@ public class FourierFastTransform {
      */
     public static abstract class FFTAbstract implements Calculate {
         static boolean CalculatePerformanceEnable = false;
-        private CalculatePerformance gnuFFT_PerformanceTask;
+        private PerformanceCalculator gnuFFT_PerformanceTask;
 
         static class fftRequest {
 
@@ -90,7 +90,7 @@ public class FourierFastTransform {
 
         private void RunWithPerformanceCalculation(ForkJoinTask<float[]> task) {
             if (this.gnuFFT_PerformanceTask == null)
-                this.gnuFFT_PerformanceTask = new CalculatePerformance("gnuFFT_PerformanceTask", 100);
+                this.gnuFFT_PerformanceTask = new PerformanceCalculator("gnuFFT_PerformanceTask", 100);
             gnuFFT_PerformanceTask.start();
             poll.execute(task);
             gnuFFT_PerformanceTask.stop().logPerformance();

@@ -8,7 +8,7 @@ import androidx.test.platform.app.InstrumentationRegistry;
 
 import com.example.spectrumaudiofrequency.R;
 import com.example.spectrumaudiofrequency.core.codec_manager.DecoderManager;
-import com.example.spectrumaudiofrequency.util.CalculatePerformance;
+import com.example.spectrumaudiofrequency.util.PerformanceCalculator;
 
 import org.junit.Assert;
 import org.junit.Test;
@@ -26,7 +26,7 @@ import static com.example.spectrumaudiofrequency.core.codec_manager.DecoderManag
 @RunWith(AndroidJUnit4.class)
 public class DecoderCodecManagerTest {
     private static final long MAX_TIME_OUT = 50000;
-    final int id = R.raw.hollow;
+    final int id = R.raw.choose;
     private final ForkJoinPool forkJoinPool;
     private final DecoderManager decoder;
     private final boolean TimeOutON = false;
@@ -34,7 +34,7 @@ public class DecoderCodecManagerTest {
 
     public DecoderCodecManagerTest() {
         Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();
-        decoder = new DecoderManager(context, id);
+        decoder = new DecoderManager(context, id, sampleMetrics -> sampleMetrics);
         forkJoinPool = ForkJoinPool.commonPool();
     }
 
@@ -54,7 +54,7 @@ public class DecoderCodecManagerTest {
         });
     }
 
-    private boolean AlreadyDecoded(ArrayList<TestResult> testResults, long SampleTime) {
+    private boolean checkIfItIsAlreadyDecoded(ArrayList<TestResult> testResults, long SampleTime) {
         for (int i = 0; i < testResults.size(); i++) {
             TestResult testResult = testResults.get(i);
             if (testResult != null)
@@ -64,19 +64,31 @@ public class DecoderCodecManagerTest {
         return false;
     }
 
+    private String checkIfNotInSequence(ArrayList<TestResult> testResults) {
+        StringBuilder r = new StringBuilder();
+        long lastSampleTime = 0;
+        for (int i = 0; i < testResults.size(); i++) {
+            TestResult testResult = testResults.get(i);
+            if (testResult.SampleTime < lastSampleTime)
+                r.append(testResult.SampleTime).append(" | ");
+            lastSampleTime = testResult.SampleTime;
+        }
+        return r.toString();
+    }
+
     @Test
     public void Decode() throws InterruptedException {
         ArrayList<TestResult> testResults = new ArrayList<>();
         CountDownLatch countDownLatch = new CountDownLatch(1);
 
-        CalculatePerformance calculatePerformance = new CalculatePerformance("Decoder");
+        PerformanceCalculator performanceCalculator = new PerformanceCalculator("Decoder");
 
-        decoder.addDecodingListener(decoderResult -> {
+        decoder.addOnDecodingListener(decoderResult -> {
             long presentationTimeUs = decoderResult.bufferInfo.presentationTimeUs;
 
-            calculatePerformance.stop(presentationTimeUs,
-                    decoder.getTrueMediaDuration()).logPerformance();
-            calculatePerformance.start();
+            performanceCalculator.stop(presentationTimeUs, ((long) decoder.getTrueMediaDuration()))
+                    .logPerformance();
+            performanceCalculator.start();
 
             boolean IsError = false;
             String message = "";
@@ -84,7 +96,7 @@ public class DecoderCodecManagerTest {
                 IsError = true;
                 message += " Sample length Error == 0";
             }
-            if (AlreadyDecoded(testResults, presentationTimeUs)) {
+            if (checkIfItIsAlreadyDecoded(testResults, presentationTimeUs)) {
                 IsError = true;
                 message += " Sample AlreadyDecoded " + presentationTimeUs;
             }
@@ -93,14 +105,13 @@ public class DecoderCodecManagerTest {
             testResults.add(new TestResult(IsError, presentationTimeUs, message));
         });
 
-        decoder.addFinishListener(countDownLatch::countDown);
+        decoder.addOnDecoderFinishListener(countDownLatch::countDown);
 
         CountTimeout(countDownLatch);
-        decoder.setNewSampleDuration(25000);
         decoder.start();
-
         countDownLatch.await();
-        Assert.assertTrue(testResults.size() > 0);
+        Assert.assertEquals("", checkIfNotInSequence(testResults));
+        Assert.assertEquals(decoder.getNumberOfSamples(), testResults.size());
         for (int i = 0; i < testResults.size(); i++) {
             TestResult testResult = testResults.get(i);
             if (testResult.IsError) {
@@ -113,8 +124,8 @@ public class DecoderCodecManagerTest {
     public void removeOutputListener() {
         DecoderManager.DecodingListener decodingListener = codecSample ->
                 Log.e("removeOutputListenerError", "lambda should not be called: ");
-        decoder.addDecodingListener(decodingListener);
-        decoder.removeOnDecodeListener(decodingListener);
+        decoder.addOnDecodingListener(decodingListener);
+        decoder.removeOnDecodingListener(decodingListener);
         Assert.assertEquals(0, decoder.getDecodeListenersListSize());
     }
 

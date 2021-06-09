@@ -7,55 +7,32 @@ import androidx.test.ext.junit.runners.AndroidJUnit4;
 import androidx.test.platform.app.InstrumentationRegistry;
 
 import com.example.spectrumaudiofrequency.R;
-import com.example.spectrumaudiofrequency.core.codec_manager.DecoderManager;
+import com.example.spectrumaudiofrequency.core.codec_manager.DecoderManager.DecoderResult;
 import com.example.spectrumaudiofrequency.core.codec_manager.DecoderManager.PeriodRequest;
 import com.example.spectrumaudiofrequency.core.codec_manager.DecoderManagerWithStorage;
-import com.example.spectrumaudiofrequency.util.CalculatePerformance;
+import com.example.spectrumaudiofrequency.util.PerformanceCalculator;
+import com.example.spectrumaudiofrequency.util.VerifyTimeOut;
 
-import org.junit.After;
 import org.junit.Assert;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
-import java.util.ArrayList;
-import java.util.Arrays;
+import java.util.LinkedList;
 import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ForkJoinPool;
 
 @RunWith(AndroidJUnit4.class)
 public class DecoderManagerWithStorageTest {
-    private static final long MAX_TIME_OUT = 5000;
-    private final ForkJoinPool forkJoinPool;
-    private final DecoderManagerWithStorage decoderManagerWithStorage;
-    ArrayList<TestResult> testResults = new ArrayList<>();
-    private boolean TimeOutPass = false;
+    private static final long MAX_TIME = 5000;
+    private final static int id = R.raw.choose;
+    private final DecoderManagerWithStorage decoder;
+    LinkedList<TestResult> testResults = new LinkedList<>();
 
     public DecoderManagerWithStorageTest() {
         Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();
-
-        int id = R.raw.hollow;
-        decoderManagerWithStorage = new DecoderManagerWithStorage(context, id);
-        forkJoinPool = ForkJoinPool.commonPool();
-
+        decoder = new DecoderManagerWithStorage(context, id, sampleMetrics -> sampleMetrics);
     }
 
-    void CountTimeout(CountDownLatch countDownLatch) {
-        forkJoinPool.execute(() -> {
-            try {
-                Thread.sleep(MAX_TIME_OUT);
-            } catch (InterruptedException e) {
-                e.printStackTrace();
-            }
-            if (TimeOutPass) CountTimeout(countDownLatch);
-            else {
-                Log.e("DecoderManagerWithStorageTest", "TimeOut");
-                countDownLatch.countDown();
-            }
-            TimeOutPass = false;
-        });
-    }
-
-    private String verifyErrorsInDecodeResult(DecoderManager.DecoderResult decoderResult) {
+    private String verifyErrorsInDecodeResult(DecoderResult decoderResult) {
         String message = "";
         if (decoderResult.bufferInfo == null) return message;
         if (decoderResult.bytes.length == 0) {
@@ -67,7 +44,7 @@ public class DecoderManagerWithStorageTest {
         return message;
     }
 
-    private boolean AlreadyDecoded(ArrayList<TestResult> testResults, long SampleTime) {
+    private boolean AlreadyDecoded(LinkedList<TestResult> testResults, long SampleTime) {
         for (int i = 0; i < testResults.size(); i++) {
             TestResult testResult = testResults.get(i);
             if (testResult.SampleTime == SampleTime) return true;
@@ -76,68 +53,90 @@ public class DecoderManagerWithStorageTest {
         return false;
     }
 
-    @Test
-    public void addRequests() throws InterruptedException {
-        CountDownLatch wantingResultOfRequest = new CountDownLatch(1);
-        decoderManagerWithStorage.setNewSampleDuration(25000);
+    private void VerifyErrors(DecoderResult decoderResult,
+                              PerformanceCalculator performanceCalculator,
+                              VerifyTimeOut verifyTimeOut) {
+        verifyTimeOut.Pass();
+        String message = verifyErrorsInDecodeResult(decoderResult);
+        long presentationTimeUs = -1;
+        boolean IsError = !message.equals("");
 
-        int numberOfSamples = decoderManagerWithStorage.getNumberOfSamples();
-        Assert.assertTrue(numberOfSamples > 0);
-        CalculatePerformance calculatePerformance = new CalculatePerformance(("DecoderWithStorage"));
-        for (int i = 0; i < numberOfSamples; i++) {
-            decoderManagerWithStorage.addRequest(new PeriodRequest(i, decoderResult -> {
-                TimeOutPass = true;
-                calculatePerformance.stop(decoderResult.bufferInfo.presentationTimeUs,
-                        decoderManagerWithStorage.getTrueMediaDuration()).logPerformance();
-                calculatePerformance.start();
-
-                String message = verifyErrorsInDecodeResult(decoderResult);
-                long presentationTimeUs = -1;
-                boolean IsError = !message.equals("");
-
-                if (decoderResult.bufferInfo != null) {
-                    presentationTimeUs = decoderResult.bufferInfo.presentationTimeUs;
-                    message = decoderResult.bufferInfo.presentationTimeUs + "";
-                } else {
-                    message = "null";
-                }
-
-                testResults.add(new TestResult(IsError, presentationTimeUs, message));
-            }));
+        if (decoderResult.bufferInfo != null) {
+            performanceCalculator.stop(decoderResult.bufferInfo.presentationTimeUs,
+                    (long) decoder.getTrueMediaDuration()).logPerformance();
+            performanceCalculator.start();
+            presentationTimeUs = decoderResult.bufferInfo.presentationTimeUs;
+            message += " time " + presentationTimeUs;
+        } else {
+            message = "null";
         }
+        testResults.add(new TestResult(IsError, presentationTimeUs, message));
+    }
 
-        decoderManagerWithStorage.addFinishListener(() ->
-                decoderManagerWithStorage.addRequest(new PeriodRequest((numberOfSamples + 1),
-                        decoderResult -> wantingResultOfRequest.countDown())));
+    public void makeRequests(int offset, int length,
+                             PerformanceCalculator performanceCalculator,
+                             VerifyTimeOut verifyTimeOut) {
+        for (int i = offset; i < length; i++) {
+            decoder.makeRequest(new PeriodRequest(i, decoderResult ->
+                    VerifyErrors(decoderResult,
+                            performanceCalculator,
+                            verifyTimeOut)));
+        }
+    }
 
-        decoderManagerWithStorage.start();
+    @Test
+    public void addRequestsTest() throws InterruptedException {
+        CountDownLatch wantingResults = new CountDownLatch(1);
+        int numberOfSamples = decoder.getNumberOfSamples();
+        Assert.assertTrue(numberOfSamples > 0);
 
-        CountTimeout(wantingResultOfRequest);
+        VerifyTimeOut verifyTimeOut = new VerifyTimeOut(this.getClass(),
+                MAX_TIME,
+                wantingResults,
+                false);
 
-        wantingResultOfRequest.await();
-        Assert.assertTrue(testResults.size() > 0);
+        if (decoder.IsDecoded()) {
+            decoder.clear();
+            Assert.fail();
+        }
+        PerformanceCalculator performanceCalculator;
+        performanceCalculator = new PerformanceCalculator(("DecoderWithStorage"));
 
+        makeRequests(0, numberOfSamples - 1,
+                performanceCalculator,
+                verifyTimeOut);
+
+        decoder.addOnDecoderFinishListener(() -> {
+            int TrueNumberOfSamples = decoder.getNumberOfSamples();
+            int lastSample = TrueNumberOfSamples - 1;
+            //if it is necessary to make more requests
+            if (TrueNumberOfSamples > numberOfSamples) {
+                int additionalRequests = TrueNumberOfSamples - numberOfSamples;
+                makeRequests(numberOfSamples - additionalRequests,
+                        lastSample,
+                        performanceCalculator,
+                        verifyTimeOut);
+            } else if (TrueNumberOfSamples < numberOfSamples) lastSample++;
+
+            decoder.makeRequest(new PeriodRequest(lastSample, lastResult -> {
+                VerifyErrors(lastResult, performanceCalculator, verifyTimeOut);
+                wantingResults.countDown();
+            }));
+        });
+
+        wantingResults.await();
+        int TrueNumberOfSamples = decoder.getNumberOfSamples();
+        decoder.clear();
+        decoder.close();
+
+        Assert.assertTrue((testResults.size() >= TrueNumberOfSamples));
         for (int i = 0; i < testResults.size(); i++) {
             TestResult testResult = testResults.get(i);
             if (testResult.IsError) {
-                Log.e("DecoderTestError", "testResults: " + Arrays.toString(testResults.toArray()));
                 Log.e("DecoderTestError", testResult.Message);
+                Log.e("Results", testResults.toString());
                 Assert.fail();
             }
         }
-    }
-
-    @Test
-    public void removeOutputListener() {
-        DecoderManager.DecodingListener decodingListener = codecSample ->
-                Log.e("removeOutputListenerError", "lambda should not be called: ");
-        decoderManagerWithStorage.addDecodingListener(decodingListener);
-        decoderManagerWithStorage.removeOnDecodeListener(decodingListener);
-        Assert.assertEquals(0, decoderManagerWithStorage.getDecodeListenersListSize());
-    }
-
-    @After
-    public void clear() {
-        //decoderManagerWithStorage.clear();
     }
 }

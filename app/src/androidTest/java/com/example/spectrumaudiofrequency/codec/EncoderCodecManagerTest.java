@@ -11,7 +11,7 @@ import androidx.test.platform.app.InstrumentationRegistry;
 import com.example.spectrumaudiofrequency.R;
 import com.example.spectrumaudiofrequency.core.codec_manager.CodecManager;
 import com.example.spectrumaudiofrequency.core.codec_manager.EncoderCodecManager;
-import com.example.spectrumaudiofrequency.util.CalculatePerformance;
+import com.example.spectrumaudiofrequency.util.PerformanceCalculator;
 
 import org.junit.Assert;
 import org.junit.Test;
@@ -27,7 +27,8 @@ import static com.example.spectrumaudiofrequency.util.Files.getUriFromResourceId
 public class EncoderCodecManagerTest {
     private static final int TEST_RAW_ID = R.raw.stardew_valley;
     private final EncoderCodecManager Encoder;
-    int SampleDuration = 2000;
+    int SampleDuration = 2500;
+    int MediaDurationToTest = SampleDuration * 100;
 
     public EncoderCodecManagerTest() throws IOException {
         Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();
@@ -39,6 +40,7 @@ public class EncoderCodecManagerTest {
 
         MediaFormat newFormat = CodecManager.copyMediaFormat(oldFormat);
         newFormat.setString(MediaFormat.KEY_MIME, MediaFormat.MIMETYPE_AUDIO_AAC);
+        newFormat.setLong(MediaFormat.KEY_DURATION, MediaDurationToTest);
 //        newFormat.setInteger(MediaFormat.KEY_BIT_RATE, newFormat.getInteger(MediaFormat.KEY_BIT_RATE) * 2);
 
         Log.i("oldFormat", oldFormat.toString());
@@ -65,14 +67,13 @@ public class EncoderCodecManagerTest {
 
         byte[] inputData = new byte[Encoder.getInputBufferLimit()];
         for (int i = 0; i < inputData.length; i++) inputData[i] = (byte) (i + i / 2);
+        int NumberOfSamples = MediaDurationToTest / SampleDuration;
 
-        int NumberOfSamples = 100;
-        Encoder.addEncoderOutputPromise(codecSample -> {
-
-            CalculatePerformance calculatePerformance = new CalculatePerformance("Encode");
-            calculatePerformance.stop(codecSample.bufferInfo.presentationTimeUs,
+        PerformanceCalculator performanceCalculator = new PerformanceCalculator("Encode");
+        Encoder.addOnOutputListener(codecSample -> {
+            performanceCalculator.stop(codecSample.bufferInfo.presentationTimeUs,
                     Encoder.MediaDuration).logPerformance();
-            calculatePerformance.start();
+            performanceCalculator.start();
 
             boolean IsError = false;
             String message = "";
@@ -89,9 +90,11 @@ public class EncoderCodecManagerTest {
             message += codecSample.bufferInfo.presentationTimeUs;
             testResults.add(new TestResult(IsError, timeUs, message));
         });
-        Encoder.addFinishListener(signal::countDown);
+        Encoder.addOnFinishListener(signal::countDown);
 
-        for (int i = 0; i < NumberOfSamples; i++) Encoder.addPutInputRequest(inputData);
+        for (int i = 0; i < NumberOfSamples; i++) {
+            Encoder.addPutInputRequest(inputData);
+        }
         Encoder.stop();
 
         signal.await();
@@ -107,26 +110,5 @@ public class EncoderCodecManagerTest {
         Log.i("testResults", testResults.toString());
 
         Assert.assertEquals(testResults.size(), NumberOfSamples);
-    }
-
-    @Test
-    public void removeListenersTests() {
-        Runnable codecFinishListener = () ->
-                Log.e("removeListenerError", "lambda should not be called: ");
-        Encoder.addFinishListener(codecFinishListener);
-        Encoder.removeOnFinishListener(codecFinishListener);
-        Assert.assertEquals(0, Encoder.getFinishListenerSize());
-
-        CodecManager.OnReadyListener onReadyListener = (SampleDuration, SampleSize) ->
-                Log.e("removeOnReadyListenerError", "lambda should not be called: ");
-        Encoder.addOnReadyListener(onReadyListener);
-        Encoder.removeOnReadyListener(onReadyListener);
-        Assert.assertEquals(0, Encoder.getReadyListenersSize());
-
-        CodecManager.ResultPromiseListener resultPromiseListener = codecSample ->
-                Log.e("removeOutputListenerError", "lambda should not be called: ");
-        Encoder.addEncoderOutputPromise(resultPromiseListener);
-        Encoder.removeEncoderOutputPromise(resultPromiseListener);
-        Assert.assertEquals(0, Encoder.getEncoderPromisesSize());
     }
 }

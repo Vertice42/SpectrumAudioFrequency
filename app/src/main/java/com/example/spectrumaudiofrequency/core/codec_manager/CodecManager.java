@@ -12,13 +12,11 @@ import org.jetbrains.annotations.NotNull;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static android.media.MediaCodec.BUFFER_FLAG_END_OF_STREAM;
 import static android.media.MediaCodec.CONFIGURE_FLAG_ENCODE;
@@ -28,33 +26,35 @@ import static android.media.MediaFormat.KEY_DURATION;
 import static android.media.MediaFormat.KEY_FRAME_RATE;
 
 public abstract class CodecManager {
-    private final ArrayList<Integer> InputIdsAvailable = new ArrayList<>();
-    private final ArrayList<OnReadyListener> onOnReadyListeners = new ArrayList<>();
-    private final ArrayList<IdListener> RequestsOfInputID = new ArrayList<>();
-    private final ArrayList<OutputPromise> OutputPromises = new ArrayList<>();
-    private final ArrayList<Runnable> FinishListeners = new ArrayList<>();
-    private final ArrayList<OutputPromise> PromisesOfSortedOutputs = new ArrayList<>();
-    private final ArrayList<OnOutputListener> OnOutputListeners = new ArrayList<>();
-    private final LinkedList<IdListener> InputIdListeners = new LinkedList<>();
+    private final LinkedList<Integer> InputIdsAvailable = new LinkedList<>();
+    private final LinkedList<IdListener> RequestsOfInputID = new LinkedList<>();
+    private final LinkedList<OutputPromise> OutputPromises = new LinkedList<>();
+    private final LinkedList<OutputPromise> SortedOutputPromises = new LinkedList<>();
+    private final LinkedList<IdListener> OnInputIdAvailableListeners = new LinkedList<>();
+    private final LinkedList<SampleMetricsListener>
+            sampleMetricsListeners = new LinkedList<>();
+    private final LinkedList<OnOutputListener> OnOutputListeners = new LinkedList<>();
+    private final LinkedList<Runnable> OnInputIdReleasedListeners = new LinkedList<>();
+    private final LinkedList<Runnable> OnFinishListeners = new LinkedList<>();
 
     private final SortedQueue samplesQueue = new SortedQueue();
+
     public MediaFormat mediaFormat;
     public long MediaDuration;
-    protected ExecutorService CachedThreadPool;
-    protected int NewSampleDuration;
-    protected int NewSampleSize;
-    boolean IsStopped = false;
-    private MediaCodec Codec = null;
+    protected int SampleDuration;
+    protected int SampleSize;
+    protected boolean IsStopped = false;
+    private MediaCodec Codec;
     private int bufferLimit = 0;
     private int AmountOfBuffers;
     private ResultPromiseListener onPromiseKept;
     private boolean IsReady;
 
     public CodecManager(MediaFormat mediaFormat, boolean IsDecoder) {
-        PrepareEndStart(mediaFormat, IsDecoder);
+        prepareEndStart(mediaFormat, IsDecoder);
     }
 
-    CodecManager() {
+    public CodecManager() {//todo refatorar
     }
 
     public static MediaFormat copyMediaFormat(MediaFormat mediaFormat) {
@@ -88,10 +88,8 @@ public abstract class CodecManager {
         }
     }
 
-    protected void PrepareEndStart(MediaFormat mediaFormat, boolean IsDecoder) {
+    protected void prepareEndStart(MediaFormat mediaFormat, boolean IsDecoder) {
         this.mediaFormat = mediaFormat;
-        this.CachedThreadPool = Executors.newCachedThreadPool();
-
         try {
             if (IsDecoder)
                 Codec = MediaCodec.createDecoderByType(mediaFormat.getString(MediaFormat.KEY_MIME));
@@ -105,19 +103,19 @@ public abstract class CodecManager {
         AtomicBoolean IsMaxBufferValue = new AtomicBoolean(false);
         AtomicLong lastSampleTime = new AtomicLong();
 
-        final IdListener[] awaitForAmountOfBuffers = new IdListener[1];
-        awaitForAmountOfBuffers[0] = InputID -> {
+        AtomicReference<IdListener> getAmountOfBuffers = new AtomicReference<>();
+        getAmountOfBuffers.set(InputID -> {
             if (InputID > AmountOfBuffers) {
                 AmountOfBuffers = InputID;
             } else if (InputID < AmountOfBuffers) {
                 AmountOfBuffers += 1;
                 IsMaxBufferValue.set(true);
-                removeInputIdAvailableListener(awaitForAmountOfBuffers[0]);
+                removeOnInputIdAvailableListeners(getAmountOfBuffers.get());
             }
-        };
+        });
 
-        addInputIdAvailableListener(awaitForAmountOfBuffers[0]);
-        addInputIdAvailableListener(this::GiveBackInputID);
+        addOnInputIdAvailableListeners(getAmountOfBuffers.get());
+        addOnInputIdAvailableListeners(this::giveBackInputID);
 
         onPromiseKept = codecSample -> {
             long sampleTime = codecSample.bufferInfo.presentationTimeUs;
@@ -125,13 +123,13 @@ public abstract class CodecManager {
             lastSampleTime.set(sampleTime);
 
             samplesQueue.add(codecSample);
-            if (IsMaxBufferValue.get())
-                if (sampleDuration != 0 &&
-                        codecSample.bytes.length > 0 &&
-                        sampleTime > sampleDuration * 4) {
-                    ExecuteDecoderReadyListeners(sampleDuration, codecSample.bytes.length);
-                    onPromiseKept = this::OrderSamples;
-                }
+            if (IsMaxBufferValue.get() &&
+                    sampleDuration != 0 &&
+                    codecSample.bytes.length > 0 &&
+                    sampleTime > sampleDuration * 4) {
+                executeOnReadyListeners(sampleDuration, codecSample.bytes.length);
+                onPromiseKept = this::orderSamples;
+            }
         };
 
         Codec.setCallback(new MediaCodec.Callback() {
@@ -139,7 +137,8 @@ public abstract class CodecManager {
             @Override
             public void onInputBufferAvailable(@NonNull final MediaCodec mediaCodec,
                                                final int inputBufferId) {
-                executeInputIdListeners(inputBufferId);
+                executeOnInputIdAvailableListeners(inputBufferId);
+                executeOnInputIdAvailableListeners();
             }
 
             @Override
@@ -175,7 +174,7 @@ public abstract class CodecManager {
         }
     }
 
-    public synchronized void GiveBackInputID(int BufferId) {
+    public synchronized void giveBackInputID(int BufferId) {
         if (RequestsOfInputID.size() > 0) {
             IdListener idListener = RequestsOfInputID.get(0);
             RequestsOfInputID.remove(idListener);
@@ -183,9 +182,9 @@ public abstract class CodecManager {
         } else InputIdsAvailable.add(BufferId);
     }
 
-    private void OrderSamples(CodecSample codecSample) {
+    private void orderSamples(CodecSample codecSample) {
         samplesQueue.add(codecSample);
-        if (IsStopped && PromisesOfSortedOutputs.size() == samplesQueue.size()) {
+        if (IsStopped && samplesQueue.size() == SortedOutputPromises.size()) {
             while (samplesQueue.size() > 1) {
                 CodecSample sample = (CodecSample) samplesQueue.pollFirst();
                 assert sample != null;
@@ -196,7 +195,6 @@ public abstract class CodecManager {
             sample.bufferInfo.flags = BUFFER_FLAG_END_OF_STREAM;
             keepPromisesOfSortedOutputs(sample);
             executeFinishListeners();
-
         } else if (samplesQueue.size() >= AmountOfBuffers) {
             for (int i = 0; i < AmountOfBuffers; i++) {
                 CodecSample sample = (CodecSample) samplesQueue.pollFirst();
@@ -206,54 +204,12 @@ public abstract class CodecManager {
         }
     }
 
-    private void ExecuteDecoderReadyListeners(int sampleDuration, int sampleLength) {
-        IsReady = true;
-        NewSampleDuration = sampleDuration;
-        NewSampleSize = sampleLength;
-        for (int i = 0; i < onOnReadyListeners.size(); i++)
-            onOnReadyListeners.get(i).OnReady(sampleDuration, sampleLength);
-    }
-
-    private synchronized void KeepOutputPromises(int outputBufferId, BufferInfo bufferInfo) {
-        int i = 0;
-        while (i < OutputPromises.size()) {
-            OutputPromise outputPromise = OutputPromises.get(i);
-            if (outputPromise.SampleTime == bufferInfo.presentationTimeUs) {
-                OutputPromises.remove(outputPromise);
-                ByteBuffer outputBuffer = Codec.getOutputBuffer(outputBufferId);
-                byte[] bytes = new byte[outputBuffer.remaining()];
-                outputBuffer.get(bytes);
-                Codec.releaseOutputBuffer(outputBufferId, false);
-                outputPromise.resultPromiseListener.onKeep(new CodecSample(bufferInfo, bytes));
-            } else i++;
-        }
-    }
-
-    private void keepPromisesOfSortedOutputs(CodecSample codecSample) {
-        int i = 0;
-        while (i < PromisesOfSortedOutputs.size()) {
-            OutputPromise promise = PromisesOfSortedOutputs.get(i);
-            if (promise.SampleTime == codecSample.bufferInfo.presentationTimeUs) {
-                promise.resultPromiseListener.onKeep(codecSample);
-                PromisesOfSortedOutputs.remove(promise);
-            } else i++;
-        }
-        executeOnOutputListener(codecSample);
-    }
-
-    public int getFinishListenerSize() {
-        return FinishListeners.size();
-    }
-
-    public int getReadyListenersSize() {
-        return onOnReadyListeners.size();
-    }
-
     public int getInputBufferLimit() {
         if (bufferLimit == 0) {
             CountDownLatch countDownLatch = new CountDownLatch(1);
             this.addInputIdRequest(Id -> {
                 bufferLimit = getInputBuffer(Id).limit();
+                giveBackInputID(Id);
                 countDownLatch.countDown();
             });
             try {
@@ -267,22 +223,14 @@ public abstract class CodecManager {
     }
 
     public int getNumberOfInputsIdsAvailable() {
-        //Log.i("Ids", "InputsIdsAvailable = " + InputIdsAvailable.size() + " RequestsOfInputID = " + RequestsOfInputID.size());
+        Log.i("Ids", "InputsIdsAvailable = " + InputIdsAvailable.size() +
+                " RequestsOfInputID = " + RequestsOfInputID.size() +
+                " AmountOfBuffers:" + AmountOfBuffers);
         return InputIdsAvailable.size();
     }
 
     protected MediaFormat getOutputFormat() {
         return Codec.getOutputFormat();
-    }
-
-    void addInputIdRequest(IdListener idListener) {
-        if (InputIdsAvailable.size() > 0) {
-            int InputId = InputIdsAvailable.get(0);
-            InputIdsAvailable.remove(0);
-            idListener.onIdAvailable(InputId);
-        } else {
-            RequestsOfInputID.add(idListener);
-        }
     }
 
     void processInput(CodecManagerRequest codecManagerRequest) {
@@ -293,45 +241,122 @@ public abstract class CodecManager {
                 codecManagerRequest.bufferInfo.flags);
     }
 
-    protected void addInputIdAvailableListener(IdListener idListener) {
-        InputIdListeners.add(idListener);
+    public void stop() {
+        IsStopped = true;
     }
 
-    protected void removeInputIdAvailableListener(IdListener idListener) {
-        InputIdListeners.remove(idListener);
+    protected synchronized void addInputIdRequest(IdListener idListener) {
+        if (InputIdsAvailable.size() > 0) {
+            int InputId = InputIdsAvailable.get(0);
+            InputIdsAvailable.remove(0);
+            idListener.onIdAvailable(InputId);
+        } else {
+            RequestsOfInputID.add(idListener);
+        }
     }
 
-    private void executeInputIdListeners(int InputId) {
-        for (int i = 0; i < InputIdListeners.size(); i++)
-            InputIdListeners.get(i).onIdAvailable(InputId);
+    public void removeOnInputIdAvailableListener(Runnable OnInputIdAvailableListener) {
+        OnInputIdReleasedListeners.add(OnInputIdAvailableListener);
+
     }
 
-    public void addOnReadyListener(OnReadyListener onReadyListener) {
-        if (IsReady) onOnReadyListeners.add(onReadyListener);
-        else onReadyListener.OnReady(this.NewSampleDuration, this.NewSampleSize);
+    public void addOnInputIdAvailableListener(Runnable OnInputIdAvailableListener) {
+        OnInputIdReleasedListeners.add(OnInputIdAvailableListener);
     }
 
-    public void removeOnReadyListener(OnReadyListener onReadyListener) {
-        onOnReadyListeners.remove(onReadyListener);
+    private synchronized void executeOnInputIdAvailableListeners() {
+        for (int i = 0; i < OnInputIdReleasedListeners.size(); i++) {
+            OnInputIdReleasedListeners.get(i).run();
+        }
+    }
+
+    private void addOnInputIdAvailableListeners(IdListener idListener) {
+        OnInputIdAvailableListeners.add(idListener);
+    }
+
+    private void removeOnInputIdAvailableListeners(IdListener idListener) {
+        OnInputIdAvailableListeners.remove(idListener);
+    }
+
+    private void executeOnInputIdAvailableListeners(int InputId) {
+        for (int i = 0; i < OnInputIdAvailableListeners.size(); i++)
+            OnInputIdAvailableListeners.get(i).onIdAvailable(InputId);
+    }
+
+    public void addOnReadyListener(SampleMetricsListener sampleMetricsListener) {
+        if (IsReady) sampleMetricsListeners.add(sampleMetricsListener);
+        else
+            sampleMetricsListener.OnAvailable(new SampleMetrics(this.SampleDuration, this.SampleSize));
+    }
+
+    public void removeOnReadyListener(SampleMetricsListener sampleMetricsListener) {
+        sampleMetricsListeners.remove(sampleMetricsListener);
+    }
+
+    public int getReadyListenersSize() {
+        return sampleMetricsListeners.size();
+    }
+
+    private void executeOnReadyListeners(int sampleDuration, int sampleLength) {
+        IsReady = true;
+        SampleDuration = sampleDuration;
+        SampleSize = sampleLength;
+        for (int i = 0; i < sampleMetricsListeners.size(); i++)
+            sampleMetricsListeners.get(i).OnAvailable(new SampleMetrics(sampleDuration, sampleLength));
     }
 
     protected void addOrderlyOutputPromise(OutputPromise outputPromise) {
         OutputPromises.add(new OutputPromise(outputPromise.SampleTime, onPromiseKept));
-        PromisesOfSortedOutputs.add(outputPromise);
+        SortedOutputPromises.add(outputPromise);
     }
 
-    public void addFinishListener(Runnable finishListener) {
-        FinishListeners.add(finishListener);
+    private void keepPromisesOfSortedOutputs(CodecSample codecSample) {
+        int i = 0;
+        while (i < SortedOutputPromises.size()) {
+            OutputPromise promise = SortedOutputPromises.get(i);
+            if (promise.SampleTime == codecSample.bufferInfo.presentationTimeUs) {
+                promise.PromiseListener.onKeep(codecSample);
+                SortedOutputPromises.remove(promise);
+            } else i++;
+        }
+        executeOnOutputListener(codecSample);
+    }
+
+    private synchronized void KeepOutputPromises(int outputBufferId, BufferInfo bufferInfo) {
+        for (int i = 0; i < OutputPromises.size(); i++) {
+            OutputPromise outputPromise = OutputPromises.get(i);
+            if (outputPromise.SampleTime == bufferInfo.presentationTimeUs) {
+                OutputPromises.remove(outputPromise);
+                ByteBuffer outputBuffer = Codec.getOutputBuffer(outputBufferId);
+                byte[] bytes = new byte[outputBuffer.remaining()];
+                outputBuffer.get(bytes);
+                Codec.releaseOutputBuffer(outputBufferId, false);
+                outputPromise.PromiseListener.onKeep(new CodecSample(bufferInfo, bytes));
+                break;
+            }
+        }
+    }
+
+    public void addOnFinishListener(Runnable finishListener) {
+        OnFinishListeners.add(finishListener);
     }
 
     public void removeOnFinishListener(Runnable finishListener) {
-        FinishListeners.remove(finishListener);
+        OnFinishListeners.remove(finishListener);
     }
 
     private void executeFinishListeners() {
-        for (int i = 0; i < FinishListeners.size(); i++) {
-            CachedThreadPool.execute(FinishListeners.get(i));
+        for (int i = 0; i < OnFinishListeners.size(); i++) {
+            OnFinishListeners.get(i).run();
         }
+    }
+
+    public boolean IsReady() {
+        return IsReady;
+    }
+
+    public int getFinishListenerSize() {
+        return OnFinishListeners.size();
     }
 
     public void addOnOutputListener(OnOutputListener onOutputListener) {
@@ -346,10 +371,6 @@ public abstract class CodecManager {
         for (int i = 0; i < OnOutputListeners.size(); i++) {
             OnOutputListeners.get(i).OnOutput(codecSample);
         }
-    }
-
-    public void stop() {
-        IsStopped = true;
     }
 
     public ByteBuffer getInputBuffer(int inputID) {
@@ -368,8 +389,8 @@ public abstract class CodecManager {
         void OnOutput(CodecSample codecSample);
     }
 
-    public interface OnReadyListener {
-        void OnReady(int SampleDuration, int SampleSize);
+    public interface SampleMetricsListener {
+        void OnAvailable(SampleMetrics sampleMetrics);
     }
 
     public static class CodecManagerRequest {
@@ -395,11 +416,11 @@ public abstract class CodecManager {
 
     public static class OutputPromise {
         long SampleTime;
-        ResultPromiseListener resultPromiseListener;
+        ResultPromiseListener PromiseListener;
 
-        public OutputPromise(long sampleTime, ResultPromiseListener resultPromiseListener) {
+        public OutputPromise(long sampleTime, ResultPromiseListener PromiseListener) {
             SampleTime = sampleTime;
-            this.resultPromiseListener = resultPromiseListener;
+            this.PromiseListener = PromiseListener;
         }
     }
 
@@ -407,22 +428,38 @@ public abstract class CodecManager {
         public BufferInfo bufferInfo;
         public byte[] bytes;
 
-        public CodecSample(BufferInfo bufferInfo, byte[] bytes) {
+        public CodecSample(BufferInfo bufferInfo, @NotNull byte[] bytes) {
             this.bufferInfo = bufferInfo;
             this.bytes = bytes;
         }
 
+        /*
         @Override
         public @NotNull String toString() {
             return "{" +
                     " T=" + bufferInfo.presentationTimeUs +
                     ", S=" + bytes.length +
                     '}';
+        }*/
+
+        @Override
+        public @NotNull String toString() {
+            return "" + bufferInfo.presentationTimeUs;
         }
 
         @Override
         public long getIndex() {
             return this.bufferInfo.presentationTimeUs;
+        }
+    }
+
+    public static class SampleMetrics {
+        int SampleDuration;
+        int SampleSize;
+
+        public SampleMetrics(int sampleDuration, int sampleSize) {
+            SampleDuration = sampleDuration;
+            SampleSize = sampleSize;
         }
     }
 }

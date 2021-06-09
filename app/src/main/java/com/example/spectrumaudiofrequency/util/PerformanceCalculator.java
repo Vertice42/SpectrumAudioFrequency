@@ -6,30 +6,38 @@ import org.jetbrains.annotations.NotNull;
 
 import java.text.DecimalFormat;
 
-public class CalculatePerformance {
+public class PerformanceCalculator {
     private final String Name;
+    private final DecimalFormat decimalFormat;
     private int ResetCont = 5;
     private long Time;
     private long ProcessingTimeSome;
     private int count = 0;
 
-    public CalculatePerformance(String Name) {
+    public PerformanceCalculator(String Name) {
         this.Name = Name;
+        decimalFormat = new DecimalFormat("000.000");
     }
 
-    public CalculatePerformance(String Name, int ResetCont) {
+    public PerformanceCalculator(String Name, int ResetCont) {
         this.Name = Name;
         this.ResetCont = ResetCont;
+        decimalFormat = new DecimalFormat("000.000");
     }
 
-    public static Performance SomePerformances(String name, Performance[] performances) {
+    public static Performance SomePerformances(PerformanceCalculator performanceCalculator,
+                                               String name,
+                                               Performance[] performances) {
         long MediaNano = 0;
         long ProcessingTimeNano = 0;
         for (Performance performance : performances) {
             MediaNano += performance.MediaNano;
             ProcessingTimeNano += performance.ProcessingTimeNano;
         }
-        return new Performance(name, ProcessingTimeNano, MediaNano);
+        return new Performance(performanceCalculator.decimalFormat,
+                name,
+                ProcessingTimeNano,
+                MediaNano);
     }
 
     public void start() {
@@ -48,7 +56,7 @@ public class CalculatePerformance {
 
         long Media = ProcessingTimeSome / count;
 
-        return new Performance(Name, ProcessingTime, Media);
+        return new Performance(decimalFormat, Name, ProcessingTime, Media);
     }
 
     public Performance stop(long now, long total) {
@@ -58,8 +66,7 @@ public class CalculatePerformance {
         }
 
         float percentage = Math.CalculatePercentage(now, total);
-        String percentage_formatted = new DecimalFormat("0.00").format(percentage);
-        String progress = percentage_formatted + "% time:" + now + " duration:" + total;
+        String progress = decimalFormat.format(percentage) + "% time:" + now + " duration:" + total;
 
         long ProcessingTime = System.nanoTime() - Time;
         ProcessingTimeSome += ProcessingTime;
@@ -67,34 +74,43 @@ public class CalculatePerformance {
 
         long Media = ProcessingTimeSome / count;
 
-        return new Performance(Name, ProcessingTime, Media, progress);
+        return new Performance(decimalFormat, Name, ProcessingTime, Media, progress);
     }
 
     public static class Performance {
+        private final DecimalFormat decimalFormat;
         String Name;
         long ProcessingTimeNano;
         long MediaNano;
         private String Extra;
 
-        Performance(String Name, long ProcessingTimeNano, long Media) {
+        Performance(DecimalFormat decimalFormat, String Name, long ProcessingTimeNano, long Media) {
             this.Name = Name;
             this.ProcessingTimeNano = ProcessingTimeNano;
             this.MediaNano = Media;
+            this.decimalFormat = decimalFormat;
         }
 
-        Performance(String Name, long ProcessingTimeNano, long Media, String Extra) {
+        Performance(DecimalFormat decimalFormat,
+                    String Name,
+                    long ProcessingTimeNano,
+                    long Media,
+                    String Extra) {
             this.Name = Name;
             this.ProcessingTimeNano = ProcessingTimeNano;
             this.MediaNano = Media;
             this.Extra = Extra;
+            this.decimalFormat = decimalFormat;
+
+
         }
 
-        public float getProcessingTime() {
-            return ProcessingTimeNano / 1000000f;
+        public String getProcessingTime() {
+            return decimalFormat.format(ProcessingTimeNano / 1000000f);
         }
 
-        public float getMediaNano() {
-            return MediaNano / 1000000f;
+        public String getMediaNano() {
+            return decimalFormat.format(MediaNano / 1000000f);
         }
 
         public String toString(String extra) {

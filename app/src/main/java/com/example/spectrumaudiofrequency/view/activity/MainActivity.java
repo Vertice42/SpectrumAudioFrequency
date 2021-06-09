@@ -8,6 +8,7 @@ import android.media.AudioManager;
 import android.media.MediaPlayer;
 import android.os.Build;
 import android.os.Bundle;
+import android.util.Log;
 import android.view.View;
 import android.widget.Button;
 import android.widget.LinearLayout;
@@ -32,6 +33,7 @@ import com.example.spectrumaudiofrequency.view.SinusoidDrawn;
 import java.io.IOException;
 import java.util.Timer;
 import java.util.TimerTask;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import static androidx.recyclerview.widget.LinearLayoutManager.HORIZONTAL;
@@ -49,7 +51,7 @@ public class MainActivity extends AppCompatActivity {
     public static TextView InfoTextView;
     private static boolean onAnalysis = false;
     public LongWaveImageAdapter WaveAdapter;
-    private DecoderManagerWithStorage decoderCodecWithCacheManager;
+    private DecoderManagerWithStorage decoderManagerWithStorage;
     private MediaPlayer mediaPlayer;
     private SinusoidDrawn sinusoidDrawn;
     private ProgressBar AnalysisProgressBar;
@@ -74,7 +76,7 @@ public class MainActivity extends AppCompatActivity {
         onAnalysis = true;
 
         ProgressLayout.setVisibility(View.VISIBLE);
-        SoundAnalyzer soundAnalyzer = new SoundAnalyzer(decoderCodecWithCacheManager,
+        SoundAnalyzer soundAnalyzer = new SoundAnalyzer(decoderManagerWithStorage,
                 20,
                 SAMPLE_DURATION);
 
@@ -98,8 +100,8 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-
         setContentView(R.layout.activity_main);
+
         RequestPermissions(this);
 
         ProgressLayout = this.findViewById(R.id.ProgressLayout);
@@ -113,18 +115,26 @@ public class MainActivity extends AppCompatActivity {
         Button reanalyzeButton = this.findViewById(R.id.ReanalyzeButton);
         SeekBar scaleInput = this.findViewById(R.id.scaleInput);
 
-        decoderCodecWithCacheManager = new DecoderManagerWithStorage(this, AUDIO_ID);
-        decoderCodecWithCacheManager.setNewSampleDuration(SAMPLE_DURATION);
+        CountDownLatch countDownLatch = new CountDownLatch(1);
+        decoderManagerWithStorage = new DecoderManagerWithStorage(this, AUDIO_ID,
+                sampleMetrics -> sampleMetrics);
+        decoderManagerWithStorage.addOnReadyListener(sampleMetrics -> countDownLatch.countDown());
 
-        sinusoidDrawn = new SinusoidDrawn(this, decoderCodecWithCacheManager.MediaDuration);
-        WaveAdapter = new LongWaveImageAdapter(decoderCodecWithCacheManager, this.sinusoidDrawn);
+        try {
+            countDownLatch.await();
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+
+        sinusoidDrawn = new SinusoidDrawn(this, decoderManagerWithStorage.MediaDuration);
+        WaveAdapter = new LongWaveImageAdapter(decoderManagerWithStorage, this.sinusoidDrawn);
 
         waveRecyclerView.setHasFixedSize(false);
         LinearLayoutManager linearLayoutManagerOfWaveRecyclerView
                 = new LinearLayoutManager(this, HORIZONTAL, false);
         waveRecyclerView.setLayoutManager(linearLayoutManagerOfWaveRecyclerView);
-        waveRecyclerView.setAdapter(WaveAdapter);
 
+        waveRecyclerView.setAdapter(WaveAdapter);
 
         String FileName = String.valueOf(AUDIO_ID);
         if (ReadJsonFile(this, FileName).equals("")) {//not decoded//todo change to true validation
@@ -180,29 +190,32 @@ public class MainActivity extends AppCompatActivity {
                         IsPapered.set(true);
                         mediaPlayer.start();
 
+                        int sampleDuration = decoderManagerWithStorage.getSampleDuration();
                         Timer timer = new Timer();
                         timer.scheduleAtFixedRate(new TimerTask() {
                             @Override
                             public void run() {
 
                                 if (mediaPlayer.isPlaying()) {
-                                    long currentTime = mediaPlayer.getCurrentPosition() * 1000;
-                                    int PeacePosition = (int)
-                                            (currentTime / 1000);
-                                    long restTime = currentTime - PeacePosition * 1000;
+                                    long currentTime = mediaPlayer.getCurrentPosition();
 
-                                    int pixelTime = 1000 / linearLayoutManagerOfWaveRecyclerView.getWidth();
+                                    int PeacePosition = (int) (currentTime / sampleDuration);
+                                    long restTime = currentTime - PeacePosition * sampleDuration;
+                                    float pixelTime = linearLayoutManagerOfWaveRecyclerView.getWidth() / (float) sampleDuration;
 
+                                    int finalPeacePosition = PeacePosition + 1;
                                     waveRecyclerView.post(() -> {
                                         int offset = 0;
                                         if (restTime > 0)
                                             offset = (int) (restTime / pixelTime) * -1;
+
                                         linearLayoutManagerOfWaveRecyclerView
-                                                .scrollToPositionWithOffset(PeacePosition, offset);
+                                                .scrollToPositionWithOffset(finalPeacePosition, offset);
+                                        Log.i("finalPeacePosition", "" + finalPeacePosition);
                                     });
                                 }
                             }
-                        }, 0, 33);
+                        }, 0, 33 * 100);
 
                     });
                     mediaPlayer.prepareAsync();
@@ -226,7 +239,7 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onDestroy() {
         super.onDestroy();
-        this.decoderCodecWithCacheManager.destroy();
+        this.decoderManagerWithStorage.close();
         this.sinusoidDrawn.destroy();
     }
 }

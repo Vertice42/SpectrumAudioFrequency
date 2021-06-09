@@ -36,22 +36,20 @@ public class FourierFastTransformTest {
 
         RenderScript rs = RenderScript.create(context);
 
-        DecoderManagerWithStorage decoder = new DecoderManagerWithStorage(context, R.raw.choose);
+        DecoderManagerWithStorage decoder = new DecoderManagerWithStorage(context, R.raw.choose,
+                sampleMetrics -> sampleMetrics);
 
         fft_Default = new FourierFastTransform.Default(rs, ForkJoinPool.commonPool());
         fft_Native = new FourierFastTransform.Native(ForkJoinPool.commonPool());
         fft_Adapted = new FourierFastTransform.Adapted(rs, ForkJoinPool.commonPool());
         fft_Precise = new FourierFastTransform.Precise(rs, ForkJoinPool.commonPool());
 
-        Log.i("TAG", "FourierFastTransformTest: ");
         final CountDownLatch signal = new CountDownLatch(1);
-        decoder.addRequest(new PeriodRequest((2), decoderResult -> {
-            Log.i("wat", "FourierFastTransformTest: ");
+        decoder.makeRequest(new PeriodRequest((2), decoderResult -> {
             Sample = separateSampleChannels(decoderResult.bytes, decoder.ChannelsNumber)[0];
             signal.countDown();
         }));
-        decoder.setNewSampleDuration(25000);
-        decoder.start();
+        decoder.restart();
         signal.await();
     }
 
