@@ -7,21 +7,19 @@ import android.media.MediaFormat;
 import com.example.spectrumaudiofrequency.BuildConfig;
 import com.example.spectrumaudiofrequency.core.ByteQueue;
 
-import java.util.ArrayList;
-
 public class EncoderCodecManager extends CodecManager {
-    private final ArrayList<ResultPromiseListener> ResultsPromises = new ArrayList<>();
-    private final ByteQueue byteQueue = new ByteQueue(1024 * 5000);
+    private final ByteQueue byteQueue;
 
     private long PresentationTimeUs = 0;
 
     public EncoderCodecManager(MediaFormat mediaFormat) {
         super(mediaFormat, false);
         this.SampleSize = getInputBufferLimit();
+        byteQueue = new ByteQueue(this.SampleSize * 1000);
     }
 
     public void setSampleDuration(int SampleDuration) {
-        if (BuildConfig.DEBUG) assert SampleDuration != 0;
+        assert !BuildConfig.DEBUG || SampleDuration != 0;
         this.SampleDuration = SampleDuration;
     }
 
@@ -39,15 +37,9 @@ public class EncoderCodecManager extends CodecManager {
         }
     }
 
-    private void keepResultPromises(CodecSample codecSample) {
-        for (int i = 0; i < ResultsPromises.size(); i++) ResultsPromises.get(i).onKeep(codecSample);
-    }
-
     public void putData(int InputBufferId, boolean LastSample, byte[] data) {
         BufferInfo bufferInfo = new BufferInfo();
         bufferInfo.set(0, data.length, PresentationTimeUs, MediaCodec.BUFFER_FLAG_KEY_FRAME);
-        addOrderlyOutputPromise(new OutputPromise(bufferInfo.presentationTimeUs,
-                this::keepResultPromises));
 
         if (LastSample) {
             double bytesDuration = SampleDuration / (double) data.length;
@@ -55,24 +47,10 @@ public class EncoderCodecManager extends CodecManager {
         } else {
             PresentationTimeUs += SampleDuration;
         }
-        getInputBuffer(InputBufferId).put(data);
-        processInput(new CodecManagerRequest(InputBufferId, bufferInfo));
+        putAndProcessInput(InputBufferId, data, bufferInfo);
     }
-
     private void addPutInputRequest(boolean LastSample, byte[] data) {
         this.addInputIdRequest(InputID -> putData(InputID, LastSample, data));
-    }
-
-    private void addOutputPromise(ResultPromiseListener resultPromiseListener) {
-        ResultsPromises.add(resultPromiseListener);
-    }
-
-    private void removeEncoderOutputPromise(ResultPromiseListener resultPromiseListener) {
-        ResultsPromises.remove(resultPromiseListener);
-    }
-
-    public int getEncoderPromisesSize() {
-        return ResultsPromises.size();
     }
 
     public MediaFormat getOutputFormat() {

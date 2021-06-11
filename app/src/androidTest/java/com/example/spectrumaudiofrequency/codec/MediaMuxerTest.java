@@ -57,7 +57,7 @@ public class MediaMuxerTest {
 
         newAudioFormat.setString(MediaFormat.KEY_MIME, MediaFormat.MIMETYPE_AUDIO_AAC);
 
-        MediaFormatConverter FormatConverter = new MediaFormatConverter(context,
+        MediaFormatConverter formatConverter = new MediaFormatConverter(context,
                 new int[]{IdsOfSounds[0]}, newAudioFormat);
 
         ArrayList<CodecSample> cacheOfSamples = new ArrayList<>();
@@ -66,7 +66,7 @@ public class MediaMuxerTest {
         MediaFormatConverterListener converterListener = converterResult -> {
             converterResult.bufferInfo.flags = MediaCodec.BUFFER_FLAG_KEY_FRAME;
             performance.stop(converterResult.bufferInfo.presentationTimeUs,
-                    FormatConverter.getMediaDuration())
+                    formatConverter.getMediaDuration())
                     .logPerformance(" flag: " + converterResult.bufferInfo.flags +
                             " size:" + converterResult.bufferInfo.size);
             performance.start();
@@ -80,24 +80,24 @@ public class MediaMuxerTest {
                     cacheOfSamples.remove(0);
                 }
                 converterListener.onConvert(converterResult);
-                FormatConverter.setOnConvert(converterListener);
+                formatConverter.setOnConvert(converterListener);
             } else {
                 cacheOfSamples.add(converterResult);
             }
         };
-        FormatConverter.setOnConvert(awaitingStart);
+        formatConverter.setOnConvert(awaitingStart);
 
         final CountDownLatch EndSignal = new CountDownLatch(1);
-        FormatConverter.setFinishListener(() -> {
+        formatConverter.setFinishListener(() -> {
             EndSignal.countDown();
             mediaMuxerManager.stop();
         });
 
-        FormatConverter.start();
-        MediaFormat outputFormat = FormatConverter.getOutputFormat();
+        formatConverter.start();
+        MediaFormat outputFormat = formatConverter.getOutputFormat();
         mediaMuxerManager.prepare(cutoffs, outputFormat);
-        FormatConverter.pause();
-        mediaMuxerManager.putExtractorData(FormatConverter::restart);
+        formatConverter.pause();
+        mediaMuxerManager.putExtractorData(formatConverter::restart);
 
         EndSignal.await();
     }

@@ -7,6 +7,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4;
 import androidx.test.platform.app.InstrumentationRegistry;
 
 import com.example.spectrumaudiofrequency.R;
+import com.example.spectrumaudiofrequency.core.codec_manager.CodecManager;
 import com.example.spectrumaudiofrequency.core.codec_manager.DecoderManager;
 import com.example.spectrumaudiofrequency.util.PerformanceCalculator;
 
@@ -29,12 +30,18 @@ public class DecoderCodecManagerTest {
     final int id = R.raw.choose;
     private final ForkJoinPool forkJoinPool;
     private final DecoderManager decoder;
-    private final boolean TimeOutON = false;
+    private final boolean TimeOutEnable = false;
+    private final DecoderManager decodeWithRearrangement;
     private boolean TimeOutPass = false;
 
     public DecoderCodecManagerTest() {
         Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();
         decoder = new DecoderManager(context, id, sampleMetrics -> sampleMetrics);
+        decodeWithRearrangement = new DecoderManager(context, id, metrics ->
+                new CodecManager.SampleMetrics(metrics.SampleDuration,
+                        (int) Math.ceil(((double)
+                                metrics.SampleSize * metrics.SampleDuration) / metrics.SampleDuration)));
+
         forkJoinPool = ForkJoinPool.commonPool();
     }
 
@@ -48,7 +55,7 @@ public class DecoderCodecManagerTest {
             if (TimeOutPass) CountTimeout(countDownLatch);
             else {
                 Log.e("countDownLatch", "Time Limit ");
-                if (TimeOutON) countDownLatch.countDown();
+                if (TimeOutEnable) countDownLatch.countDown();
             }
             TimeOutPass = false;
         });
@@ -76,8 +83,7 @@ public class DecoderCodecManagerTest {
         return r.toString();
     }
 
-    @Test
-    public void Decode() throws InterruptedException {
+    private void TestDecoding(DecoderManager decoder) throws InterruptedException {
         ArrayList<TestResult> testResults = new ArrayList<>();
         CountDownLatch countDownLatch = new CountDownLatch(1);
 
@@ -121,14 +127,17 @@ public class DecoderCodecManagerTest {
         }
     }
 
-    public void removeOutputListener() {
-        DecoderManager.DecodingListener decodingListener = codecSample ->
-                Log.e("removeOutputListenerError", "lambda should not be called: ");
-        decoder.addOnDecodingListener(decodingListener);
-        decoder.removeOnDecodingListener(decodingListener);
-        Assert.assertEquals(0, decoder.getDecodeListenersListSize());
+    @Test
+    public void decode() throws InterruptedException {
+        TestDecoding(decoder);
     }
 
+    @Test
+    public void decodeWithRearrangement() throws InterruptedException {
+        TestDecoding(decodeWithRearrangement);
+    }
+
+    @Test
     public void separateAndJoiningSampleChannelsTest() {
         byte[] original = new byte[16];
         int ChannelsNumber = 2;

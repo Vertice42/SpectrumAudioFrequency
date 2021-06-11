@@ -92,9 +92,7 @@ public class EncoderCodecManagerTest {
         });
         Encoder.addOnFinishListener(signal::countDown);
 
-        for (int i = 0; i < NumberOfSamples; i++) {
-            Encoder.addPutInputRequest(inputData);
-        }
+        for (int i = 0; i < NumberOfSamples; i++) Encoder.addPutInputRequest(inputData);
         Encoder.stop();
 
         signal.await();

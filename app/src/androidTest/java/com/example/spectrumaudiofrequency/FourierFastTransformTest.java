@@ -49,7 +49,7 @@ public class FourierFastTransformTest {
             Sample = separateSampleChannels(decoderResult.bytes, decoder.ChannelsNumber)[0];
             signal.countDown();
         }));
-        decoder.restart();
+        decoder.start();
         signal.await();
     }
 

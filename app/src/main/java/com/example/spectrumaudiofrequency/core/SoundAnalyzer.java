@@ -64,7 +64,7 @@ public class SoundAnalyzer {
     }
 
     public void start() {
-        if (!decoderManagerWithStorage.IsDecoded()) decoderManagerWithStorage.restart();
+        if (!decoderManagerWithStorage.IsDecoded()) decoderManagerWithStorage.start();
         getAudioSampleAndAnalise(audioPeakAnalyzer, 0);
     }
 

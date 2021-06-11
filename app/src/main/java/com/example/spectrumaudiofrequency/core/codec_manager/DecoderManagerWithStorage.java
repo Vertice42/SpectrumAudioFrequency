@@ -1,8 +1,8 @@
 package com.example.spectrumaudiofrequency.core.codec_manager;
 
 import android.content.Context;
-import android.media.MediaFormat;
 import android.os.Build;
+import android.util.Log;
 
 import androidx.annotation.RequiresApi;
 
@@ -12,6 +12,7 @@ import java.util.LinkedList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Extended Code manager, but contains methods for obtaining samples asynchronously.
@@ -23,16 +24,18 @@ public class DecoderManagerWithStorage extends DecoderManager {
     private CacheQueue<Long, CodecSample> SamplesCache;
     private dbDecoderManager dbOfDecoder;
     private CountDownLatch awaitRestart = null;
-    private int MaxAllocation;
+    private int MaxCacheAllocation;
     private ExecutorService SingleThreadExecutor;
 
-    public DecoderManagerWithStorage(Context context, int ResourceId, Rearranger rearranger) {
-        super(context, ResourceId, rearranger);
+    public DecoderManagerWithStorage(Context context, int ResourceId,
+                                     SampleRearranger sampleRearranger) {
+        super(context, ResourceId, sampleRearranger);
         PrepareDataBase();
     }
 
-    public DecoderManagerWithStorage(Context context, String AudioPath, Rearranger rearranger) {
-        super(context, AudioPath, rearranger);
+    public DecoderManagerWithStorage(Context context, String AudioPath,
+                                     SampleRearranger sampleRearranger) {
+        super(context, AudioPath, sampleRearranger);
         PrepareDataBase();
     }
 
@@ -42,9 +45,7 @@ public class DecoderManagerWithStorage extends DecoderManager {
         SingleThreadExecutor = Executors.newSingleThreadExecutor();
         IsDecoded = dbOfDecoder.MediaIsDecoded();
 
-        MaxAllocation = AvailableMaxAllocationOfSamples(400);
-        addOnMetricsDefinedListener(sampleMetrics ->
-                MaxAllocation = AvailableMaxAllocationOfSamples(sampleMetrics.SampleSize));
+        MaxCacheAllocation = AvailableMaxAllocationOfSamples(400);
 
         if (IsDecoded) {
             MediaSpecs mediaSpecs = dbOfDecoder.getMediaSpecs();
@@ -52,11 +53,14 @@ public class DecoderManagerWithStorage extends DecoderManager {
             this.SampleDuration = (int) mediaSpecs.SampleDuration;
             this.SampleSize = mediaSpecs.SampleSize;
         } else {
+            addOnMetricsDefinedListener(sampleMetrics ->
+                    MaxCacheAllocation = AvailableMaxAllocationOfSamples(sampleMetrics.SampleSize));
+
             super.addOnDecodingListener(decoderResult -> {
-                //Log.i("Decoding", ((double) decoderResult.bufferInfo.presentationTimeUs / getTrueMediaDuration() * 100) + "%");
+                Log.i("Decoding", ((double) decoderResult.bufferInfo.presentationTimeUs / getTrueMediaDuration() * 100) + "%");
                 //Log.i("freeMemory", "" + Runtime.getRuntime().freeMemory() + " MaxAllocation:" + MaxAllocation);
                 KeepRequestsPromises(decoderResult);
-                if (SamplesCache.size() < MaxAllocation)
+                if (SamplesCache.size() < MaxCacheAllocation)
                     SamplesCache.put(decoderResult.SampleId, decoderResult);
                 dbOfDecoder.add(decoderResult.SampleId, decoderResult.bytes);
             });
@@ -92,6 +96,27 @@ public class DecoderManagerWithStorage extends DecoderManager {
                 makeRequest(promise);
             } else request++;
         }
+    }
+
+    public SampleMetrics getSampleMetrics() {
+        AtomicReference<SampleMetrics> sampleMetrics = new AtomicReference<>();
+
+        if (IsDecoded) {
+            sampleMetrics.set(new SampleMetrics(this.SampleDuration, this.SampleSize));
+        } else {
+            CountDownLatch countDownLatch = new CountDownLatch(1);
+            addOnMetricsDefinedListener(sampleMetricsDefined -> {
+                sampleMetrics.set(sampleMetricsDefined);
+                countDownLatch.countDown();
+            });
+            try {
+                countDownLatch.await();
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+        }
+
+        return sampleMetrics.get();
     }
 
     public int getNumberOfSamples() {
@@ -134,18 +159,14 @@ public class DecoderManagerWithStorage extends DecoderManager {
 
     }
 
-    public void restart() {
+    public void start() {
+        if (!IsDecoded) super.start();
         if (awaitRestart != null) awaitRestart.countDown();
     }
 
     public void pause() {
         if (!IsDecoded) super.pause();
         else awaitRestart = new CountDownLatch(1);
-    }
-
-    @Override
-    public MediaFormat getOutputFormat() {
-        return super.getOutputFormat();
     }
 
     public void clear() {

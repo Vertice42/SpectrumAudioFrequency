@@ -3,8 +3,8 @@ package com.example.spectrumaudiofrequency.core;
 import java.nio.ByteBuffer;
 
 public class ByteQueue {
-    private final ByteBuffer mainBuffer;
-    private final ByteBuffer leftoversBuffer;
+    protected ByteBuffer mainBuffer;
+    protected ByteBuffer leftoversBuffer;
 
     public ByteQueue(int capacity) {
         this.mainBuffer = ByteBuffer.allocate(capacity);
@@ -17,6 +17,11 @@ public class ByteQueue {
         else return leftoversBuffer.position();
     }
 
+    public int remaining() {
+        if (mainBuffer.position() > 0) return mainBuffer.remaining();
+        else return leftoversBuffer.remaining();
+    }
+
     public void put(byte[] bytes) {
         if (leftoversBuffer.position() > 0) {
             leftoversBuffer.flip();
@@ -25,7 +30,6 @@ public class ByteQueue {
         }
         mainBuffer.put(bytes);
     }
-
 
     public byte[] pollList(int length) {
         byte[] bytes = new byte[length];
