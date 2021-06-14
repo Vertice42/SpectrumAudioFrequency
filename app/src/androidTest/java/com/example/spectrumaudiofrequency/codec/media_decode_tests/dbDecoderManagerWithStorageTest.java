@@ -1,4 +1,4 @@
-package com.example.spectrumaudiofrequency.codec;
+package com.example.spectrumaudiofrequency.codec.media_decode_tests;
 
 import android.content.Context;
 
@@ -24,7 +24,7 @@ public class dbDecoderManagerWithStorageTest {
 
     public dbDecoderManagerWithStorageTest() {
         Context context = ApplicationProvider.getApplicationContext();
-        DecoderManager decoderToTest = new DecoderManager(context, id, sampleMetrics -> sampleMetrics);
+        DecoderManager decoderToTest = new DecoderManager(context, id);
         dbManager = new dbDecoderManager(context, decoderToTest);
     }
 

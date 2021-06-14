@@ -1,4 +1,4 @@
-package com.example.spectrumaudiofrequency.codec;
+package com.example.spectrumaudiofrequency.codec.media_decode_tests;
 
 import android.content.Context;
 import android.util.Log;
@@ -6,7 +6,7 @@ import android.util.Log;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
 import androidx.test.platform.app.InstrumentationRegistry;
 
-import com.example.spectrumaudiofrequency.R;
+import com.example.spectrumaudiofrequency.codec.CodecTestResult;
 import com.example.spectrumaudiofrequency.core.codec_manager.CodecManager;
 import com.example.spectrumaudiofrequency.core.codec_manager.DecoderManager;
 import com.example.spectrumaudiofrequency.util.PerformanceCalculator;
@@ -15,32 +15,30 @@ import org.junit.Assert;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
-import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.LinkedList;
 import java.util.Random;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ForkJoinPool;
 
+import static com.example.spectrumaudiofrequency.codec.CodecManagersTests.SoundID;
 import static com.example.spectrumaudiofrequency.core.codec_manager.DecoderManager.DecoderResult.SampleChannelsToBytes;
 import static com.example.spectrumaudiofrequency.core.codec_manager.DecoderManager.DecoderResult.separateSampleChannels;
 
 @RunWith(AndroidJUnit4.class)
-public class DecoderCodecManagerTest {
+public class MediaDecoderTest {
     private static final long MAX_TIME_OUT = 50000;
-    final int id = R.raw.choose;
     private final ForkJoinPool forkJoinPool;
     private final DecoderManager decoder;
-    private final boolean TimeOutEnable = false;
     private final DecoderManager decodeWithRearrangement;
+    private final boolean TimeOutEnable = false;
     private boolean TimeOutPass = false;
 
-    public DecoderCodecManagerTest() {
+    public MediaDecoderTest() {
         Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();
-        decoder = new DecoderManager(context, id, sampleMetrics -> sampleMetrics);
-        decodeWithRearrangement = new DecoderManager(context, id, metrics ->
-                new CodecManager.SampleMetrics(metrics.SampleDuration,
-                        (int) Math.ceil(((double)
-                                metrics.SampleSize * metrics.SampleDuration) / metrics.SampleDuration)));
+        decoder = new DecoderManager(context, SoundID);
+
+        decodeWithRearrangement = new DecoderManager(context, SoundID);
 
         forkJoinPool = ForkJoinPool.commonPool();
     }
@@ -61,30 +59,8 @@ public class DecoderCodecManagerTest {
         });
     }
 
-    private boolean checkIfItIsAlreadyDecoded(ArrayList<TestResult> testResults, long SampleTime) {
-        for (int i = 0; i < testResults.size(); i++) {
-            TestResult testResult = testResults.get(i);
-            if (testResult != null)
-                if (testResult.SampleTime == SampleTime) return true;
-                else if (testResult.SampleTime > SampleTime) return false;
-        }
-        return false;
-    }
-
-    private String checkIfNotInSequence(ArrayList<TestResult> testResults) {
-        StringBuilder r = new StringBuilder();
-        long lastSampleTime = 0;
-        for (int i = 0; i < testResults.size(); i++) {
-            TestResult testResult = testResults.get(i);
-            if (testResult.SampleTime < lastSampleTime)
-                r.append(testResult.SampleTime).append(" | ");
-            lastSampleTime = testResult.SampleTime;
-        }
-        return r.toString();
-    }
-
     private void TestDecoding(DecoderManager decoder) throws InterruptedException {
-        ArrayList<TestResult> testResults = new ArrayList<>();
+        LinkedList<CodecTestResult> DecoderResults = new LinkedList<>();
         CountDownLatch countDownLatch = new CountDownLatch(1);
 
         PerformanceCalculator performanceCalculator = new PerformanceCalculator("Decoder");
@@ -96,19 +72,9 @@ public class DecoderCodecManagerTest {
                     .logPerformance();
             performanceCalculator.start();
 
-            boolean IsError = false;
-            String message = "";
-            if (decoderResult.bytes.length == 0) {
-                IsError = true;
-                message += " Sample length Error == 0";
-            }
-            if (checkIfItIsAlreadyDecoded(testResults, presentationTimeUs)) {
-                IsError = true;
-                message += " Sample AlreadyDecoded " + presentationTimeUs;
-            }
-
-            TimeOutPass = true;
-            testResults.add(new TestResult(IsError, presentationTimeUs, message));
+            DecoderResults.add(new CodecTestResult(presentationTimeUs,
+                    decoderResult.bytes.length, decoderResult.bufferInfo.flags
+            ));
         });
 
         decoder.addOnDecoderFinishListener(countDownLatch::countDown);
@@ -116,15 +82,8 @@ public class DecoderCodecManagerTest {
         CountTimeout(countDownLatch);
         decoder.start();
         countDownLatch.await();
-        Assert.assertEquals("", checkIfNotInSequence(testResults));
-        Assert.assertEquals(decoder.getNumberOfSamples(), testResults.size());
-        for (int i = 0; i < testResults.size(); i++) {
-            TestResult testResult = testResults.get(i);
-            if (testResult.IsError) {
-                Log.wtf("DecoderTestError", testResult.Message);
-                Assert.assertFalse(testResult.IsError);
-            }
-        }
+        Assert.assertEquals(decoder.getNumberOfSamples(), DecoderResults.size());
+        CodecErrorChecker.check(this.getClass().getSimpleName(), DecoderResults);
     }
 
     @Test
@@ -134,6 +93,10 @@ public class DecoderCodecManagerTest {
 
     @Test
     public void decodeWithRearrangement() throws InterruptedException {
+        decodeWithRearrangement.setSampleRearranger(metrics ->
+                new CodecManager.SampleMetrics((metrics.SampleDuration / 2), (int) Math.ceil(((double)
+                        metrics.SampleSize * metrics.SampleDuration)
+                        / metrics.SampleDuration / 2f)));
         TestDecoding(decodeWithRearrangement);
     }
 

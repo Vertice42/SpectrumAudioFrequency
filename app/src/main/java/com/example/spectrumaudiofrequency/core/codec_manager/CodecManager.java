@@ -25,8 +25,10 @@ import static android.media.MediaFormat.KEY_FRAME_RATE;
 public abstract class CodecManager {
     private final LinkedList<Integer> InputIdsAvailable = new LinkedList<>();
     private final LinkedList<IdListener> RequestsOfInputID = new LinkedList<>();
+
     private final LinkedList<OutputPromise> OutputPromises = new LinkedList<>();
     private final LinkedList<OutputPromise> SortedOutputPromises = new LinkedList<>();
+
     private final LinkedList<IdListener> OnInputIdAvailableListeners = new LinkedList<>();
     private final LinkedList<SampleMetricsListener> onReadyListeners = new LinkedList<>();
     private final LinkedList<OnOutputListener> OnOutputListeners = new LinkedList<>();
@@ -35,24 +37,16 @@ public abstract class CodecManager {
 
     private final SortedQueue samplesQueue = new SortedQueue();
 
-    public MediaFormat mediaFormat;
     public long MediaDuration;
     protected int SampleDuration;
     protected int SampleSize;
     protected boolean IsStopped = false;
-    private MediaCodec Codec;
     private int bufferLimit = 0;
     private int AmountOfBuffers;
+    private MediaCodec Codec;
     private ResultPromiseListener onPromiseKept;
     private boolean IsReady;
     private int ResultsExpected = 0;
-
-    public CodecManager(MediaFormat mediaFormat, boolean IsDecoder) {
-        prepareEndStart(mediaFormat, IsDecoder);
-    }
-
-    public CodecManager() {//todo refatorar
-    }
 
     public static MediaFormat copyMediaFormat(MediaFormat mediaFormat) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -91,8 +85,7 @@ public abstract class CodecManager {
         }
     }
 
-    protected void prepareEndStart(MediaFormat mediaFormat, boolean IsDecoder) {
-        this.mediaFormat = mediaFormat;
+    protected void prepare(MediaFormat mediaFormat, boolean IsDecoder) {
         try {
             if (IsDecoder)
                 Codec = MediaCodec.createDecoderByType(mediaFormat.getString(MediaFormat.KEY_MIME));

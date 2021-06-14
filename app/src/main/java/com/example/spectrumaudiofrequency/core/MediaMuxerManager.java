@@ -107,7 +107,8 @@ public class MediaMuxerManager {
         while (true) {
             timeBefore = mediaExtractor.getSampleTime();
             //todo o audio fica desincronisado por causa das diferensas de tempo da flag
-            if (timeBefore <= cutoff.endTime || mediaExtractor.getSampleFlags() != MediaExtractor.SAMPLE_FLAG_SYNC) {
+            if (timeBefore <= cutoff.endTime ||
+                    mediaExtractor.getSampleFlags() != MediaExtractor.SAMPLE_FLAG_SYNC) {
                 mediaExtractor.advance();
             } else break;
         }

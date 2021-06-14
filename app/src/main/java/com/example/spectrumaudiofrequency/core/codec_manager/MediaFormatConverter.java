@@ -2,7 +2,6 @@ package com.example.spectrumaudiofrequency.core.codec_manager;
 
 import android.content.Context;
 import android.media.MediaFormat;
-import android.util.Log;
 
 import com.example.spectrumaudiofrequency.core.codec_manager.CodecManager.OnOutputListener;
 import com.example.spectrumaudiofrequency.core.codec_manager.CodecManager.SampleMetrics;
@@ -24,31 +23,30 @@ public class MediaFormatConverter {
     private long MediaDuration = 0;
     private int SampleSize;
 
+    // todo encoder consome muita memoria
+
     public MediaFormatConverter(Context context, int[] MediaIds, MediaFormat newMediaFormat) {
+        int sampleRate = newMediaFormat.getInteger(MediaFormat.KEY_SAMPLE_RATE);
+        newMediaFormat.setInteger(MediaFormat.KEY_SAMPLE_RATE, (int) sampleRate);
 
         decoders = new DecoderManagerWithStorage[MediaIds.length];
-        for (int i = 0; i < decoders.length; i++)
-            decoders[i] = new DecoderManagerWithStorage(context, MediaIds[i], metrics -> {
-                return new SampleMetrics(metrics.SampleDuration, (int) Math.ceil(((double)
-                        metrics.SampleSize * metrics.SampleDuration) / metrics.SampleDuration));
-            });
-
-        /*
-        int sampleRate = newMediaFormat.getInteger(MediaFormat.KEY_SAMPLE_RATE);
-        int bitRate = newMediaFormat.getInteger(MediaFormat.KEY_BIT_RATE);
-        Log.i("sampleRate", "" + sampleRate + " bitRate:" + bitRate);
-        newMediaFormat.setInteger(MediaFormat.KEY_SAMPLE_RATE, (int) (sampleRate / 2f));
-        */
+        for (int i = 0; i < decoders.length; i++) {
+            decoders[i] = new DecoderManagerWithStorage(context, MediaIds[i]);
+            decoders[i].setSampleRearranger(metrics ->
+                    new SampleMetrics((metrics.SampleDuration / 2), (int) Math.ceil(((double)
+                            metrics.SampleSize * metrics.SampleDuration) /
+                            (metrics.SampleDuration / 2f))));
+        }
 
         this.NewMediaFormat = newMediaFormat;
     }
 
-    private void addRequests(int Period, int ChannelsNumber, int DecoderID,
-                             DecoderResult[] decoderResults, MixResultListener mixResultListener) {
+    private void mix(int Period, int ChannelsNumber, int DecoderID,
+                     DecoderResult[] decoderResults, MixResultListener mixResultListener) {
         if (DecoderID < decoders.length) {
             decoders[DecoderID].makeRequest(new PeriodRequest(Period, decoderResult -> {
                 decoderResults[DecoderID] = decoderResult;
-                addRequests(Period, ChannelsNumber, (DecoderID + 1), decoderResults, mixResultListener);
+                mix(Period, ChannelsNumber, (DecoderID + 1), decoderResults, mixResultListener);
             }));
         } else {
             if (SampleSize == 0)
@@ -60,7 +58,7 @@ public class MediaFormatConverter {
 
     private void mixTracks(int Period, int ChannelsNumber, MixResultListener mixResultListener) {
         DecoderResult[] decoderResults = new DecoderResult[decoders.length];
-        addRequests(Period, ChannelsNumber, 0, decoderResults, mixResultListener);
+        mix(Period, ChannelsNumber, 0, decoderResults, mixResultListener);
     }
 
     private int getBiggerNumberSamples() {
@@ -124,26 +122,20 @@ public class MediaFormatConverter {
 
     public void start() {
         encoder = new EncoderCodecManager(NewMediaFormat);
-        encoder.addOnOutputListener(encoderResult -> {
-            Log.i("OnOutputListener", "encoderResult: " + encoderResult.bufferInfo.presentationTimeUs);
-            ConverterListener.onConvert(encoderResult);
-        });
+        encoder.addOnOutputListener(encoderResult -> ConverterListener.onConvert(encoderResult));
         encoder.addOnFinishListener(FinishListener::OnFinish);
+        for (DecoderManagerWithStorage decoder : decoders) decoder.start();
 
-        //for (DecoderManagerWithStorage decoderManager : decoders) decoderManager.start();
-
-        int lastPeriod = getBiggerNumberSamples() - 1;
-
+        int biggerNumberSamples = getBiggerNumberSamples();
+        int lastPeriod = biggerNumberSamples - 1;
         int ChannelsNumber = decoders[0].ChannelsNumber;
-
         encoder.setSampleDuration(getBiggerSampleDuration(decoders));
-
         for (int i = 0; i < lastPeriod; i++) {
             if (decoders.length > 1)
                 mixTracks(i, ChannelsNumber, MixResult -> encoder.addPutInputRequest(MixResult));
             else {
-                decoders[0].makeRequest(new PeriodRequest(i,
-                        decoderResult -> encoder.addPutInputRequest(decoderResult.bytes)));
+                decoders[0].makeRequest(new PeriodRequest(i, decoderResult ->
+                        encoder.addPutInputRequest(decoderResult.bytes)));
             }
         }
 

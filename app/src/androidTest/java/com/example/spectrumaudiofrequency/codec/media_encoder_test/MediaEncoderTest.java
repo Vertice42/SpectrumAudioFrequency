@@ -1,4 +1,4 @@
-package com.example.spectrumaudiofrequency.codec;
+package com.example.spectrumaudiofrequency.codec.media_encoder_test;
 
 import android.content.Context;
 import android.media.MediaExtractor;
@@ -9,6 +9,8 @@ import androidx.test.ext.junit.runners.AndroidJUnit4;
 import androidx.test.platform.app.InstrumentationRegistry;
 
 import com.example.spectrumaudiofrequency.R;
+import com.example.spectrumaudiofrequency.codec.CodecTestResult;
+import com.example.spectrumaudiofrequency.codec.media_decode_tests.CodecErrorChecker;
 import com.example.spectrumaudiofrequency.core.codec_manager.CodecManager;
 import com.example.spectrumaudiofrequency.core.codec_manager.EncoderCodecManager;
 import com.example.spectrumaudiofrequency.util.PerformanceCalculator;
@@ -18,19 +20,19 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 
 import java.io.IOException;
-import java.util.ArrayList;
+import java.util.LinkedList;
 import java.util.concurrent.CountDownLatch;
 
 import static com.example.spectrumaudiofrequency.util.Files.getUriFromResourceId;
 
 @RunWith(AndroidJUnit4.class)
-public class EncoderCodecManagerTest {
+public class MediaEncoderTest {
     private static final int TEST_RAW_ID = R.raw.stardew_valley;
     private final EncoderCodecManager Encoder;
     int SampleDuration = 2500;
     int MediaDurationToTest = SampleDuration * 100;
 
-    public EncoderCodecManagerTest() throws IOException {
+    public MediaEncoderTest() throws IOException {
         Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();
 
         MediaExtractor mediaExtractor = new MediaExtractor();
@@ -41,7 +43,6 @@ public class EncoderCodecManagerTest {
         MediaFormat newFormat = CodecManager.copyMediaFormat(oldFormat);
         newFormat.setString(MediaFormat.KEY_MIME, MediaFormat.MIMETYPE_AUDIO_AAC);
         newFormat.setLong(MediaFormat.KEY_DURATION, MediaDurationToTest);
-//        newFormat.setInteger(MediaFormat.KEY_BIT_RATE, newFormat.getInteger(MediaFormat.KEY_BIT_RATE) * 2);
 
         Log.i("oldFormat", oldFormat.toString());
         Log.i("newFormat", newFormat.toString());
@@ -50,63 +51,33 @@ public class EncoderCodecManagerTest {
         Encoder.setSampleDuration(SampleDuration);
     }
 
-    private boolean AlreadyCoded(ArrayList<TestResult> testResults, long SampleTime) {
-        for (int i = 0; i < testResults.size(); i++) {
-            TestResult testResult = testResults.get(i);
-            if (testResult.SampleTime == SampleTime) return true;
-            else if (testResult.SampleTime > SampleTime) return false;
-        }
-        return false;
-    }
-
     @Test
     public void Encode() throws InterruptedException {
-        final CountDownLatch signal = new CountDownLatch(1);
+        final CountDownLatch EndSignal = new CountDownLatch(1);
 
-        ArrayList<TestResult> testResults = new ArrayList<>();
+        LinkedList<CodecTestResult> DecoderTestResults = new LinkedList<>();
+        PerformanceCalculator performanceCalculator = new PerformanceCalculator("Encode");
 
         byte[] inputData = new byte[Encoder.getInputBufferLimit()];
         for (int i = 0; i < inputData.length; i++) inputData[i] = (byte) (i + i / 2);
         int NumberOfSamples = MediaDurationToTest / SampleDuration;
 
-        PerformanceCalculator performanceCalculator = new PerformanceCalculator("Encode");
         Encoder.addOnOutputListener(codecSample -> {
-            performanceCalculator.stop(codecSample.bufferInfo.presentationTimeUs,
-                    Encoder.MediaDuration).logPerformance();
+            long presentationTimeUs = codecSample.bufferInfo.presentationTimeUs;
+            performanceCalculator.stop(presentationTimeUs, Encoder.MediaDuration).logPerformance();
             performanceCalculator.start();
-
-            boolean IsError = false;
-            String message = "";
-            if (codecSample.bytes.length < 1) {
-                IsError = true;
-                message += " Sample NumberOfSamples == 0";
-            }
-            long timeUs = codecSample.bufferInfo.presentationTimeUs;
-
-            if (AlreadyCoded(testResults, timeUs)) {
-                IsError = true;
-                message += " Sample Already Encoded " + timeUs;
-            }
-            message += codecSample.bufferInfo.presentationTimeUs;
-            testResults.add(new TestResult(IsError, timeUs, message));
+            DecoderTestResults.add(new CodecTestResult(presentationTimeUs,
+                    codecSample.bytes.length,
+                    codecSample.bufferInfo.flags));
         });
-        Encoder.addOnFinishListener(signal::countDown);
+        Encoder.addOnFinishListener(EndSignal::countDown);
 
         for (int i = 0; i < NumberOfSamples; i++) Encoder.addPutInputRequest(inputData);
         Encoder.stop();
 
-        signal.await();
+        EndSignal.await();
 
-        for (int i = 0; i < testResults.size(); i++) {
-            TestResult testResult = testResults.get(i);
-            if (testResult.IsError) {
-                Log.wtf("DecoderTestError", testResult.Message);
-                Assert.assertFalse(testResult.IsError);
-            }
-        }
-
-        Log.i("testResults", testResults.toString());
-
-        Assert.assertEquals(testResults.size(), NumberOfSamples);
+        Assert.assertEquals(DecoderTestResults.size(), NumberOfSamples);
+        CodecErrorChecker.check(this.getClass().getSimpleName(), DecoderTestResults);
     }
 }

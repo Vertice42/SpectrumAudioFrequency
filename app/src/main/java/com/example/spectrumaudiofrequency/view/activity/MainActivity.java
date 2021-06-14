@@ -116,8 +116,7 @@ public class MainActivity extends AppCompatActivity {
         SeekBar scaleInput = this.findViewById(R.id.scaleInput);
 
         CountDownLatch countDownLatch = new CountDownLatch(1);
-        decoderManagerWithStorage = new DecoderManagerWithStorage(this, AUDIO_ID,
-                sampleMetrics -> sampleMetrics);
+        decoderManagerWithStorage = new DecoderManagerWithStorage(this, AUDIO_ID);
         decoderManagerWithStorage.addOnReadyListener(sampleMetrics -> countDownLatch.countDown());
 
         try {

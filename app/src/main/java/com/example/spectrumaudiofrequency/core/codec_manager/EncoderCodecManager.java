@@ -13,7 +13,7 @@ public class EncoderCodecManager extends CodecManager {
     private long PresentationTimeUs = 0;
 
     public EncoderCodecManager(MediaFormat mediaFormat) {
-        super(mediaFormat, false);
+        super.prepare(mediaFormat, false);
         this.SampleSize = getInputBufferLimit();
         byteQueue = new ByteQueue(this.SampleSize * 1000);
     }
@@ -49,6 +49,7 @@ public class EncoderCodecManager extends CodecManager {
         }
         putAndProcessInput(InputBufferId, data, bufferInfo);
     }
+
     private void addPutInputRequest(boolean LastSample, byte[] data) {
         this.addInputIdRequest(InputID -> putData(InputID, LastSample, data));
     }
