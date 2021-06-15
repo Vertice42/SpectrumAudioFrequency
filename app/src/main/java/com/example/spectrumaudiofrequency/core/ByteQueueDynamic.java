@@ -1,7 +1,5 @@
 package com.example.spectrumaudiofrequency.core;
 
-import android.util.Log;
-
 import java.nio.ByteBuffer;
 
 public class ByteQueueDynamic extends ByteQueue {
@@ -18,17 +16,20 @@ public class ByteQueueDynamic extends ByteQueue {
     }
 
     private void expandCapacity(int newCapacity) {
-        Log.i("ByteQueueDynamic", "expand Capacity to " + newCapacity + " bytes");
         byte[] temp = pollList(getSize());
         this.mainBuffer = ByteBuffer.allocate(newCapacity);
         this.leftoversBuffer = ByteBuffer.allocate(newCapacity);
         this.put(temp);
     }
 
+    public int getCapacity() {
+        return this.mainBuffer.capacity();
+    }
+
     public void put(byte[] bytes) {
         int newSize = this.getSize() + bytes.length;
-        int limit = this.remaining();
-        if (newSize > limit) expandCapacity(newSize);
+        int capacity = this.getCapacity();
+        if (newSize > capacity) expandCapacity(newSize);
         super.put(bytes);
     }
 }

@@ -18,7 +18,6 @@ import java.util.Arrays;
 import java.util.LinkedList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicReference;
 
 import static com.example.spectrumaudiofrequency.util.Files.getFileName;
 import static com.example.spectrumaudiofrequency.util.Files.getUriFromResourceId;
@@ -144,13 +143,6 @@ public class DecoderManager extends CodecManager {
         if (!IsReady()) {
             CountDownLatch countDownLatch = new CountDownLatch(1);
             addOnMetricsDefinedListener(sampleMetrics -> countDownLatch.countDown());
-
-            AtomicReference<DecodingListener> reference = new AtomicReference<>();
-            reference.set(addOnDecodingListener(decoderResult -> {
-                countDownLatch.countDown();
-                removeOnDecodingListener(reference.get());
-            }));
-
             try {
                 countDownLatch.await();
             } catch (InterruptedException e) {

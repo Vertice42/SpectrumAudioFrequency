@@ -15,7 +15,7 @@ public class EncoderCodecManager extends CodecManager {
     public EncoderCodecManager(MediaFormat mediaFormat) {
         super.prepare(mediaFormat, false);
         this.SampleSize = getInputBufferLimit();
-        byteQueue = new ByteQueue(this.SampleSize * 1000);
+        byteQueue = new ByteQueue(this.SampleSize * 5);
     }
 
     public void setSampleDuration(int SampleDuration) {
@@ -27,8 +27,10 @@ public class EncoderCodecManager extends CodecManager {
         byteQueue.put(data);
         int inputBufferLimit = this.getInputBufferLimit();
         if (byteQueue.getSize() >= inputBufferLimit) {
-            byte[] bytes = byteQueue.pollList(inputBufferLimit);
-            addPutInputRequest(false, bytes);
+            while (byteQueue.getSize() >= inputBufferLimit) {
+                byte[] bytes = byteQueue.pollList(inputBufferLimit);
+                addPutInputRequest(false, bytes);
+            }
         } else if (IsStopped) {
             while (byteQueue.getSize() > 0) {
                 byte[] bytes = byteQueue.pollList(inputBufferLimit);
@@ -52,6 +54,10 @@ public class EncoderCodecManager extends CodecManager {
 
     private void addPutInputRequest(boolean LastSample, byte[] data) {
         this.addInputIdRequest(InputID -> putData(InputID, LastSample, data));
+    }
+
+    public int getByteQueueSize() {
+        return byteQueue.getSize();
     }
 
     public MediaFormat getOutputFormat() {

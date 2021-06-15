@@ -37,14 +37,22 @@ public class ByteQueue {
 
             leftoversBuffer.flip();
             leftoversBuffer.get(bytes);
-            if (leftoversBuffer.remaining() > 0) mainBuffer.put(leftoversBuffer);
+            if (leftoversBuffer.remaining() > 0) {
+                byte[] rest = new byte[leftoversBuffer.remaining()];
+                leftoversBuffer.get(rest);
+                mainBuffer.put(rest);
+            }
             leftoversBuffer.clear();
 
         } else {
 
             mainBuffer.flip();
             mainBuffer.get(bytes);
-            if (mainBuffer.remaining() > 0) leftoversBuffer.put(mainBuffer);
+            if (mainBuffer.remaining() > 0) {
+                byte[] rest = new byte[mainBuffer.remaining()];
+                mainBuffer.get(rest);
+                leftoversBuffer.put(rest);
+            }
             mainBuffer.clear();
 
         }

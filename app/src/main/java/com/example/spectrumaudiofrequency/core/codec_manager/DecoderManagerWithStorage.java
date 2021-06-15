@@ -20,7 +20,7 @@ public class DecoderManagerWithStorage extends DecoderManager {
     private HashMap<Integer, CodecSample> SamplesCache;
     private dbDecoderManager dbOfDecoder;
     private CountDownLatch awaitRestart = null;
-    private int MaxCacheAllocation;
+    private int MaxAllocationOfSamples;
     private ExecutorService SingleThreadExecutor;
 
     public DecoderManagerWithStorage(Context context, int ResourceId) {
@@ -39,7 +39,7 @@ public class DecoderManagerWithStorage extends DecoderManager {
         SingleThreadExecutor = Executors.newSingleThreadExecutor();
         IsCompletelyCodified = dbOfDecoder.MediaIsDecoded();
 
-        MaxCacheAllocation = AvailableMaxAllocationOfSamples(400);
+        MaxAllocationOfSamples = availableMaxAllocationOfSamples(400);
 
         if (IsCompletelyCodified) {
             MediaSpecs mediaSpecs = dbOfDecoder.getMediaSpecs();
@@ -48,15 +48,15 @@ public class DecoderManagerWithStorage extends DecoderManager {
             this.SampleSize = mediaSpecs.SampleSize;
         }
         addOnMetricsDefinedListener(sampleMetrics ->
-                MaxCacheAllocation = AvailableMaxAllocationOfSamples(sampleMetrics.SampleSize));
+                MaxAllocationOfSamples = availableMaxAllocationOfSamples(sampleMetrics.SampleSize));
 
         super.addOnDecodingListener(decoderResult -> {
             //Log.i("Decoding", ((double) decoderResult.bufferInfo.presentationTimeUs / getTrueMediaDuration() * 100) + "%");
             //Log.i("freeMemory", "" + Runtime.getRuntime().freeMemory() + " MaxAllocation:" + MaxAllocation);
-            if (SamplesCache.size() < MaxCacheAllocation)
+            if (SamplesCache.size() < MaxAllocationOfSamples)
                 SamplesCache.put(decoderResult.SampleId, decoderResult);
-            KeepRequestsPromises(decoderResult);
             dbOfDecoder.add(decoderResult.SampleId, decoderResult.bytes);
+            KeepRequestsPromises(decoderResult);
         });
 
         super.addOnDecoderFinishListener(() -> {
@@ -66,7 +66,7 @@ public class DecoderManagerWithStorage extends DecoderManager {
 
     }
 
-    private int AvailableMaxAllocationOfSamples(int SampleSize) {
+    private int availableMaxAllocationOfSamples(int SampleSize) {
         long freeMemory = Runtime.getRuntime().freeMemory();
         long max = freeMemory / 20;
         return (int) max / SampleSize;
@@ -121,17 +121,15 @@ public class DecoderManagerWithStorage extends DecoderManager {
     }
 
     private synchronized void deliveryRequest(PeriodRequest periodRequest) {
-        CodecSample codecSample;
-        if (SamplesCache.size() > 0) {
-            codecSample = SamplesCache.get(periodRequest.RequiredSampleId);
+        CodecSample codecSample = SamplesCache.get(periodRequest.RequiredSampleId);
+        if (codecSample != null) {
             SamplesCache.remove(periodRequest.RequiredSampleId);
         } else {
             codecSample = dbOfDecoder.getCodecSample(periodRequest.RequiredSampleId);
         }
 
         if (IsCompletelyCodified && codecSample == null) {
-            codecSample = new DecoderResult
-                    (periodRequest.RequiredSampleId, new byte[0], (null));
+            codecSample = new DecoderResult(periodRequest.RequiredSampleId, new byte[0], (null));
         }
 
         assert codecSample != null;
