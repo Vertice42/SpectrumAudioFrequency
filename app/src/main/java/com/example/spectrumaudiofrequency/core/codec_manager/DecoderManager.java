@@ -241,9 +241,8 @@ public class DecoderManager extends CodecManager {
         else OnDecodingFinishListeners.add(onFinish);
     }
 
-    public DecodingListener addOnDecodingListener(DecodingListener decodingListener) {
+    public void addOnDecodingListener(DecodingListener decodingListener) {
         onDecodingListeners.add(decodingListener);
-        return decodingListener;
     }
 
     public void addOnMetricsDefinedListener(SampleMetricsListener sampleMetricsListener) {

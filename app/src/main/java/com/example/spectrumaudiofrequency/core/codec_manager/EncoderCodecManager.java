@@ -15,7 +15,7 @@ public class EncoderCodecManager extends CodecManager {
     public EncoderCodecManager(MediaFormat mediaFormat) {
         super.prepare(mediaFormat, false);
         this.SampleSize = getInputBufferLimit();
-        byteQueue = new ByteQueue(this.SampleSize * 5);
+        byteQueue = new ByteQueue(this.SampleSize * 6);
     }
 
     public void setSampleDuration(int SampleDuration) {

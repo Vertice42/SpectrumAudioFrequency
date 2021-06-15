@@ -28,7 +28,7 @@ import static com.example.spectrumaudiofrequency.util.Files.getUriFromResourceId
 
 @RunWith(AndroidJUnit4.class)
 public class MediaMuxerTest {
-    public static final int[] IdsOfSounds = {R.raw.hollow, R.raw.game_description};
+    public static final int[] IdsOfSounds = {R.raw.simcity1, R.raw.game_description};
 
     @Test
     public void Mux() throws IOException, InterruptedException {

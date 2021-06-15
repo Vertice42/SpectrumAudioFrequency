@@ -78,8 +78,8 @@ public class MediaFormatConverter {
         }
     }
 
-    private void makeInputRequests(DecoderManagerWithStorage[] decoders,
-                                   AtomicInteger RequiredSampleId) {
+    private void putSamplesToEncode(DecoderManagerWithStorage[] decoders,
+                                    AtomicInteger RequiredSampleId) {
         int interactions = encoder.getNumberOfInputsIdsAvailable();
         if (interactions == 0) interactions = 1;
         for (int i = 0; i < interactions; i++)
@@ -169,6 +169,7 @@ public class MediaFormatConverter {
         encoder = new EncoderCodecManager(NewMediaFormat);
         encoder.addOnOutputListener(encoderResult -> ConverterListener.onConvert(encoderResult));
         encoder.addOnFinishListener(FinishListener::OnFinish);
+
         for (DecoderManagerWithStorage decoder : decoders) decoder.start();
 
         //int biggerNumberSamples = getBiggerNumberSamples();
@@ -178,8 +179,8 @@ public class MediaFormatConverter {
 
         AtomicInteger RequiredSampleId = new AtomicInteger();
 
-        makeInputRequests(decoders, RequiredSampleId);
-        encoder.addOnInputIdAvailableListener(() -> makeInputRequests(decoders, RequiredSampleId));
+        putSamplesToEncode(decoders, RequiredSampleId);
+        encoder.addOnInputIdAvailableListener(() -> putSamplesToEncode(decoders, RequiredSampleId));
     }
 
     public void pause() {

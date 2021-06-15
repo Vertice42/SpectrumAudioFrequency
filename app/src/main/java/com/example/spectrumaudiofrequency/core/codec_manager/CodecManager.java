@@ -122,7 +122,7 @@ public abstract class CodecManager {
             if (IsMaxBufferValue.get() &&
                     sampleDuration != 0 &&
                     codecSample.bytes.length > 0 &&
-                    sampleTime == sampleDuration * 4) {
+                    sampleTime > sampleDuration * 4) {
                 executeOnReadyListeners(sampleDuration, codecSample.bytes.length);
                 onPromiseKept = this::orderSamples;
             }
