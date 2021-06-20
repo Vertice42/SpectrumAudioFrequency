@@ -62,7 +62,7 @@ public class MediaMuxerManager {
 
     public void prepare(Cutoff[] cutoffs, MediaFormat ExternalMediaFormat) {
 
-        inputBuffer = ByteBuffer.allocate(1024 * 5000);
+        inputBuffer = ByteBuffer.allocate(1024 * 50_000);
 
         this.cutoffs = cutoffs;
 

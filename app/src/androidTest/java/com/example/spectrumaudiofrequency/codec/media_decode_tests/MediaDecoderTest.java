@@ -8,7 +8,7 @@ import androidx.test.platform.app.InstrumentationRegistry;
 
 import com.example.spectrumaudiofrequency.codec.CodecTestResult;
 import com.example.spectrumaudiofrequency.core.codec_manager.CodecManager;
-import com.example.spectrumaudiofrequency.core.codec_manager.DecoderManager;
+import com.example.spectrumaudiofrequency.core.codec_manager.MediaDecoder;
 import com.example.spectrumaudiofrequency.util.PerformanceCalculator;
 
 import org.junit.Assert;
@@ -22,24 +22,19 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ForkJoinPool;
 
 import static com.example.spectrumaudiofrequency.codec.CodecManagersTests.SoundID;
-import static com.example.spectrumaudiofrequency.core.codec_manager.DecoderManager.DecoderResult.SampleChannelsToBytes;
-import static com.example.spectrumaudiofrequency.core.codec_manager.DecoderManager.DecoderResult.separateSampleChannels;
+import static com.example.spectrumaudiofrequency.core.codec_manager.MediaDecoder.DecoderResult.SampleChannelsToBytes;
+import static com.example.spectrumaudiofrequency.core.codec_manager.MediaDecoder.DecoderResult.separateSampleChannels;
 
 @RunWith(AndroidJUnit4.class)
 public class MediaDecoderTest {
     private static final long MAX_TIME_OUT = 50000;
     private final ForkJoinPool forkJoinPool;
-    private final DecoderManager decoder;
-    private final DecoderManager decodeWithRearrangement;
     private final boolean TimeOutEnable = false;
+    private final Context context;
     private boolean TimeOutPass = false;
 
     public MediaDecoderTest() {
-        Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();
-        decoder = new DecoderManager(context, SoundID);
-
-        decodeWithRearrangement = new DecoderManager(context, SoundID);
-
+        context = InstrumentationRegistry.getInstrumentation().getTargetContext();
         forkJoinPool = ForkJoinPool.commonPool();
     }
 
@@ -59,7 +54,7 @@ public class MediaDecoderTest {
         });
     }
 
-    private void TestDecoding(DecoderManager decoder) throws InterruptedException {
+    private void TestDecoding(MediaDecoder decoder) throws InterruptedException {
         LinkedList<CodecTestResult> DecoderResults = new LinkedList<>();
         CountDownLatch countDownLatch = new CountDownLatch(1);
 
@@ -82,21 +77,22 @@ public class MediaDecoderTest {
         CountTimeout(countDownLatch);
         decoder.start();
         countDownLatch.await();
-        Assert.assertEquals(decoder.getNumberOfSamples(), DecoderResults.size());
+        Assert.assertTrue(DecoderResults.size() >= decoder.getNumberOfSamples());
         CodecErrorChecker.check(this.getClass().getSimpleName(), DecoderResults);
     }
 
     @Test
     public void decode() throws InterruptedException {
-        TestDecoding(decoder);
+        TestDecoding(new MediaDecoder(context, SoundID));
     }
 
     @Test
     public void decodeWithRearrangement() throws InterruptedException {
+        MediaDecoder decodeWithRearrangement = new MediaDecoder(context, SoundID);
         decodeWithRearrangement.setSampleRearranger(metrics ->
-                new CodecManager.SampleMetrics((metrics.SampleDuration / 2), (int) Math.ceil(((double)
-                        metrics.SampleSize * metrics.SampleDuration)
-                        / metrics.SampleDuration / 2f)));
+                new CodecManager.SampleMetrics((metrics.SampleDuration / 2),
+                        (int) Math.ceil(((double) metrics.SampleSize * metrics.SampleDuration)
+                                / metrics.SampleDuration / 2f)));
         TestDecoding(decodeWithRearrangement);
     }
 

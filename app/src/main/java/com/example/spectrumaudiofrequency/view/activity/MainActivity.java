@@ -25,7 +25,7 @@ import androidx.recyclerview.widget.RecyclerView;
 
 import com.example.spectrumaudiofrequency.R;
 import com.example.spectrumaudiofrequency.core.SoundAnalyzer;
-import com.example.spectrumaudiofrequency.core.codec_manager.DecoderManagerWithStorage;
+import com.example.spectrumaudiofrequency.core.codec_manager.MediaDecoderWithStorage;
 import com.example.spectrumaudiofrequency.util.Files;
 import com.example.spectrumaudiofrequency.view.LongWaveImageAdapter;
 import com.example.spectrumaudiofrequency.view.SinusoidDrawn;
@@ -51,7 +51,7 @@ public class MainActivity extends AppCompatActivity {
     public static TextView InfoTextView;
     private static boolean onAnalysis = false;
     public LongWaveImageAdapter WaveAdapter;
-    private DecoderManagerWithStorage decoderManagerWithStorage;
+    private MediaDecoderWithStorage decoderManagerWithStorage;
     private MediaPlayer mediaPlayer;
     private SinusoidDrawn sinusoidDrawn;
     private ProgressBar AnalysisProgressBar;
@@ -116,9 +116,9 @@ public class MainActivity extends AppCompatActivity {
         SeekBar scaleInput = this.findViewById(R.id.scaleInput);
 
         CountDownLatch countDownLatch = new CountDownLatch(1);
-        decoderManagerWithStorage = new DecoderManagerWithStorage(this, AUDIO_ID);
-        decoderManagerWithStorage.addOnReadyListener(sampleMetrics -> countDownLatch.countDown());
-
+        decoderManagerWithStorage = new MediaDecoderWithStorage(this, AUDIO_ID);
+        decoderManagerWithStorage.addOnReadyListener((SamplesHaveEqualSize, sampleMetrics)
+                -> countDownLatch.countDown());
         try {
             countDownLatch.await();
         } catch (InterruptedException e) {

@@ -3,19 +3,17 @@ package com.example.spectrumaudiofrequency.core.codec_manager;
 import android.content.Context;
 import android.media.MediaFormat;
 
-import com.example.spectrumaudiofrequency.core.codec_manager.CodecManager.OnOutputListener;
 import com.example.spectrumaudiofrequency.core.codec_manager.CodecManager.SampleMetrics;
-import com.example.spectrumaudiofrequency.core.codec_manager.DecoderManager.DecoderResult;
-import com.example.spectrumaudiofrequency.core.codec_manager.DecoderManager.PeriodRequest;
+import com.example.spectrumaudiofrequency.core.codec_manager.MediaDecoder.DecoderResult;
+import com.example.spectrumaudiofrequency.core.codec_manager.MediaDecoderWithStorage.PeriodRequest;
 
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicReference;
 
 import static com.example.spectrumaudiofrequency.sinusoid_converter.MixSample.Mix;
 
 public class MediaFormatConverter {
-    private final DecoderManagerWithStorage[] decoders;
+    private final MediaDecoderWithStorage[] decoders;
     private final MediaFormat NewMediaFormat;
     private EncoderCodecManager encoder;
     private MediaFormatConverterFinishListener FinishListener;
@@ -25,12 +23,9 @@ public class MediaFormatConverter {
     private int SampleSize;
 
     public MediaFormatConverter(Context context, int[] MediaIds, MediaFormat newMediaFormat) {
-        //int sampleRate = newMediaFormat.getInteger(MediaFormat.KEY_SAMPLE_RATE);
-        //newMediaFormat.setInteger(MediaFormat.KEY_SAMPLE_RATE,  sampleRate);
-
-        decoders = new DecoderManagerWithStorage[MediaIds.length];
+        decoders = new MediaDecoderWithStorage[MediaIds.length];
         for (int i = 0; i < decoders.length; i++) {
-            decoders[i] = new DecoderManagerWithStorage(context, MediaIds[i]);
+            decoders[i] = new MediaDecoderWithStorage(context, MediaIds[i]);
             /*
             decoders[i].setSampleRearranger(metrics ->
                     new SampleMetrics((metrics.SampleDuration / 2), (int) Math.ceil(((double)
@@ -44,8 +39,9 @@ public class MediaFormatConverter {
 
     private void awaitingAllDecodersFinish() {
         int DecodersNotYetFinished = 0;
-        for (DecoderManagerWithStorage decoder : decoders)
+        for (MediaDecoderWithStorage decoder : decoders)
             if (!decoder.IsCompletelyCodified) DecodersNotYetFinished++;
+
         if (DecodersNotYetFinished > 0) {
             CountDownLatch awaitingFinish = new CountDownLatch(DecodersNotYetFinished);
             for (int i = 0; i < DecodersNotYetFinished; i++)
@@ -56,34 +52,6 @@ public class MediaFormatConverter {
                 e.printStackTrace();
             }
         }
-    }
-
-    private synchronized void putNextSampleToEncode(DecoderManagerWithStorage[] decoders,
-                                                    AtomicInteger RequiredSampleId,
-                                                    int BiggerNumberSamples) {
-
-        RequiredSampleId.getAndIncrement();
-        if (RequiredSampleId.get() > BiggerNumberSamples) {
-            awaitingAllDecodersFinish();
-            BiggerNumberSamples = getBiggerNumberSamples();
-            if (RequiredSampleId.get() > BiggerNumberSamples) {
-                encoder.stop();
-                return;
-            }
-        }
-
-        for (DecoderManagerWithStorage decoder : decoders) {
-            decoder.makeRequest(new PeriodRequest(RequiredSampleId.get(), decoderResult ->
-                    encoder.addPutInputRequest(decoderResult.bytes)));
-        }
-    }
-
-    private void putSamplesToEncode(DecoderManagerWithStorage[] decoders,
-                                    AtomicInteger RequiredSampleId) {
-        int interactions = encoder.getNumberOfInputsIdsAvailable();
-        if (interactions == 0) interactions = 1;
-        for (int i = 0; i < interactions; i++)
-            putNextSampleToEncode(decoders, RequiredSampleId, getBiggerNumberSamples());
     }
 
     private void mix(int Period, int ChannelsNumber, int DecoderID,
@@ -106,23 +74,53 @@ public class MediaFormatConverter {
         mix(Period, ChannelsNumber, 0, decoderResults, mixResultListener);
     }
 
+    private synchronized void putNextSampleToEncode(MediaDecoderWithStorage[] decoders,
+                                                    AtomicInteger RequiredSampleId,
+                                                    AtomicInteger BiggerNumberSamples) {
+        final int requiredSampleId = RequiredSampleId.get();
+        if (requiredSampleId > BiggerNumberSamples.get()) return;
+
+        for (MediaDecoderWithStorage decoder : decoders) {
+            decoder.makeRequest(new PeriodRequest(requiredSampleId, decoderResult -> {
+                if (requiredSampleId >= BiggerNumberSamples.get()) {
+                    awaitingAllDecodersFinish();
+                    BiggerNumberSamples.set(getBiggerNumberSamples());
+                    if (requiredSampleId >= BiggerNumberSamples.get()) encoder.setClose();
+                }
+                encoder.addPutInputRequest(decoderResult.bytes);
+            }));
+        }
+
+        RequiredSampleId.getAndIncrement();
+    }
+
+    private synchronized void putSamplesToEncode(MediaDecoderWithStorage[] decoders,
+                                                 AtomicInteger RequiredSampleId,
+                                                 AtomicInteger BiggerNumberSamples) {
+        int inputsIdsAvailableSize = encoder.getInputsIdsAvailableSize();
+        do {
+            putNextSampleToEncode(decoders, RequiredSampleId, BiggerNumberSamples);
+            inputsIdsAvailableSize--;
+        } while (inputsIdsAvailableSize > 0);
+    }
+
     private int getBiggerNumberSamples() {
         int BiggerNumberSamples = decoders[0].getNumberOfSamples();
-        for (DecoderManagerWithStorage decoderManager : decoders) {
+        for (MediaDecoderWithStorage decoderManager : decoders) {
             int numberOfSamples = decoderManager.getNumberOfSamples();
             if (numberOfSamples > BiggerNumberSamples) BiggerNumberSamples = numberOfSamples;
         }
         return BiggerNumberSamples;
     }
 
-    private int getBiggerSampleDuration(DecoderManagerWithStorage[] decoders) {
-        int BiggerSampleDuration = 0;
-        for (DecoderManagerWithStorage decoder : decoders) {
+    private SampleMetrics getMetricsWithLongerDuration(MediaDecoderWithStorage[] decoders) {
+        SampleMetrics metrics = null;
+        for (MediaDecoderWithStorage decoder : decoders) {
             SampleMetrics sampleMetrics = decoder.getSampleMetrics();
-            if (sampleMetrics.SampleDuration > BiggerSampleDuration)
-                BiggerSampleDuration = sampleMetrics.SampleDuration;
+            if (metrics == null || sampleMetrics.SampleDuration > metrics.SampleDuration)
+                metrics = sampleMetrics;
         }
-        return BiggerSampleDuration;
+        return metrics;
     }
 
     public void setOnConvert(MediaFormatConverterListener onConvert) {
@@ -136,7 +134,7 @@ public class MediaFormatConverter {
     public long getMediaDuration() {
         if (MediaDuration != 0) return MediaDuration;
         else {
-            for (DecoderManagerWithStorage decoderManager : decoders) {
+            for (MediaDecoderWithStorage decoderManager : decoders) {
                 long trueMediaDuration = (long) decoderManager.getTrueMediaDuration();
                 if (trueMediaDuration > MediaDuration) {
                     MediaDuration = trueMediaDuration;
@@ -148,14 +146,11 @@ public class MediaFormatConverter {
 
     public MediaFormat getOutputFormat() {
         if (IsStarted) {
-            AtomicReference<OnOutputListener> onFirstSample = new AtomicReference<>();
             CountDownLatch awaitFirst = new CountDownLatch(1);
-            onFirstSample.set(codecSample -> {
+            encoder.addOnReadyListener((SamplesHaveEqualSize, sampleMetrics) -> {
                 IsStarted = true;
                 awaitFirst.countDown();
-                encoder.removeOnOutputListener(onFirstSample.get());
             });
-            encoder.addOnOutputListener(onFirstSample.get());
             try {
                 awaitFirst.await();
             } catch (InterruptedException e) {
@@ -167,28 +162,35 @@ public class MediaFormatConverter {
 
     public void start() {
         encoder = new EncoderCodecManager(NewMediaFormat);
-        encoder.addOnOutputListener(encoderResult -> ConverterListener.onConvert(encoderResult));
-        encoder.addOnFinishListener(FinishListener::OnFinish);
+        encoder.addOnEncode(encoderResult -> ConverterListener.onConvert(encoderResult));
+        encoder.addOnFinishListener(() -> FinishListener.OnFinish());
 
-        for (DecoderManagerWithStorage decoder : decoders) decoder.start();
+        for (MediaDecoderWithStorage decoder : decoders) {
+            if (!decoder.IsCompletelyCodified) decoder.start();
+        }
 
         //int biggerNumberSamples = getBiggerNumberSamples();
         //int lastPeriod = biggerNumberSamples - 1;
         int ChannelsNumber = decoders[0].ChannelsNumber;
-        encoder.setSampleDuration(getBiggerSampleDuration(decoders));
+
+        encoder.setSampleMetrics(getMetricsWithLongerDuration(decoders));
 
         AtomicInteger RequiredSampleId = new AtomicInteger();
+        AtomicInteger BiggerNumberSamples = new AtomicInteger(getBiggerNumberSamples());
 
-        putSamplesToEncode(decoders, RequiredSampleId);
-        encoder.addOnInputIdAvailableListener(() -> putSamplesToEncode(decoders, RequiredSampleId));
+        putSamplesToEncode(decoders, RequiredSampleId, BiggerNumberSamples);
+
+        //todo remover addOnInputIdAvailableListener on stop
+        encoder.addOnInputIdAvailableListener(() ->
+                putSamplesToEncode(decoders, RequiredSampleId, BiggerNumberSamples));
     }
 
     public void pause() {
-        for (DecoderManagerWithStorage decoder : decoders) decoder.pause();
+        for (MediaDecoderWithStorage decoder : decoders) decoder.pause();
     }
 
     public void restart() {
-        for (DecoderManagerWithStorage decoder : decoders) decoder.start();
+        for (MediaDecoderWithStorage decoder : decoders) decoder.start();
     }
 
     private interface MixResultListener {

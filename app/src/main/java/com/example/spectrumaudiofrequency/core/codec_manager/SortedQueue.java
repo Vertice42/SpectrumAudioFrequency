@@ -72,7 +72,6 @@ public class SortedQueue implements Queue<QueueElement> {
     public boolean add(QueueElement queueElement) {
         int i = 0;
         while (i < queueElements.size()) {
-          //  Log.i("TAG", "disorder" + (queueElement.getIndex() > queueElements.get(i).getIndex()));
             if (queueElement.getIndex() > queueElements.get(i).getIndex()) i++;
             else break;
         }

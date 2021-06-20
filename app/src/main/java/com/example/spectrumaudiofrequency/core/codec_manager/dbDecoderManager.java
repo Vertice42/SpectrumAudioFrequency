@@ -15,10 +15,10 @@ public class dbDecoderManager extends SQLiteOpenHelper {
     public static final int DATABASE_VERSION = 2;
     public static final String DATABASE_NAME = "FeedReader.db";
     private final SQLiteDatabase sqLiteDatabase;
-    private final DecoderManager decoder;
+    private final MediaDecoder decoder;
     private int NumberOfSamples = 0;
 
-    public dbDecoderManager(Context context, DecoderManager decoder) {
+    public dbDecoderManager(Context context, MediaDecoder decoder) {
         super(context, DATABASE_NAME, null, DATABASE_VERSION);
         sqLiteDatabase = this.getWritableDatabase();
         this.decoder = decoder;

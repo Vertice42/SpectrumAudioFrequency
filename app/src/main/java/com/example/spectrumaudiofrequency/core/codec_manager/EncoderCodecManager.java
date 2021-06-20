@@ -1,26 +1,53 @@
 package com.example.spectrumaudiofrequency.core.codec_manager;
 
-import android.media.MediaCodec;
 import android.media.MediaCodec.BufferInfo;
 import android.media.MediaFormat;
 
 import com.example.spectrumaudiofrequency.BuildConfig;
 import com.example.spectrumaudiofrequency.core.ByteQueue;
 
+import java.util.LinkedList;
+
+import static android.media.MediaCodec.BUFFER_FLAG_END_OF_STREAM;
+
 public class EncoderCodecManager extends CodecManager {
-    private final ByteQueue byteQueue;
+    private final LinkedList<ResultPromiseListener> onEncodeListeners = new LinkedList<>();
+    private ByteQueue byteQueue;
+    private boolean IsClose = false;
 
     private long PresentationTimeUs = 0;
+    private double ByteDuration;
 
     public EncoderCodecManager(MediaFormat mediaFormat) {
         super.prepare(mediaFormat, false);
-        this.SampleSize = getInputBufferLimit();
-        byteQueue = new ByteQueue(this.SampleSize * 6);
     }
 
-    public void setSampleDuration(int SampleDuration) {
-        assert !BuildConfig.DEBUG || SampleDuration != 0;
-        this.SampleDuration = SampleDuration;
+    public void setSampleMetrics(SampleMetrics sampleMetrics) {
+        if (BuildConfig.DEBUG) {
+            if (sampleMetrics.SampleDuration == 0 || sampleMetrics.SampleSize == 0)
+                throw new AssertionError();
+        }
+
+        this.SampleDuration = sampleMetrics.SampleDuration;
+        this.SampleSize = sampleMetrics.SampleSize;
+        this.ByteDuration = sampleMetrics.getByteDuration();
+        byteQueue = new ByteQueue(this.SampleSize * 10);
+    }
+
+    public void putData(int InputBufferId, boolean LastSample, byte[] data) {
+        BufferInfo bufferInfo = new BufferInfo();
+        bufferInfo.set(0, data.length, PresentationTimeUs, 0);
+
+        if (LastSample) {
+            super.stop();
+            bufferInfo.flags = BUFFER_FLAG_END_OF_STREAM;
+        }
+        putAndProcessInput(InputBufferId, data, bufferInfo, this::executeOnEncodeListeners);
+        PresentationTimeUs += data.length * ByteDuration;
+    }
+
+    private void addPutInputRequest(boolean LastSample, byte[] data) {
+        this.addInputIdRequest(InputID -> putData(InputID, LastSample, data));
     }
 
     public void addPutInputRequest(byte[] data) {
@@ -31,33 +58,37 @@ public class EncoderCodecManager extends CodecManager {
                 byte[] bytes = byteQueue.pollList(inputBufferLimit);
                 addPutInputRequest(false, bytes);
             }
-        } else if (IsStopped) {
-            while (byteQueue.getSize() > 0) {
-                byte[] bytes = byteQueue.pollList(inputBufferLimit);
-                addPutInputRequest(true, bytes);
+        } else if (IsClose) {
+            while (true) {
+                int queueSize = byteQueue.getSize();
+                if (queueSize <= inputBufferLimit) {
+                    byte[] bytes = byteQueue.pollList(queueSize);
+                    addPutInputRequest(true, bytes);
+                    break;
+                } else {
+                    byte[] bytes = byteQueue.pollList(inputBufferLimit);
+                    addPutInputRequest(false, bytes);
+                }
             }
         }
     }
 
-    public void putData(int InputBufferId, boolean LastSample, byte[] data) {
-        BufferInfo bufferInfo = new BufferInfo();
-        bufferInfo.set(0, data.length, PresentationTimeUs, MediaCodec.BUFFER_FLAG_KEY_FRAME);
+    public void setClose() {
+        IsClose = true;
+    }
 
-        if (LastSample) {
-            double bytesDuration = SampleDuration / (double) data.length;
-            PresentationTimeUs += data.length * bytesDuration;
-        } else {
-            PresentationTimeUs += SampleDuration;
+    public boolean isClose() {
+        return IsClose;
+    }
+
+    public void addOnEncode(ResultPromiseListener resultPromiseListener) {
+        onEncodeListeners.add(resultPromiseListener);
+    }
+
+    private void executeOnEncodeListeners(CodecSample codecSample) {
+        for (int i = 0; i < onEncodeListeners.size(); i++) {
+            onEncodeListeners.get(i).onKeep(codecSample);
         }
-        putAndProcessInput(InputBufferId, data, bufferInfo);
-    }
-
-    private void addPutInputRequest(boolean LastSample, byte[] data) {
-        this.addInputIdRequest(InputID -> putData(InputID, LastSample, data));
-    }
-
-    public int getByteQueueSize() {
-        return byteQueue.getSize();
     }
 
     public MediaFormat getOutputFormat() {

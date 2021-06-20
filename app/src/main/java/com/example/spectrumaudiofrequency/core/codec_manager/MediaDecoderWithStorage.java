@@ -15,7 +15,7 @@ import java.util.concurrent.atomic.AtomicReference;
  * Extended Code manager, but contains methods for obtaining samples asynchronously.
  * The samples are saved in a database.
  */
-public class DecoderManagerWithStorage extends DecoderManager {
+public class MediaDecoderWithStorage extends MediaDecoder {
     private final LinkedList<PeriodRequest> RequestsPromises = new LinkedList<>();
     private HashMap<Integer, CodecSample> SamplesCache;
     private dbDecoderManager dbOfDecoder;
@@ -23,19 +23,20 @@ public class DecoderManagerWithStorage extends DecoderManager {
     private int MaxAllocationOfSamples;
     private ExecutorService SingleThreadExecutor;
 
-    public DecoderManagerWithStorage(Context context, int ResourceId) {
+    public MediaDecoderWithStorage(Context context, int ResourceId) {
         super(context, ResourceId);
         PrepareDataBase(context);
     }
 
-    public DecoderManagerWithStorage(Context context, String AudioPath) {
+    public MediaDecoderWithStorage(Context context, String AudioPath) {
         super(AudioPath);
         PrepareDataBase(context);
     }
 
     private void PrepareDataBase(Context context) {
-        SamplesCache = new HashMap<>();
         dbOfDecoder = new dbDecoderManager(context, this);
+
+        SamplesCache = new HashMap<>();
         SingleThreadExecutor = Executors.newSingleThreadExecutor();
         IsCompletelyCodified = dbOfDecoder.MediaIsDecoded();
 
@@ -43,27 +44,29 @@ public class DecoderManagerWithStorage extends DecoderManager {
 
         if (IsCompletelyCodified) {
             MediaSpecs mediaSpecs = dbOfDecoder.getMediaSpecs();
-            this.TrueMediaDuration = mediaSpecs.TrueMediaDuration;
+            this.TrueMediaDuration = (double) mediaSpecs.TrueMediaDuration;
             this.SampleDuration = (int) mediaSpecs.SampleDuration;
             this.SampleSize = mediaSpecs.SampleSize;
+
+        } else {
+            addOnMetricsDefinedListener(sampleMetrics ->
+                    MaxAllocationOfSamples = availableMaxAllocationOfSamples
+                            (sampleMetrics.SampleSize));
+
+            super.addOnDecodingListener(decoderResult -> {
+                //Log.i("Decoding", ((double) decoderResult.bufferInfo.presentationTimeUs / getTrueMediaDuration() * 100) + "%");
+                //Log.i("freeMemory", "" + Runtime.getRuntime().freeMemory() + " MaxAllocation:" + MaxAllocation);
+                if (SamplesCache.size() < MaxAllocationOfSamples)
+                    SamplesCache.put(decoderResult.SampleId, decoderResult);
+                dbOfDecoder.add(decoderResult.SampleId, decoderResult.bytes);
+                KeepRequestsPromises(decoderResult);
+            });
+
+            super.addOnDecoderFinishListener(() -> {
+                dbOfDecoder.setDecoded();
+                KeepRequestsPromises();
+            });
         }
-        addOnMetricsDefinedListener(sampleMetrics ->
-                MaxAllocationOfSamples = availableMaxAllocationOfSamples(sampleMetrics.SampleSize));
-
-        super.addOnDecodingListener(decoderResult -> {
-            //Log.i("Decoding", ((double) decoderResult.bufferInfo.presentationTimeUs / getTrueMediaDuration() * 100) + "%");
-            //Log.i("freeMemory", "" + Runtime.getRuntime().freeMemory() + " MaxAllocation:" + MaxAllocation);
-            if (SamplesCache.size() < MaxAllocationOfSamples)
-                SamplesCache.put(decoderResult.SampleId, decoderResult);
-            dbOfDecoder.add(decoderResult.SampleId, decoderResult.bytes);
-            KeepRequestsPromises(decoderResult);
-        });
-
-        super.addOnDecoderFinishListener(() -> {
-            dbOfDecoder.setDecoded();
-            KeepRequestsPromises();
-        });
-
     }
 
     private int availableMaxAllocationOfSamples(int SampleSize) {
@@ -77,7 +80,7 @@ public class DecoderManagerWithStorage extends DecoderManager {
     }
 
     private synchronized void KeepRequestsPromises(DecoderResult decoderResult) {
-        while (RequestsPromises.size() != 0) {
+        while (RequestsPromises.size() > 0) {
             PeriodRequest periodRequest = RequestsPromises.get(0);
             if (periodRequest.RequiredSampleId <= decoderResult.SampleId || IsCompletelyCodified) {
                 RequestsPromises.remove(periodRequest);
@@ -121,37 +124,38 @@ public class DecoderManagerWithStorage extends DecoderManager {
     }
 
     private synchronized void deliveryRequest(PeriodRequest periodRequest) {
-        CodecSample codecSample = SamplesCache.get(periodRequest.RequiredSampleId);
+        if (awaitRestart != null) {
+            try {
+                awaitRestart.await();
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+        }
+        int requiredSampleId = periodRequest.RequiredSampleId;
+        CodecSample codecSample = SamplesCache.get(requiredSampleId);
         if (codecSample != null) {
-            SamplesCache.remove(periodRequest.RequiredSampleId);
+            SamplesCache.remove(requiredSampleId);
         } else {
-            codecSample = dbOfDecoder.getCodecSample(periodRequest.RequiredSampleId);
+            codecSample = dbOfDecoder.getCodecSample(requiredSampleId);
         }
 
         if (IsCompletelyCodified && codecSample == null) {
-            codecSample = new DecoderResult(periodRequest.RequiredSampleId, new byte[0], (null));
+            codecSample = new DecoderResult(requiredSampleId, new byte[0], (null));
         }
 
         assert codecSample != null;
+
+        long presentationTimeUs = -1;
+        if (codecSample.bufferInfo != null)
+            presentationTimeUs = codecSample.bufferInfo.presentationTimeUs;
         periodRequest.DecodingListener.onDecoded(new DecoderResult
-                (periodRequest.RequiredSampleId, codecSample));
+                (requiredSampleId, codecSample));
     }
 
     public void makeRequest(PeriodRequest periodRequest) {
-        SingleThreadExecutor.execute(() -> {
-            if (awaitRestart != null) {
-                try {
-                    awaitRestart.await();
-                } catch (InterruptedException e) {
-                    e.printStackTrace();
-                }
-            }
-
-            if (IsCompletelyCodified && RequestsPromises.size() == 0)
-                deliveryRequest(periodRequest);
-            else addRequestsPromises(periodRequest);
-        });
-
+        if (IsCompletelyCodified && RequestsPromises.size() == 0) {
+            SingleThreadExecutor.execute(() -> deliveryRequest(periodRequest));
+        } else addRequestsPromises(periodRequest);
     }
 
     public void start() {
@@ -172,4 +176,17 @@ public class DecoderManagerWithStorage extends DecoderManager {
         dbOfDecoder.close();
     }
 
+    public interface PeriodRequestListener {
+        void onDecoded(DecoderResult decoderResult);
+    }
+
+    public static class PeriodRequest {
+        int RequiredSampleId;
+        PeriodRequestListener DecodingListener;
+
+        public PeriodRequest(int RequiredSampleId, PeriodRequestListener DecodingListener) {
+            this.RequiredSampleId = RequiredSampleId;
+            this.DecodingListener = DecodingListener;
+        }
+    }
 }

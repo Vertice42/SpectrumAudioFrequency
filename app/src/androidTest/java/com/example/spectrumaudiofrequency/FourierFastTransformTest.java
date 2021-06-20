@@ -8,8 +8,8 @@ import androidx.test.core.app.ApplicationProvider;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
 
 import com.example.spectrumaudiofrequency.core.FourierFastTransform;
-import com.example.spectrumaudiofrequency.core.codec_manager.DecoderManager.PeriodRequest;
-import com.example.spectrumaudiofrequency.core.codec_manager.DecoderManagerWithStorage;
+import com.example.spectrumaudiofrequency.core.codec_manager.MediaDecoderWithStorage;
+import com.example.spectrumaudiofrequency.core.codec_manager.MediaDecoderWithStorage.PeriodRequest;
 
 import org.junit.Assert;
 import org.junit.Test;
@@ -18,7 +18,7 @@ import org.junit.runner.RunWith;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ForkJoinPool;
 
-import static com.example.spectrumaudiofrequency.core.codec_manager.DecoderManager.DecoderResult.separateSampleChannels;
+import static com.example.spectrumaudiofrequency.core.codec_manager.MediaDecoder.DecoderResult.separateSampleChannels;
 import static com.example.spectrumaudiofrequency.util.Array.calculateEquity;
 
 @RunWith(AndroidJUnit4.class)
@@ -36,7 +36,7 @@ public class FourierFastTransformTest {
 
         RenderScript rs = RenderScript.create(context);
 
-        DecoderManagerWithStorage decoder = new DecoderManagerWithStorage(context, R.raw.choose);
+        MediaDecoderWithStorage decoder = new MediaDecoderWithStorage(context, R.raw.choose);
 
         fft_Default = new FourierFastTransform.Default(rs, ForkJoinPool.commonPool());
         fft_Native = new FourierFastTransform.Native(ForkJoinPool.commonPool());

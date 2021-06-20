@@ -1,7 +1,6 @@
 package com.example.spectrumaudiofrequency.codec;
 
 import android.content.Context;
-import android.media.MediaCodec;
 import android.media.MediaExtractor;
 import android.media.MediaFormat;
 import android.util.Log;
@@ -28,10 +27,12 @@ import static com.example.spectrumaudiofrequency.util.Files.getUriFromResourceId
 
 @RunWith(AndroidJUnit4.class)
 public class MediaMuxerTest {
-    public static final int[] IdsOfSounds = {R.raw.simcity1, R.raw.game_description};
+    public static final int[] IdsOfSounds = {R.raw.hollow, R.raw.game_description};
 
     @Test
     public void Mux() throws IOException, InterruptedException {
+        final CountDownLatch EndSignal = new CountDownLatch(1);
+
         Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();
         MediaMuxerManager mediaMuxerManager = new MediaMuxerManager(context,
                 getUriFromResourceId(context, R.raw.video_input3));
@@ -63,17 +64,18 @@ public class MediaMuxerTest {
         ArrayList<CodecSample> cacheOfSamples = new ArrayList<>();
 
         PerformanceCalculator performance = new PerformanceCalculator("MuxTime");
+
         MediaFormatConverterListener converterListener = converterResult -> {
-            converterResult.bufferInfo.flags = MediaCodec.BUFFER_FLAG_KEY_FRAME;
-            performance.stop(converterResult.bufferInfo.presentationTimeUs,
-                    formatConverter.getMediaDuration())
-                    .logPerformance(" flag: " + converterResult.bufferInfo.flags +
-                            " size:" + converterResult.bufferInfo.size);
+            long presentationTimeUs = converterResult.bufferInfo.presentationTimeUs;
+            performance.stop(presentationTimeUs,
+                    formatConverter.getMediaDuration()).logPerformance(" flag: " +
+                    converterResult.bufferInfo.flags +
+                    " size:" + converterResult.bufferInfo.size);
             performance.start();
             mediaMuxerManager.writeSampleData(converterResult.bufferInfo, converterResult.bytes);
         };
 
-        MediaFormatConverterListener awaitingStart = converterResult -> {
+        MediaFormatConverterListener waitingPreparationOfMediaMuxer = converterResult -> {
             if (mediaMuxerManager.IsPrepared()) {
                 while (cacheOfSamples.size() > 0) {
                     converterListener.onConvert(cacheOfSamples.get(0));
@@ -85,9 +87,8 @@ public class MediaMuxerTest {
                 cacheOfSamples.add(converterResult);
             }
         };
-        formatConverter.setOnConvert(awaitingStart);
+        formatConverter.setOnConvert(waitingPreparationOfMediaMuxer);
 
-        final CountDownLatch EndSignal = new CountDownLatch(1);
         formatConverter.setFinishListener(() -> {
             EndSignal.countDown();
             mediaMuxerManager.stop();

@@ -4,8 +4,8 @@ import android.os.Build;
 
 import com.example.spectrumaudiofrequency.core.MediaMuxerManager.Cutoff;
 import com.example.spectrumaudiofrequency.core.SoundAnalyzer.AudioPeakAnalyzer.Peak;
-import com.example.spectrumaudiofrequency.core.codec_manager.DecoderManager.PeriodRequest;
-import com.example.spectrumaudiofrequency.core.codec_manager.DecoderManagerWithStorage;
+import com.example.spectrumaudiofrequency.core.codec_manager.MediaDecoderWithStorage;
+import com.example.spectrumaudiofrequency.core.codec_manager.MediaDecoderWithStorage.PeriodRequest;
 
 import org.jetbrains.annotations.NotNull;
 import org.json.JSONArray;
@@ -14,16 +14,16 @@ import org.json.JSONObject;
 
 import java.util.concurrent.ForkJoinPool;
 
-import static com.example.spectrumaudiofrequency.core.codec_manager.DecoderManager.DecoderResult.separateSampleChannels;
+import static com.example.spectrumaudiofrequency.core.codec_manager.MediaDecoder.DecoderResult.separateSampleChannels;
 
 public class SoundAnalyzer {
     private final int SAMPLE_DURATION;
     private final ForkJoinPool Poll;
-    private final DecoderManagerWithStorage decoderManagerWithStorage;
+    private final MediaDecoderWithStorage decoderManagerWithStorage;
     private final AudioPeakAnalyzer audioPeakAnalyzer;
     private SoundAnalyzerProgressListener progressListener;
 
-    public SoundAnalyzer(DecoderManagerWithStorage decoderManagerWithStorage,
+    public SoundAnalyzer(MediaDecoderWithStorage decoderManagerWithStorage,
                          int SpikesCollectionSize,
                          int SampleDuration) {
         this.decoderManagerWithStorage = decoderManagerWithStorage;

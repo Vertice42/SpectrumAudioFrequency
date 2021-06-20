@@ -9,13 +9,13 @@ import androidx.annotation.NonNull;
 import androidx.annotation.RequiresApi;
 import androidx.recyclerview.widget.RecyclerView;
 
-import com.example.spectrumaudiofrequency.core.codec_manager.DecoderManager.PeriodRequest;
-import com.example.spectrumaudiofrequency.core.codec_manager.DecoderManagerWithStorage;
+import com.example.spectrumaudiofrequency.core.codec_manager.MediaDecoderWithStorage;
+import com.example.spectrumaudiofrequency.core.codec_manager.MediaDecoderWithStorage.PeriodRequest;
 import com.example.spectrumaudiofrequency.sinusoid_converter.SamplingResize.SuperResize;
 import com.example.spectrumaudiofrequency.util.PerformanceCalculator;
 import com.example.spectrumaudiofrequency.util.PerformanceCalculator.Performance;
 
-import static com.example.spectrumaudiofrequency.core.codec_manager.DecoderManager.DecoderResult.separateSampleChannels;
+import static com.example.spectrumaudiofrequency.core.codec_manager.MediaDecoder.DecoderResult.separateSampleChannels;
 import static com.example.spectrumaudiofrequency.util.PerformanceCalculator.SomePerformances;
 import static com.example.spectrumaudiofrequency.view.activity.MainActivity.InfoTextView;
 
@@ -23,14 +23,14 @@ public class LongWaveImageAdapter extends RecyclerView.Adapter<WaveViewHolder> {
     private static final int ImageResolution = 2;
     private final PerformanceCalculator RequestPerformance;
     private final PerformanceCalculator RenderPerformanCalculator;
-    public DecoderManagerWithStorage decoderManagerWithStorage;
+    public MediaDecoderWithStorage decoderManagerWithStorage;
     public SinusoidDrawn sinusoidDrawn;
     public int WaveLength = 0;
     boolean inUpdate = false;
     private WaveViewHolder holderObserved;
     private int Zoom;
 
-    public LongWaveImageAdapter(DecoderManagerWithStorage decoderCodecWithCacheManager, SinusoidDrawn sinusoidDrawn) {
+    public LongWaveImageAdapter(MediaDecoderWithStorage decoderCodecWithCacheManager, SinusoidDrawn sinusoidDrawn) {
         this.decoderManagerWithStorage = decoderCodecWithCacheManager;
         this.sinusoidDrawn = sinusoidDrawn;
 

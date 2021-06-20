@@ -1,14 +1,13 @@
 package com.example.spectrumaudiofrequency.codec.media_decode_tests;
 
 import android.content.Context;
-import android.util.Log;
 
 import androidx.test.ext.junit.runners.AndroidJUnit4;
 import androidx.test.platform.app.InstrumentationRegistry;
 
 import com.example.spectrumaudiofrequency.codec.CodecTestResult;
-import com.example.spectrumaudiofrequency.core.codec_manager.DecoderManager.PeriodRequest;
-import com.example.spectrumaudiofrequency.core.codec_manager.DecoderManagerWithStorage;
+import com.example.spectrumaudiofrequency.core.codec_manager.MediaDecoderWithStorage;
+import com.example.spectrumaudiofrequency.core.codec_manager.MediaDecoderWithStorage.PeriodRequest;
 import com.example.spectrumaudiofrequency.util.PerformanceCalculator;
 import com.example.spectrumaudiofrequency.util.VerifyTimeOut;
 
@@ -25,11 +24,11 @@ import static org.junit.Assert.fail;
 @RunWith(AndroidJUnit4.class)
 public class MediaDecoderWithStorageTest {
     private static final long MAX_TIME = 5000;
-    private final DecoderManagerWithStorage decoder;
+    private final MediaDecoderWithStorage decoder;
 
     public MediaDecoderWithStorageTest() {
         Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();
-        decoder = new DecoderManagerWithStorage(context, SoundID);
+        decoder = new MediaDecoderWithStorage(context, SoundID);
         decoder.start();
     }
 
@@ -72,7 +71,7 @@ public class MediaDecoderWithStorageTest {
             fail();
         }
         PerformanceCalculator performanceCalculator;
-        performanceCalculator = new PerformanceCalculator(("DecoderWithStorage"));
+        performanceCalculator = new PerformanceCalculator("DecoderWithStorage");
 
         makeRequests(0,
                 numberOfSamples - 1,
@@ -112,13 +111,6 @@ public class MediaDecoderWithStorageTest {
         int TrueNumberOfSamples = decoder.getNumberOfSamples();
         decoder.clear();
         decoder.close();
-
-        boolean AllRequestsHaveDelivered = RequestsResults.size() >= TrueNumberOfSamples;
-        if (!AllRequestsHaveDelivered) {
-            Log.e("AllRequestsNotHaveDelivered", "TrueNumberOfSamples: " +
-                    TrueNumberOfSamples + " RequestsResultsSize: " + RequestsResults.size());
-            fail();
-        }
         CodecErrorChecker.check(getClass().getSimpleName(), RequestsResults);
     }
 }

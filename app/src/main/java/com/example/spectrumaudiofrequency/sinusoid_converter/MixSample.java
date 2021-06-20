@@ -4,8 +4,8 @@ import android.util.Log;
 
 import com.example.spectrumaudiofrequency.core.codec_manager.CodecManager.CodecSample;
 
-import static com.example.spectrumaudiofrequency.core.codec_manager.DecoderManager.DecoderResult.SampleChannelsToBytes;
-import static com.example.spectrumaudiofrequency.core.codec_manager.DecoderManager.DecoderResult.separateSampleChannels;
+import static com.example.spectrumaudiofrequency.core.codec_manager.MediaDecoder.DecoderResult.SampleChannelsToBytes;
+import static com.example.spectrumaudiofrequency.core.codec_manager.MediaDecoder.DecoderResult.separateSampleChannels;
 import static com.example.spectrumaudiofrequency.sinusoid_converter.SamplingResize.ResizeSamplesChannels;
 
 public class MixSample {
