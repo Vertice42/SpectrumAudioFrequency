@@ -22,8 +22,8 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ForkJoinPool;
 
 import static com.example.spectrumaudiofrequency.codec.CodecManagersTests.SoundID;
-import static com.example.spectrumaudiofrequency.core.codec_manager.MediaDecoder.DecoderResult.SampleChannelsToBytes;
-import static com.example.spectrumaudiofrequency.core.codec_manager.MediaDecoder.DecoderResult.separateSampleChannels;
+import static com.example.spectrumaudiofrequency.core.codec_manager.MediaDecoder.converterBytesToChannels;
+import static com.example.spectrumaudiofrequency.core.codec_manager.MediaDecoder.converterChannelsToBytes;
 
 @RunWith(AndroidJUnit4.class)
 public class MediaDecoderTest {
@@ -77,7 +77,7 @@ public class MediaDecoderTest {
         CountTimeout(countDownLatch);
         decoder.start();
         countDownLatch.await();
-        Assert.assertTrue(DecoderResults.size() >= decoder.getNumberOfSamples());
+        Assert.assertTrue(DecoderResults.size() >= decoder.getSamplesNumber());
         CodecErrorChecker.check(this.getClass().getSimpleName(), DecoderResults);
     }
 
@@ -103,8 +103,8 @@ public class MediaDecoderTest {
         Random random = new Random();
         random.nextBytes(original);
 
-        short[][] separateSample = separateSampleChannels(original, ChannelsNumber);
-        byte[] unitedSample = SampleChannelsToBytes(separateSample, ChannelsNumber);
+        short[][] separateSample = converterBytesToChannels(original, ChannelsNumber);
+        byte[] unitedSample = converterChannelsToBytes(separateSample);
 
         Log.i("byte[] original", Arrays.toString(original));
         Log.i("separate", Arrays.deepToString(separateSample));

@@ -58,7 +58,7 @@ public class MediaDecoderWithStorageTest {
     public void addRequestsTest() throws InterruptedException {
         CountDownLatch wantingResults = new CountDownLatch(1);
         LinkedList<CodecTestResult> RequestsResults = new LinkedList<>();
-        int numberOfSamples = decoder.getNumberOfSamples();
+        int numberOfSamples = decoder.getSamplesNumber();
         Assert.assertTrue(numberOfSamples > 0);
 
         VerifyTimeOut verifyTimeOut = new VerifyTimeOut(this.getClass(),
@@ -81,7 +81,7 @@ public class MediaDecoderWithStorageTest {
                 RequestsResults);
 
         decoder.addOnDecoderFinishListener(() -> {
-            int TrueNumberOfSamples = decoder.getNumberOfSamples();
+            int TrueNumberOfSamples = decoder.getSamplesNumber();
             int lastSample = TrueNumberOfSamples - 1;
             //if it is necessary to make more requests
             if (TrueNumberOfSamples > numberOfSamples) {
@@ -108,7 +108,7 @@ public class MediaDecoderWithStorageTest {
         });
 
         wantingResults.await();
-        int TrueNumberOfSamples = decoder.getNumberOfSamples();
+        int TrueNumberOfSamples = decoder.getSamplesNumber();
         decoder.clear();
         decoder.close();
         CodecErrorChecker.check(getClass().getSimpleName(), RequestsResults);

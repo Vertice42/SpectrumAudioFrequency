@@ -18,7 +18,7 @@ import com.example.spectrumaudiofrequency.core.FourierFastTransform.FFTAbstract;
 import com.example.spectrumaudiofrequency.core.FourierFastTransform.Native;
 import com.example.spectrumaudiofrequency.core.FourierFastTransform.Precise;
 import com.example.spectrumaudiofrequency.core.SoundAnalyzer.AudioPeakAnalyzer.Peak;
-import com.example.spectrumaudiofrequency.sinusoid_converter.Converter;
+import com.example.spectrumaudiofrequency.sinusoid_manipulador.SinusoidManipulator;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -194,8 +194,8 @@ public class SinusoidDrawn {
                 WavePaint.setColor(Color.GRAY);
             }
 
-            float EndLine = Converter.ToLogarithmicScale(sample[i]);
-            float startLineH = Converter.ToLogarithmicScale(sample[i - 1]);//todo é possivel reutilisar do loop anterior
+            float EndLine = SinusoidManipulator.ToLogarithmicScale(sample[i]);
+            float startLineH = SinusoidManipulator.ToLogarithmicScale(sample[i - 1]);//todo é possivel reutilisar do loop anterior
 
             float endLineH = EndLine;
 
@@ -226,8 +226,8 @@ public class SinusoidDrawn {
 
 
         for (int i = 1; i < sample.length; i++) {
-            float EndLine = Converter.ToLogarithmicScale(sample[i]);
-            float startLineH = Converter.ToLogarithmicScale(sample[i - 1]);//todo é possivel reutilisar do loop anterior
+            float EndLine = SinusoidManipulator.ToLogarithmicScale(sample[i]);
+            float startLineH = SinusoidManipulator.ToLogarithmicScale(sample[i - 1]);//todo é possivel reutilisar do loop anterior
 
             if (EndLine > 0) EndLine *= -1;
             if (startLineH > 0) startLineH *= -1;

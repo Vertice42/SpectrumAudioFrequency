@@ -362,7 +362,7 @@ public abstract class CodecManager {
         }
     }
 
-    public static class CodecSample implements QueueElement {
+    public static class CodecSample {
         public BufferInfo bufferInfo;
         public byte[] bytes;
         public boolean isLastPeace;
@@ -379,11 +379,6 @@ public abstract class CodecManager {
                     " T=" + bufferInfo.presentationTimeUs +
                     ", S=" + bytes.length +
                     '}';
-        }
-
-        @Override
-        public long getIndex() {
-            return this.bufferInfo.presentationTimeUs;
         }
     }
 

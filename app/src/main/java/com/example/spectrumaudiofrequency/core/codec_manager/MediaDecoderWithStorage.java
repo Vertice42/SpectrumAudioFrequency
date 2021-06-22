@@ -114,9 +114,9 @@ public class MediaDecoderWithStorage extends MediaDecoder {
         return sampleMetrics.get();
     }
 
-    public int getNumberOfSamples() {
+    public int getSamplesNumber() {
         if (IsCompletelyCodified) return dbOfDecoder.getNumberOfSamples();
-        else return super.getNumberOfSamples();
+        else return super.getSamplesNumber();
     }
 
     public int getSampleDuration() {

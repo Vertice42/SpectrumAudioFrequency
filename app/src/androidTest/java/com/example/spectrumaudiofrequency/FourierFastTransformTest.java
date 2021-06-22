@@ -18,7 +18,7 @@ import org.junit.runner.RunWith;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ForkJoinPool;
 
-import static com.example.spectrumaudiofrequency.core.codec_manager.MediaDecoder.DecoderResult.separateSampleChannels;
+import static com.example.spectrumaudiofrequency.core.codec_manager.MediaDecoder.converterBytesToChannels;
 import static com.example.spectrumaudiofrequency.util.Array.calculateEquity;
 
 @RunWith(AndroidJUnit4.class)
@@ -45,7 +45,7 @@ public class FourierFastTransformTest {
 
         final CountDownLatch signal = new CountDownLatch(1);
         decoder.makeRequest(new PeriodRequest((2), decoderResult -> {
-            Sample = separateSampleChannels(decoderResult.bytes, decoder.ChannelsNumber)[0];
+            Sample = converterBytesToChannels(decoderResult.bytes, decoder.ChannelsNumber)[0];
             signal.countDown();
         }));
         decoder.start();

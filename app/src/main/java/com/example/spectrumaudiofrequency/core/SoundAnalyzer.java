@@ -14,7 +14,7 @@ import org.json.JSONObject;
 
 import java.util.concurrent.ForkJoinPool;
 
-import static com.example.spectrumaudiofrequency.core.codec_manager.MediaDecoder.DecoderResult.separateSampleChannels;
+import static com.example.spectrumaudiofrequency.core.codec_manager.MediaDecoder.converterBytesToChannels;
 
 public class SoundAnalyzer {
     private final int SAMPLE_DURATION;
@@ -45,7 +45,7 @@ public class SoundAnalyzer {
         decoderManagerWithStorage.makeRequest(new PeriodRequest(SampleId, decoderResult -> {
             if (decoderResult.bufferInfo != null) {
                 long sampleTime = decoderResult.bufferInfo.presentationTimeUs;
-                short[][] sampleChannels = separateSampleChannels(decoderResult.bytes,
+                short[][] sampleChannels = converterBytesToChannels(decoderResult.bytes,
                         decoderManagerWithStorage.ChannelsNumber);
 
                 audioPeakAnalyzer.analyzeData(sampleChannels[0], SampleId, SAMPLE_DURATION);

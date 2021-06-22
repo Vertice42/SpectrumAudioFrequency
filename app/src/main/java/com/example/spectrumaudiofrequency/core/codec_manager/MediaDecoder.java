@@ -45,6 +45,41 @@ public class MediaDecoder extends CodecManager {
         prepare(AudioPath);
     }
 
+    public static short[][] converterBytesToChannels(byte[] sampleData, int ChannelsNumber) {
+        assert sampleData.length > 0;
+        short[] shorts = new short[sampleData.length / 2];
+        ByteBuffer.wrap(sampleData).order(ByteOrder.nativeOrder()).asShortBuffer().get(shorts);
+
+        short[][] SamplesChannels;
+        SamplesChannels = new short[ChannelsNumber]
+                [shorts.length / ChannelsNumber];
+        for (int i = 0; i < SamplesChannels.length; ++i) {
+            for (int j = 0; j < SamplesChannels[i].length; j++) {
+                SamplesChannels[i][j] = shorts[j * ChannelsNumber + i];
+            }
+        }
+
+        if (SamplesChannels[0].length < 1) SamplesChannels = new short[2][200];
+        return SamplesChannels;
+    }
+
+    public static byte[] converterChannelsToBytes(short[][] sampleData) {
+        int channelsNumber = sampleData.length;
+        ByteBuffer byteBuffer = ByteBuffer.allocate((sampleData[0].length * channelsNumber) * 2);
+        byteBuffer.order(ByteOrder.nativeOrder());
+
+        for (int i = 0; i < sampleData[1].length; i++) {
+            for (short[] sampleDatum : sampleData) {
+                byteBuffer.putShort(sampleDatum[i]);
+            }
+        }
+        byteBuffer.flip();
+
+        byte[] result = new byte[byteBuffer.limit()];
+        byteBuffer.get(result);
+        return result;
+    }
+
     private void putNextSample() {
         int interactions = 1;
         interactions += getInputsIdsAvailableSize();
@@ -142,7 +177,7 @@ public class MediaDecoder extends CodecManager {
         return (IsCompletelyCodified) ? TrueMediaDuration : MediaDuration;
     }
 
-    public int getNumberOfSamples() {
+    public int getSamplesNumber() {
         if (!IsReady()) {
             CountDownLatch countDownLatch = new CountDownLatch(1);
             addOnMetricsDefinedListener(sampleMetrics -> countDownLatch.countDown());
@@ -306,39 +341,8 @@ public class MediaDecoder extends CodecManager {
             this.SampleId = SampleId;
         }
 
-        public static short[][] separateSampleChannels(byte[] sampleData, int ChannelsNumber) {
-            short[] shorts = new short[sampleData.length / 2];
-            ByteBuffer.wrap(sampleData).order(ByteOrder.nativeOrder()).asShortBuffer().get(shorts);
-
-            short[][] SamplesChannels;
-            SamplesChannels = new short[ChannelsNumber]
-                    [shorts.length / ChannelsNumber];
-            for (int i = 0; i < SamplesChannels.length; ++i) {
-                for (int j = 0; j < SamplesChannels[i].length; j++) {
-                    SamplesChannels[i][j] = shorts[j * ChannelsNumber + i];
-                }
-            }
-
-            if (SamplesChannels[0].length < 1) SamplesChannels = new short[2][200];
-            return SamplesChannels;
-        }
-
-        public static byte[] SampleChannelsToBytes(short[][] sampleData, int ChannelsNumber) {
-            ByteBuffer byteBuffer = ByteBuffer.allocate((sampleData[0].length * ChannelsNumber) * 2);
-            byteBuffer.order(ByteOrder.nativeOrder());
-
-            for (int i = 0; i < sampleData[1].length; i++) {
-                for (int j = 0; j < ChannelsNumber; j++) {
-                    byteBuffer.putShort(sampleData[j][i]);
-                }
-            }
-            byteBuffer.flip();
-
-            byte[] result = new byte[byteBuffer.limit()];
-            byteBuffer.get(result);
-            return result;
-
-
+        public short[][] converterBytesToChannels(int ChannelsNumber) {
+            return MediaDecoder.converterBytesToChannels(this.bytes, ChannelsNumber);
         }
 
         @Override
