@@ -27,7 +27,7 @@ import static com.example.spectrumaudiofrequency.util.Files.getUriFromResourceId
 
 @RunWith(AndroidJUnit4.class)
 public class MediaMuxerTest {
-    public static final int[] IdsOfSounds = {R.raw.hollow, R.raw.game_description};
+    public static final int[] IdsOfSounds = {R.raw.game_description, R.raw.hollow};
 
     @Test
     public void Mux() throws IOException, InterruptedException {
@@ -58,8 +58,7 @@ public class MediaMuxerTest {
 
         newAudioFormat.setString(MediaFormat.KEY_MIME, MediaFormat.MIMETYPE_AUDIO_AAC);
 
-        MediaFormatConverter formatConverter = new MediaFormatConverter(context,
-                new int[]{IdsOfSounds[0]}, newAudioFormat);
+        MediaFormatConverter formatConverter = new MediaFormatConverter(context, IdsOfSounds, newAudioFormat);
 
         ArrayList<CodecSample> cacheOfSamples = new ArrayList<>();
 

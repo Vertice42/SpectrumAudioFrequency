@@ -1,6 +1,7 @@
 package com.example.spectrumaudiofrequency.core.codec_manager;
 
 import android.content.Context;
+import android.util.Log;
 
 import com.example.spectrumaudiofrequency.core.codec_manager.dbDecoderManager.MediaSpecs;
 
@@ -54,7 +55,7 @@ public class MediaDecoderWithStorage extends MediaDecoder {
                             (sampleMetrics.SampleSize));
 
             super.addOnDecodingListener(decoderResult -> {
-                //Log.i("Decoding", ((double) decoderResult.bufferInfo.presentationTimeUs / getTrueMediaDuration() * 100) + "%");
+                Log.i("TAG", "Decoding: " + ((double) decoderResult.bufferInfo.presentationTimeUs / getTrueMediaDuration() * 100) + "%");
                 //Log.i("freeMemory", "" + Runtime.getRuntime().freeMemory() + " MaxAllocation:" + MaxAllocation);
                 if (SamplesCache.size() < MaxAllocationOfSamples)
                     SamplesCache.put(decoderResult.SampleId, decoderResult);
@@ -159,6 +160,10 @@ public class MediaDecoderWithStorage extends MediaDecoder {
     }
 
     public void start() {
+        super.start();
+    }
+
+    public void restart() {
         if (!IsCompletelyCodified) super.start();
         if (awaitRestart != null) awaitRestart.countDown();
     }

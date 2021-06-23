@@ -59,21 +59,30 @@ public class EncoderCodecManager extends CodecManager {
                 addPutInputRequest(false, bytes);
             }
         } else if (IsClose) {
-            while (true) {
-                int queueSize = byteQueue.getSize();
-                if (queueSize <= inputBufferLimit) {
-                    byte[] bytes = byteQueue.pollList(queueSize);
-                    addPutInputRequest(true, bytes);
-                    break;
-                } else {
-                    byte[] bytes = byteQueue.pollList(inputBufferLimit);
-                    addPutInputRequest(false, bytes);
-                }
+            putAllBytesToEncode(inputBufferLimit);
+        }
+    }
+
+    private void putAllBytesToEncode(int inputBufferLimit) {
+        while (true) {
+            int queueSize = byteQueue.getSize();
+            if (queueSize <= inputBufferLimit) {
+                byte[] bytes = byteQueue.pollList(queueSize);
+                addPutInputRequest(true, bytes);
+                break;
+            } else {
+                byte[] bytes = byteQueue.pollList(inputBufferLimit);
+                addPutInputRequest(false, bytes);
             }
         }
     }
 
-    public void setClose() {
+    public void closeAndStop() {
+        this.Close();
+        putAllBytesToEncode(this.getInputBufferLimit());
+    }
+
+    public void Close() {
         IsClose = true;
     }
 
