@@ -20,7 +20,7 @@ public class SinusoidManipulator {
             for (int data = 0; data < shorterDataLength; data++) {
                 short datum = 0;
                 for (short[][] channels : tracks) datum += channels[channel][data];
-                r[channel][data] = ((short) (datum / tracksLength));
+                r[channel][data] = datum;
             }
         }
         return r;

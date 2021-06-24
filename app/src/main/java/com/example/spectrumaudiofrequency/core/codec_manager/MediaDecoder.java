@@ -19,7 +19,6 @@ import java.util.LinkedList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import static com.example.spectrumaudiofrequency.util.Files.getFileName;
 import static com.example.spectrumaudiofrequency.util.Files.getUriFromResourceId;
 
 public class MediaDecoder extends CodecManager {
@@ -27,7 +26,7 @@ public class MediaDecoder extends CodecManager {
     private final LinkedList<Runnable> OnDecodingFinishListeners = new LinkedList<>();
     private final LinkedList<DecodingListener> onDecodingListeners = new LinkedList<>();
     private final LinkedList<MetricsDefinedListener> onMetricsDefinedListeners = new LinkedList<>();
-    private final MediaExtractor mediaExtractor = new MediaExtractor();
+    private final MediaExtractor mediaExtractor;
     public int ChannelsNumber;
     protected double TrueMediaDuration;
     protected boolean IsCompletelyCodified = false;
@@ -36,13 +35,23 @@ public class MediaDecoder extends CodecManager {
 
     public MediaDecoder(Context context, int ResourceId) {
         Uri uri = getUriFromResourceId(context, ResourceId);
-        this.MediaName = getFileName(context.getResources().getResourceName(ResourceId));
+        this.mediaExtractor = new MediaExtractor();
+        this.MediaName = context.getResources().getResourceEntryName(ResourceId);
         prepare(context, uri);
     }
 
-    public MediaDecoder(String AudioPath) {
-        this.MediaName = getFileName(AudioPath);
+    public MediaDecoder(String AudioPath, String MediaName) {
+        this.mediaExtractor = new MediaExtractor();
+        this.MediaName = MediaName;
         prepare(AudioPath);
+    }
+
+    public MediaDecoder(MediaExtractor mediaExtractor, String MediaName, int TrackIndex) {
+        this.mediaExtractor = mediaExtractor;
+        this.MediaName = MediaName;
+        mediaExtractor.selectTrack(TrackIndex);//todo prepara all trakss
+        MediaFormat trackFormat = mediaExtractor.getTrackFormat(TrackIndex);
+        prepare(trackFormat);
     }
 
     public static short[][] converterBytesToChannels(byte[] sampleData, int ChannelsNumber) {
@@ -92,7 +101,8 @@ public class MediaDecoder extends CodecManager {
         } catch (IOException e) {
             e.printStackTrace();
         }
-        prepare();
+        mediaExtractor.selectTrack(0);//todo prepara all trakss
+        prepare(mediaExtractor.getTrackFormat(0));
     }
 
     private void prepare(Context context, Uri uri) {
@@ -101,15 +111,13 @@ public class MediaDecoder extends CodecManager {
         } catch (IOException e) {
             e.printStackTrace();
         }
-        prepare();
+        mediaExtractor.selectTrack(0);//todo prepara all trakss
+        prepare(mediaExtractor.getTrackFormat(0));
     }
 
-    private void prepare() {
-        MediaFormat Format = mediaExtractor.getTrackFormat(0);
-        mediaExtractor.selectTrack(0);//todo prepara all trakss
-
-        if (Format.getString(MediaFormat.KEY_MIME).contains("audio")) {
-            ChannelsNumber = Format.getInteger(MediaFormat.KEY_CHANNEL_COUNT);
+    private void prepare(MediaFormat mediaFormat) {
+        if (mediaFormat.getString(MediaFormat.KEY_MIME).contains("audio")) {
+            ChannelsNumber = mediaFormat.getInteger(MediaFormat.KEY_CHANNEL_COUNT);
         }
 
         LinkedList<CodecSample> codecSamplesAwait = new LinkedList<>();
@@ -166,7 +174,7 @@ public class MediaDecoder extends CodecManager {
             }
         });
 
-        super.prepare(Format, true);
+        super.prepare(mediaFormat, true);
     }
 
     public boolean IsDecoded() {

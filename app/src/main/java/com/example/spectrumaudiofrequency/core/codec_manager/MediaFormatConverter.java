@@ -120,18 +120,6 @@ public class MediaFormatConverter {
         this.NewMediaFormat = newMediaFormat;
     }
 
-    /*
-    private void awaitingFinish(MediaDecoderWithStorage decoder) {
-        CountDownLatch awaitingFinish = new CountDownLatch(1);
-        decoder.addOnDecoderFinishListener(awaitingFinish::countDown);
-        try {
-            awaitingFinish.await();
-        } catch (InterruptedException e) {
-            e.printStackTrace();
-        }
-    }
-     */
-
     @NotNull
     private int[] removeAndReallocMediaId(int decoderIndex) {
         int newSize = decoders.size() - 1;
@@ -175,7 +163,7 @@ public class MediaFormatConverter {
         return longerSize;
     }
 
-    private synchronized void putSamplesToEncode(SamplesFunnelRequest samplesFunnelRequest) {
+    private void putSamplesToEncode(SamplesFunnelRequest samplesFunnelRequest) {
         int inputsIdsAvailableSize = encoder.getInputsIdsAvailableSize();
         do {
             SingleThreadExecutor.execute(() -> samplesFunnel.putDataInEncode(samplesFunnelRequest));

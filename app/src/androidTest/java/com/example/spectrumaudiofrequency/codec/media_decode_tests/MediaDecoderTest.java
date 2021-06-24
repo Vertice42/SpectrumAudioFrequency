@@ -88,12 +88,13 @@ public class MediaDecoderTest {
 
     @Test
     public void decodeWithRearrangement() throws InterruptedException {
-        MediaDecoder decodeWithRearrangement = new MediaDecoder(context, SoundID);
-        decodeWithRearrangement.setSampleRearranger(metrics ->
+        MediaDecoder decoder = new MediaDecoder(context, SoundID);
+
+        decoder.setSampleRearranger(metrics ->
                 new CodecManager.SampleMetrics((metrics.SampleDuration / 2),
                         (int) Math.ceil(((double) metrics.SampleSize * metrics.SampleDuration)
                                 / metrics.SampleDuration / 2f)));
-        TestDecoding(decodeWithRearrangement);
+        TestDecoding(decoder);
     }
 
     @Test

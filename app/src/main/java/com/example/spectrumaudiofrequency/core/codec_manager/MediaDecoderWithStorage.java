@@ -1,6 +1,7 @@
 package com.example.spectrumaudiofrequency.core.codec_manager;
 
 import android.content.Context;
+import android.media.MediaExtractor;
 import android.util.Log;
 
 import com.example.spectrumaudiofrequency.core.codec_manager.dbDecoderManager.MediaSpecs;
@@ -29,8 +30,16 @@ public class MediaDecoderWithStorage extends MediaDecoder {
         PrepareDataBase(context);
     }
 
-    public MediaDecoderWithStorage(Context context, String AudioPath) {
-        super(AudioPath);
+    public MediaDecoderWithStorage(Context context, String AudioPath, String MediaName) {
+        super(AudioPath, MediaName);
+        PrepareDataBase(context);
+    }
+
+    public MediaDecoderWithStorage(Context context,
+                                   MediaExtractor mediaExtractor,
+                                   String MediaName,
+                                   int TrackIndex) {
+        super(mediaExtractor, MediaName, TrackIndex);
         PrepareDataBase(context);
     }
 

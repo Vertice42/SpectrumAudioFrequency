@@ -12,41 +12,58 @@ import android.util.Log;
 
 import androidx.annotation.RequiresApi;
 
+import com.example.spectrumaudiofrequency.core.codec_manager.CodecManager;
+import com.example.spectrumaudiofrequency.core.codec_manager.MediaFormatConverter;
 import com.example.spectrumaudiofrequency.core.codec_manager.MediaFormatConverter.MediaFormatConverterFinishListener;
+import com.example.spectrumaudiofrequency.util.PerformanceCalculator;
 
 import org.jetbrains.annotations.NotNull;
 
 import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.util.ArrayList;
 
 import static android.media.MediaCodec.BUFFER_FLAG_KEY_FRAME;
+import static com.example.spectrumaudiofrequency.util.Files.getUriFromResourceId;
 
 @RequiresApi(api = Build.VERSION_CODES.M)
 public class MediaMuxerManager {
-    private final MediaExtractor[] mediaExtractors;
+    private final MediaExtractor videoExtractor;
+    private final MediaFormatConverter formatConverter;
 
     private MediaMuxer mediaMuxer;
     private MediaFormat VideoFormat;
     private Cutoff[] cutoffs;
-
-    private long outPutDuration;
     private ByteBuffer inputBuffer;
+
+    private MediaFormatConverterFinishListener finishListener;
+    private long outPutDuration;
     private int ExternalMediaTrackId;
-    private boolean IsPrepared = false;
     private int VideoTrackId;
+    private boolean IsPrepared = false;
 
-    public MediaMuxerManager(Context context, Uri VideoUri) {
+    public MediaMuxerManager(Context context, Uri VideoUri, int[] IdsOfSounds) {
+        videoExtractor = new MediaExtractor();
+        MediaFormat[] mediaFormats = new MediaFormat[IdsOfSounds.length];
 
-        mediaExtractors = new MediaExtractor[1];
-
-        mediaExtractors[0] = new MediaExtractor();
         try {
-            mediaExtractors[0].setDataSource(context, VideoUri, null);
+            videoExtractor.setDataSource(context, VideoUri, null);
+            for (int i = 0; i < IdsOfSounds.length; i++) {
+                MediaExtractor extraExtractor = new MediaExtractor();
+                extraExtractor.setDataSource(context, getUriFromResourceId(context, IdsOfSounds[i]), null);
+                mediaFormats[i] = extraExtractor.getTrackFormat(0);
+                Log.i("Sound Format " + i, mediaFormats[i].toString());
+            }
+
         } catch (IOException e) {
             e.printStackTrace();
         }
+        MediaFormat newAudioFormat = CodecManager.copyMediaFormat(mediaFormats[0]);
 
+        newAudioFormat.setString(MediaFormat.KEY_MIME, MediaFormat.MIMETYPE_AUDIO_AAC);
+
+        formatConverter = new MediaFormatConverter(context, IdsOfSounds, newAudioFormat);
     }
 
     private String createFile(String FileName) {
@@ -61,10 +78,9 @@ public class MediaMuxerManager {
     }
 
     public void prepare(Cutoff[] cutoffs, MediaFormat ExternalMediaFormat) {
+        this.cutoffs = cutoffs;
 
         inputBuffer = ByteBuffer.allocate(1024 * 50_000);
-
-        this.cutoffs = cutoffs;
 
         String outputPath = createFile("test.mp4");
         try {
@@ -76,7 +92,7 @@ public class MediaMuxerManager {
         long skippedTime = 0;
         for (Cutoff value : cutoffs) skippedTime += value.getTimeSkip();
 
-        VideoFormat = mediaExtractors[0].getTrackFormat(0);
+        VideoFormat = videoExtractor.getTrackFormat(0);
 
         String mime = VideoFormat.getString(MediaFormat.KEY_MIME);
 
@@ -100,12 +116,12 @@ public class MediaMuxerManager {
     }
 
     public long getVideoDuration() {
-        return mediaExtractors[0].getTrackFormat(0).getLong(MediaFormat.KEY_DURATION);
+        return videoExtractor.getTrackFormat(0).getLong(MediaFormat.KEY_DURATION);
     }
 
-    private void skipTime(long timeBefore, Cutoff cutoff, MediaExtractor mediaExtractor) {
+    private void skipTime(Cutoff cutoff, MediaExtractor mediaExtractor) {
         while (true) {
-            timeBefore = mediaExtractor.getSampleTime();
+            long timeBefore = mediaExtractor.getSampleTime();
             //todo o audio fica desincronisado por causa das diferensas de tempo da flag
             if (timeBefore <= cutoff.endTime ||
                     mediaExtractor.getSampleFlags() != MediaExtractor.SAMPLE_FLAG_SYNC) {
@@ -123,9 +139,9 @@ public class MediaMuxerManager {
     }
 
     public void putExtractorData(MediaFormatConverterFinishListener formatConverterFinishListener) {
-        for (MediaExtractor mediaExtractor : mediaExtractors) mediaExtractor.selectTrack(0);
+        videoExtractor.selectTrack(0);
 
-        long presentationTimeUs = mediaExtractors[0].getSampleTime();
+        long presentationTimeUs = videoExtractor.getSampleTime();
         long timeBefore = 0;
         long sampleDuration = 0;
         long time_after = 0;
@@ -133,7 +149,7 @@ public class MediaMuxerManager {
         while (true) {
 
             float progress = ((float) presentationTimeUs / outPutDuration) * 100;
-            int bufferSize = mediaExtractors[0].readSampleData(inputBuffer, 0);
+            int bufferSize = videoExtractor.readSampleData(inputBuffer, 0);
 
 
             if (bufferSize > 0 && progress < 100) {
@@ -157,18 +173,18 @@ public class MediaMuxerManager {
                 timeBefore = time_after;
 
             } else if (progress != 0) {
-                mediaExtractors[0].release();
+                videoExtractor.release();
                 break;
             }
 
             Cutoff cutoff = SearchForCutOff(timeBefore, sampleDuration);
 
             if (cutoff != null) {
-                skipTime(timeBefore, cutoff, mediaExtractors[0]);
+                skipTime(cutoff, videoExtractor);
             } else {
-                mediaExtractors[0].advance();
+                videoExtractor.advance();
             }
-            time_after = mediaExtractors[0].getSampleTime();
+            time_after = videoExtractor.getSampleTime();
         }
         formatConverterFinishListener.OnFinish();
     }
@@ -182,6 +198,51 @@ public class MediaMuxerManager {
         inputBuffer.clear();
         inputBuffer.put(data);
         writeSampleData(ExternalMediaTrackId, inputBuffer, bufferInfo);
+    }
+
+    public void setFinishListener(MediaFormatConverterFinishListener finishListener) {
+        this.finishListener = finishListener;
+    }
+
+    public void start(Cutoff[] cutoffs) {
+
+        ArrayList<CodecManager.CodecSample> cacheOfSamples = new ArrayList<>();
+
+        PerformanceCalculator performance = new PerformanceCalculator("MuxTime");
+
+        MediaFormatConverter.MediaFormatConverterListener converterListener = converterResult -> {
+            long presentationTimeUs = converterResult.bufferInfo.presentationTimeUs;
+            performance.stop(presentationTimeUs,
+                    formatConverter.getMediaDuration()).logPerformance(" flag: " +
+                    converterResult.bufferInfo.flags +
+                    " size:" + converterResult.bufferInfo.size);
+            performance.start();
+            this.writeSampleData(converterResult.bufferInfo, converterResult.bytes);
+        };
+
+        MediaFormatConverter.MediaFormatConverterListener waitingPreparationOfMediaMuxer = converterResult -> {
+            if (this.IsPrepared()) {
+                while (cacheOfSamples.size() > 0) {
+                    converterListener.onConvert(cacheOfSamples.get(0));
+                    cacheOfSamples.remove(0);
+                }
+                converterListener.onConvert(converterResult);
+                formatConverter.setOnConvert(converterListener);
+            } else {
+                cacheOfSamples.add(converterResult);
+            }
+        };
+        formatConverter.setOnConvert(waitingPreparationOfMediaMuxer);
+        formatConverter.setFinishListener(() -> {
+            this.finishListener.OnFinish();
+            this.stop();
+        });
+
+        formatConverter.start();
+        MediaFormat outputFormat = formatConverter.getOutputFormat();
+        this.prepare(cutoffs, outputFormat);
+        formatConverter.pause();
+        this.putExtractorData(formatConverter::restart);
     }
 
     public void stop() {
