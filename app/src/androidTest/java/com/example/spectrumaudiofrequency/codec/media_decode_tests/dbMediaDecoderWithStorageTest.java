@@ -24,7 +24,7 @@ public class dbMediaDecoderWithStorageTest {
 
     public dbMediaDecoderWithStorageTest() {
         Context context = ApplicationProvider.getApplicationContext();
-        MediaDecoder decoderToTest = new MediaDecoder(context, id);
+        MediaDecoder decoderToTest = new MediaDecoder(context, id, 0);
         dbManager = new dbDecoderManager(context, decoderToTest);
     }
 

@@ -14,11 +14,11 @@ import org.jetbrains.annotations.NotNull;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
-import java.util.Arrays;
 import java.util.LinkedList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import static android.media.MediaCodec.BUFFER_FLAG_END_OF_STREAM;
 import static com.example.spectrumaudiofrequency.util.Files.getUriFromResourceId;
 
 public class MediaDecoder extends CodecManager {
@@ -27,31 +27,27 @@ public class MediaDecoder extends CodecManager {
     private final LinkedList<DecodingListener> onDecodingListeners = new LinkedList<>();
     private final LinkedList<MetricsDefinedListener> onMetricsDefinedListeners = new LinkedList<>();
     private final MediaExtractor mediaExtractor;
+    private final int TrackIndex;
     public int ChannelsNumber;
     protected double TrueMediaDuration;
     protected boolean IsCompletelyCodified = false;
     private SampleRearranger sampleRearranger;
     private ResultPromiseListener keepSortedSamplePromise;
+    private boolean IsStopped;
 
-    public MediaDecoder(Context context, int ResourceId) {
+    public MediaDecoder(Context context, int ResourceId, int TrackIndex) {
         Uri uri = getUriFromResourceId(context, ResourceId);
         this.mediaExtractor = new MediaExtractor();
         this.MediaName = context.getResources().getResourceEntryName(ResourceId);
+        this.TrackIndex = TrackIndex;
         prepare(context, uri);
     }
 
-    public MediaDecoder(String AudioPath, String MediaName) {
+    public MediaDecoder(Context context, Uri AudioUri, String MediaName, int TrackIndex) {
         this.mediaExtractor = new MediaExtractor();
         this.MediaName = MediaName;
-        prepare(AudioPath);
-    }
-
-    public MediaDecoder(MediaExtractor mediaExtractor, String MediaName, int TrackIndex) {
-        this.mediaExtractor = mediaExtractor;
-        this.MediaName = MediaName;
-        mediaExtractor.selectTrack(TrackIndex);//todo prepara all trakss
-        MediaFormat trackFormat = mediaExtractor.getTrackFormat(TrackIndex);
-        prepare(trackFormat);
+        this.TrackIndex = TrackIndex;
+        prepare(context, AudioUri);
     }
 
     public static short[][] converterBytesToChannels(byte[] sampleData, int ChannelsNumber) {
@@ -95,27 +91,15 @@ public class MediaDecoder extends CodecManager {
         for (int i = 0; i < interactions; i++) addInputIdRequest(this::putData);
     }
 
-    private void prepare(String AudioPath) {
-        try {
-            mediaExtractor.setDataSource(AudioPath);
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-        mediaExtractor.selectTrack(0);//todo prepara all trakss
-        prepare(mediaExtractor.getTrackFormat(0));
-    }
-
     private void prepare(Context context, Uri uri) {
         try {
             mediaExtractor.setDataSource(context, uri, null);
         } catch (IOException e) {
             e.printStackTrace();
         }
-        mediaExtractor.selectTrack(0);//todo prepara all trakss
-        prepare(mediaExtractor.getTrackFormat(0));
-    }
+        mediaExtractor.selectTrack(TrackIndex);
+        MediaFormat mediaFormat = mediaExtractor.getTrackFormat(TrackIndex);
 
-    private void prepare(MediaFormat mediaFormat) {
         if (mediaFormat.getString(MediaFormat.KEY_MIME).contains("audio")) {
             ChannelsNumber = mediaFormat.getInteger(MediaFormat.KEY_CHANNEL_COUNT);
         }
@@ -185,7 +169,7 @@ public class MediaDecoder extends CodecManager {
         return (IsCompletelyCodified) ? TrueMediaDuration : MediaDuration;
     }
 
-    public int getSamplesNumber() {
+    public int getNumberOfSamples() {
         if (!IsReady()) {
             CountDownLatch countDownLatch = new CountDownLatch(1);
             addOnMetricsDefinedListener(sampleMetrics -> countDownLatch.countDown());
@@ -206,18 +190,18 @@ public class MediaDecoder extends CodecManager {
         while (true) {
             int byteQueueSize = byteQueue.getSize();
             boolean incomplete = (byteQueueSize < SampleSize);
-            if ((incomplete && !codecSample.isLastPeace) || byteQueueSize == 0) break;
+            if ((incomplete && !codecSample.isLastPeace()) || byteQueueSize == 0) break;
 
             int sample_size = (incomplete) ? byteQueueSize : SampleSize;
             byte[] bytes = byteQueue.pollList(sample_size);
             double bytesDuration = bytes.length * byteDuration;
-            boolean TrueLastSample = (byteQueue.getSize() == 0 && codecSample.isLastPeace);
+            boolean TrueLastSample = (byteQueue.getSize() == 0 && codecSample.isLastPeace());
             BufferInfo bufferInfo = new BufferInfo();
             bufferInfo.set(0, bytes.length,
                     (long) TrueMediaDuration,
-                    0);
+                    (TrueLastSample) ? BUFFER_FLAG_END_OF_STREAM : 0);
             executeDecodeListeners(new DecoderResult(SamplesDecoded.get(), bytes, bufferInfo));
-            if (TrueLastSample) executeOnFinishListener();
+            if (TrueLastSample) executeOnDecoderFinishListener();
 
             TrueMediaDuration += bytesDuration;
             SamplesDecoded.incrementAndGet();
@@ -236,26 +220,28 @@ public class MediaDecoder extends CodecManager {
         executeDecodeListeners(new DecoderResult(SamplesDecoded.get(),
                 codecSample.bytes,
                 bufferInfo));
-        if (codecSample.isLastPeace) executeOnFinishListener();
+        if (codecSample.isLastPeace()) executeOnDecoderFinishListener();
         TrueMediaDuration += codecSample.bytes.length * byteDuration;
         SamplesDecoded.incrementAndGet();
     }
 
     private synchronized void putData(int inputBufferId) {
-        if (!IsStopped) {
+        if (!IsClosed) {
             long extractorSampleTime = mediaExtractor.getSampleTime();
             int offset = 0;
-            int extractorSize = mediaExtractor.readSampleData(getInputBuffer(inputBufferId), offset);
+            int extractorSize = mediaExtractor.readSampleData
+                    (getInputBuffer(inputBufferId), offset);
             if (extractorSize == -1) {
-                stop();
-                giveBackInputID(inputBufferId);
+                close();
+                this.addOnFinishListener(this::executeOnDecoderFinishListener);
+                this.putSignalOfEndOfStream(inputBufferId);
             } else {
                 BufferInfo BufferInfo = new BufferInfo();
                 BufferInfo.set(offset,
                         extractorSize,
                         extractorSampleTime,
                         mediaExtractor.getSampleFlags());
-                processInput(inputBufferId, BufferInfo,
+                this.processInput(inputBufferId, BufferInfo,
                         codecSample -> keepSortedSamplePromise.onKeep(codecSample));
                 mediaExtractor.advance();
             }
@@ -277,9 +263,9 @@ public class MediaDecoder extends CodecManager {
         removeOnInputIdAvailableListener(this::putNextSample);
     }
 
-    public void stop() {
+    public void close() {
         removeOnInputIdAvailableListener(this::putNextSample);
-        super.stop();
+        super.close();
     }
 
     public void addOnDecoderFinishListener(Runnable onFinish) {
@@ -312,7 +298,7 @@ public class MediaDecoder extends CodecManager {
         }
     }
 
-    private void executeOnFinishListener() {
+    private void executeOnDecoderFinishListener() {
         IsCompletelyCodified = true;
         for (int i = 0; i < OnDecodingFinishListeners.size(); i++) {
             OnDecodingFinishListeners.get(i).run();
@@ -356,8 +342,8 @@ public class MediaDecoder extends CodecManager {
         @Override
         public @NotNull String toString() {
             return "DecoderResult{" +
-                    "BsChannels=" + Arrays.toString(bytes) +
-                    ", presentationTimeUs=" + bufferInfo.presentationTimeUs +
+                    ", presentationTimeUs = " + bufferInfo.presentationTimeUs +
+                    ", flags = " + bufferInfo.flags +
                     '}';
         }
     }

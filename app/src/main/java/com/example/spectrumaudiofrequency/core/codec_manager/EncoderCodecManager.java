@@ -13,7 +13,6 @@ import static android.media.MediaCodec.BUFFER_FLAG_END_OF_STREAM;
 public class EncoderCodecManager extends CodecManager {
     private final LinkedList<ResultPromiseListener> onEncodeListeners = new LinkedList<>();
     private ByteQueue byteQueue;
-    private boolean IsClose = false;
 
     private long PresentationTimeUs = 0;
     private double ByteDuration;
@@ -39,7 +38,7 @@ public class EncoderCodecManager extends CodecManager {
         bufferInfo.set(0, data.length, PresentationTimeUs, 0);
 
         if (LastSample) {
-            super.stop();
+            super.close();
             bufferInfo.flags = BUFFER_FLAG_END_OF_STREAM;
         }
         putAndProcessInput(InputBufferId, data, bufferInfo, this::executeOnEncodeListeners);
@@ -58,8 +57,6 @@ public class EncoderCodecManager extends CodecManager {
                 byte[] bytes = byteQueue.pollList(inputBufferLimit);
                 addPutInputRequest(false, bytes);
             }
-        } else if (IsClose) {
-            putAllBytesToEncode(inputBufferLimit);
         }
     }
 
@@ -77,17 +74,14 @@ public class EncoderCodecManager extends CodecManager {
         }
     }
 
-    public void closeAndStop() {
-        this.Close();
+    public void addLastPutInputRequest(byte[] data) {
+        byteQueue.put(data);
+        addLastPutInputRequest();
+    }
+
+    public void addLastPutInputRequest() {
+        super.close();
         putAllBytesToEncode(this.getInputBufferLimit());
-    }
-
-    public void Close() {
-        IsClose = true;
-    }
-
-    public boolean isClose() {
-        return IsClose;
     }
 
     public void addOnEncode(ResultPromiseListener resultPromiseListener) {

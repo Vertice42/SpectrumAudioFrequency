@@ -36,7 +36,9 @@ public class FourierFastTransformTest {
 
         RenderScript rs = RenderScript.create(context);
 
-        MediaDecoderWithStorage decoder = new MediaDecoderWithStorage(context, R.raw.choose);
+        MediaDecoderWithStorage decoder = new MediaDecoderWithStorage(context,
+                R.raw.choose,
+                0);
 
         fft_Default = new FourierFastTransform.Default(rs, ForkJoinPool.commonPool());
         fft_Native = new FourierFastTransform.Native(ForkJoinPool.commonPool());

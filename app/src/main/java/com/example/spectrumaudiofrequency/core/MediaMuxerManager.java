@@ -12,9 +12,10 @@ import android.util.Log;
 
 import androidx.annotation.RequiresApi;
 
+import com.example.spectrumaudiofrequency.core.codec_manager.AudioFormatConverter;
 import com.example.spectrumaudiofrequency.core.codec_manager.CodecManager;
-import com.example.spectrumaudiofrequency.core.codec_manager.MediaFormatConverter;
-import com.example.spectrumaudiofrequency.core.codec_manager.MediaFormatConverter.MediaFormatConverterFinishListener;
+import com.example.spectrumaudiofrequency.core.codec_manager.MediaDecoderWithStorage;
+import com.example.spectrumaudiofrequency.core.codec_manager.MediaFormatConverter.MediaFormatConverterListener;
 import com.example.spectrumaudiofrequency.util.PerformanceCalculator;
 
 import org.jetbrains.annotations.NotNull;
@@ -23,47 +24,96 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
+import java.util.TreeMap;
 
 import static android.media.MediaCodec.BUFFER_FLAG_KEY_FRAME;
+import static android.media.MediaFormat.KEY_DURATION;
+import static android.media.MediaFormat.KEY_SAMPLE_RATE;
 import static com.example.spectrumaudiofrequency.util.Files.getUriFromResourceId;
 
 @RequiresApi(api = Build.VERSION_CODES.M)
 public class MediaMuxerManager {
     private final MediaExtractor videoExtractor;
-    private final MediaFormatConverter formatConverter;
+    private final AudioFormatConverter formatConverter;
 
     private MediaMuxer mediaMuxer;
     private MediaFormat VideoFormat;
     private Cutoff[] cutoffs;
     private ByteBuffer inputBuffer;
 
-    private MediaFormatConverterFinishListener finishListener;
+    private Runnable finishListener;
     private long outPutDuration;
     private int ExternalMediaTrackId;
     private int VideoTrackId;
     private boolean IsPrepared = false;
 
-    public MediaMuxerManager(Context context, Uri VideoUri, int[] IdsOfSounds) {
+    public MediaMuxerManager(Context context,
+                             String VideoName,
+                             Uri VideoUri,
+                             int[] IdsOfExtraSounds) {
         videoExtractor = new MediaExtractor();
-        MediaFormat[] mediaFormats = new MediaFormat[IdsOfSounds.length];
+        int AudioIndex = 1;//todo index pode ser diferente
+        MediaFormat FormatWithLongerSampleRate = new MediaFormat();
+        long BiggestMediaDuration = 0;
 
         try {
             videoExtractor.setDataSource(context, VideoUri, null);
-            for (int i = 0; i < IdsOfSounds.length; i++) {
+
+            {
+                FormatWithLongerSampleRate = videoExtractor.getTrackFormat(AudioIndex);
+                int BiggestSampleRate = FormatWithLongerSampleRate.getInteger(KEY_SAMPLE_RATE);
+                BiggestMediaDuration = FormatWithLongerSampleRate.getLong(KEY_DURATION);
+
                 MediaExtractor extraExtractor = new MediaExtractor();
-                extraExtractor.setDataSource(context, getUriFromResourceId(context, IdsOfSounds[i]), null);
-                mediaFormats[i] = extraExtractor.getTrackFormat(0);
-                Log.i("Sound Format " + i, mediaFormats[i].toString());
+                for (int idsOfExtraSound : IdsOfExtraSounds) {
+                    extraExtractor.setDataSource(context,
+                            getUriFromResourceId(context, idsOfExtraSound),
+                            null);
+
+                    MediaFormat format = extraExtractor.getTrackFormat(0);
+
+                    int sampleRate = format.getInteger(KEY_SAMPLE_RATE);
+
+                    if (sampleRate > BiggestSampleRate) {
+                        BiggestSampleRate = sampleRate;
+                        FormatWithLongerSampleRate = format;
+                    }
+
+                    long mediaDuration = format.getLong(KEY_DURATION);
+
+                    if (mediaDuration > BiggestMediaDuration) {
+                        BiggestMediaDuration = mediaDuration;
+                    }
+                }
             }
 
         } catch (IOException e) {
             e.printStackTrace();
         }
-        MediaFormat newAudioFormat = CodecManager.copyMediaFormat(mediaFormats[0]);
 
+        MediaFormat newAudioFormat = CodecManager.copyMediaFormat(FormatWithLongerSampleRate);
+
+        newAudioFormat.setLong(KEY_DURATION, BiggestMediaDuration);
         newAudioFormat.setString(MediaFormat.KEY_MIME, MediaFormat.MIMETYPE_AUDIO_AAC);
 
-        formatConverter = new MediaFormatConverter(context, IdsOfSounds, newAudioFormat);
+        ArrayList<String> mediaNames = new ArrayList<>();
+        TreeMap<String, MediaDecoderWithStorage> decoders = new TreeMap<>();
+
+        MediaDecoderWithStorage DecoderOfVideoSound = new MediaDecoderWithStorage(context,
+                VideoUri,
+                (VideoName + AudioIndex), AudioIndex);
+        mediaNames.add(DecoderOfVideoSound.MediaName);
+        decoders.put(DecoderOfVideoSound.MediaName, DecoderOfVideoSound);
+
+        for (int idsOfExtraSound : IdsOfExtraSounds) {
+            MediaDecoderWithStorage decoder = new MediaDecoderWithStorage(context,
+                    idsOfExtraSound,
+                    0);
+            mediaNames.add(decoder.MediaName);
+            decoders.put(decoder.MediaName, decoder);
+        }
+
+        formatConverter = new AudioFormatConverter(mediaNames, decoders, newAudioFormat);
     }
 
     private String createFile(String FileName) {
@@ -97,8 +147,8 @@ public class MediaMuxerManager {
         String mime = VideoFormat.getString(MediaFormat.KEY_MIME);
 
         if (mime.contains("video")) {
-            outPutDuration = VideoFormat.getLong(MediaFormat.KEY_DURATION) - skippedTime;
-            VideoFormat.setLong(MediaFormat.KEY_DURATION, outPutDuration);
+            outPutDuration = VideoFormat.getLong(KEY_DURATION) - skippedTime;
+            VideoFormat.setLong(KEY_DURATION, outPutDuration);
         }
 
         VideoTrackId = mediaMuxer.addTrack(VideoFormat);
@@ -116,7 +166,7 @@ public class MediaMuxerManager {
     }
 
     public long getVideoDuration() {
-        return videoExtractor.getTrackFormat(0).getLong(MediaFormat.KEY_DURATION);
+        return videoExtractor.getTrackFormat(0).getLong(KEY_DURATION);
     }
 
     private void skipTime(Cutoff cutoff, MediaExtractor mediaExtractor) {
@@ -138,7 +188,7 @@ public class MediaMuxerManager {
         return null;
     }
 
-    public void putExtractorData(MediaFormatConverterFinishListener formatConverterFinishListener) {
+    public void putVideoData(Runnable formatConverterFinishListener) {
         videoExtractor.selectTrack(0);
 
         long presentationTimeUs = videoExtractor.getSampleTime();
@@ -186,7 +236,7 @@ public class MediaMuxerManager {
             }
             time_after = videoExtractor.getSampleTime();
         }
-        formatConverterFinishListener.OnFinish();
+        formatConverterFinishListener.run();
     }
 
     public synchronized void writeSampleData(int TrackId, ByteBuffer inputBuffer,
@@ -200,7 +250,7 @@ public class MediaMuxerManager {
         writeSampleData(ExternalMediaTrackId, inputBuffer, bufferInfo);
     }
 
-    public void setFinishListener(MediaFormatConverterFinishListener finishListener) {
+    public void setFinishListener(Runnable finishListener) {
         this.finishListener = finishListener;
     }
 
@@ -210,17 +260,17 @@ public class MediaMuxerManager {
 
         PerformanceCalculator performance = new PerformanceCalculator("MuxTime");
 
-        MediaFormatConverter.MediaFormatConverterListener converterListener = converterResult -> {
+        MediaFormatConverterListener converterListener = converterResult -> {
             long presentationTimeUs = converterResult.bufferInfo.presentationTimeUs;
             performance.stop(presentationTimeUs,
-                    formatConverter.getMediaDuration()).logPerformance(" flag: " +
+                    formatConverter.MediaDuration()).logPerformance(" flag: " +
                     converterResult.bufferInfo.flags +
                     " size:" + converterResult.bufferInfo.size);
             performance.start();
             this.writeSampleData(converterResult.bufferInfo, converterResult.bytes);
         };
 
-        MediaFormatConverter.MediaFormatConverterListener waitingPreparationOfMediaMuxer = converterResult -> {
+        MediaFormatConverterListener waitingMediaMuxerPreparation = converterResult -> {
             if (this.IsPrepared()) {
                 while (cacheOfSamples.size() > 0) {
                     converterListener.onConvert(cacheOfSamples.get(0));
@@ -232,9 +282,9 @@ public class MediaMuxerManager {
                 cacheOfSamples.add(converterResult);
             }
         };
-        formatConverter.setOnConvert(waitingPreparationOfMediaMuxer);
+        formatConverter.setOnConvert(waitingMediaMuxerPreparation);
         formatConverter.setFinishListener(() -> {
-            this.finishListener.OnFinish();
+            this.finishListener.run();
             this.stop();
         });
 
@@ -242,7 +292,7 @@ public class MediaMuxerManager {
         MediaFormat outputFormat = formatConverter.getOutputFormat();
         this.prepare(cutoffs, outputFormat);
         formatConverter.pause();
-        this.putExtractorData(formatConverter::restart);
+        this.putVideoData(formatConverter::restart);
     }
 
     public void stop() {

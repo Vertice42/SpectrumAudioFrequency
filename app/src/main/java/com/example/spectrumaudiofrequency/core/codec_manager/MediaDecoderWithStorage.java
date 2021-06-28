@@ -1,8 +1,7 @@
 package com.example.spectrumaudiofrequency.core.codec_manager;
 
 import android.content.Context;
-import android.media.MediaExtractor;
-import android.util.Log;
+import android.net.Uri;
 
 import com.example.spectrumaudiofrequency.core.codec_manager.dbDecoderManager.MediaSpecs;
 
@@ -25,21 +24,16 @@ public class MediaDecoderWithStorage extends MediaDecoder {
     private int MaxAllocationOfSamples;
     private ExecutorService SingleThreadExecutor;
 
-    public MediaDecoderWithStorage(Context context, int ResourceId) {
-        super(context, ResourceId);
-        PrepareDataBase(context);
-    }
-
-    public MediaDecoderWithStorage(Context context, String AudioPath, String MediaName) {
-        super(AudioPath, MediaName);
+    public MediaDecoderWithStorage(Context context, int ResourceId, int TrackIndex) {
+        super(context, ResourceId, TrackIndex);
         PrepareDataBase(context);
     }
 
     public MediaDecoderWithStorage(Context context,
-                                   MediaExtractor mediaExtractor,
+                                   Uri AudioUri,
                                    String MediaName,
                                    int TrackIndex) {
-        super(mediaExtractor, MediaName, TrackIndex);
+        super(context, AudioUri, MediaName, TrackIndex);
         PrepareDataBase(context);
     }
 
@@ -64,7 +58,7 @@ public class MediaDecoderWithStorage extends MediaDecoder {
                             (sampleMetrics.SampleSize));
 
             super.addOnDecodingListener(decoderResult -> {
-                Log.i("TAG", "Decoding: " + ((double) decoderResult.bufferInfo.presentationTimeUs / getTrueMediaDuration() * 100) + "%");
+                //Log.i("TAG", "Decoding: " + ((double) decoderResult.bufferInfo.presentationTimeUs / getTrueMediaDuration() * 100) + "%");
                 //Log.i("freeMemory", "" + Runtime.getRuntime().freeMemory() + " MaxAllocation:" + MaxAllocation);
                 if (SamplesCache.size() < MaxAllocationOfSamples)
                     SamplesCache.put(decoderResult.SampleId, decoderResult);
@@ -124,9 +118,9 @@ public class MediaDecoderWithStorage extends MediaDecoder {
         return sampleMetrics.get();
     }
 
-    public int getSamplesNumber() {
+    public int getNumberOfSamples() {
         if (IsCompletelyCodified) return dbOfDecoder.getNumberOfSamples();
-        else return super.getSamplesNumber();
+        else return super.getNumberOfSamples();
     }
 
     public int getSampleDuration() {
@@ -186,7 +180,7 @@ public class MediaDecoderWithStorage extends MediaDecoder {
         dbOfDecoder.clear();
     }
 
-    public void close() {
+    public void closeDataBase() {
         dbOfDecoder.close();
     }
 

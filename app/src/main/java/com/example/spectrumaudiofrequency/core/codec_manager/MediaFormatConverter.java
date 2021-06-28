@@ -1,161 +1,47 @@
 package com.example.spectrumaudiofrequency.core.codec_manager;
 
-import android.content.Context;
 import android.media.MediaFormat;
-import android.util.Log;
 
-import com.example.spectrumaudiofrequency.core.codec_manager.CodecManager.SampleMetrics;
-import com.example.spectrumaudiofrequency.core.codec_manager.MediaDecoder.DecoderResult;
 import com.example.spectrumaudiofrequency.core.codec_manager.MediaDecoderWithStorage.PeriodRequest;
-import com.example.spectrumaudiofrequency.sinusoid_manipulador.SinusoidManipulator;
-import com.example.spectrumaudiofrequency.sinusoid_manipulador.SinusoidResize;
-
-import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.LinkedList;
-import java.util.Map;
+import java.util.TreeMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 public class MediaFormatConverter {
-    private final HashMap<Integer, MediaDecoderWithStorage> decoders = new HashMap<>();
-    private final MediaFormat NewMediaFormat;
-    private final int ChannelsNumber = 2;//todo criar modo de mixar canaias a mais
     private final ExecutorService SingleThreadExecutor;
-    private SamplesFunnel samplesFunnel;
-    private int[] MediaIds;
-    private EncoderCodecManager encoder;
-    private MediaFormatConverterFinishListener FinishListener;
-    private MediaFormatConverterListener ConverterListener;
+    protected ArrayList<String> MediasToDecode;
+    protected TreeMap<String, MediaDecoderWithStorage> decoders = new TreeMap<>();
+    protected MediaFormat NewMediaFormat;
+    protected EncoderCodecManager encoder;
+    protected Runnable FinishListener;
+    protected MediaFormatConverterListener ConverterListener;
+    protected SampleHandler sampleHandler;
+    protected long MediaDuration;
+
+    protected MediaDecoderWithStorage decoder;
     private boolean IsStarted = false;
-    private long MediaDuration = 0;
 
-    public MediaFormatConverter(Context context, int[] mediaIds, MediaFormat newMediaFormat) {
-        SingleThreadExecutor = Executors.newSingleThreadExecutor();
-        this.MediaIds = mediaIds;
-        for (int mediaId : this.MediaIds)
-            decoders.put(mediaId, new MediaDecoderWithStorage(context, mediaId));
-
-        if (this.MediaIds.length > 1) {
-            int SampleDurationAnchorIndex = 0;
-            int LargerSampleDuration = 0;
-
-            for (int mediaId : this.MediaIds) {
-                MediaDecoderWithStorage decoder = decoders.get(mediaId);
-                assert decoder != null;
-                int sampleDuration = decoder.getSampleDuration();
-                if (sampleDuration > LargerSampleDuration) {
-                    LargerSampleDuration = sampleDuration;
-                    SampleDurationAnchorIndex = mediaId;
-                }
-            }
-
-            for (int mediaId : this.MediaIds) {
-                if (SampleDurationAnchorIndex == mediaId) continue;
-                MediaDecoderWithStorage decoder = decoders.get(mediaId);
-                assert decoder != null;
-                int finalLargerSampleDuration = LargerSampleDuration;
-                decoder.setSampleRearranger(metrics -> new SampleMetrics(
-                        finalLargerSampleDuration,
-                        ((metrics.SampleSize * metrics.SampleDuration) / finalLargerSampleDuration)));
-            }
-
-            samplesFunnel = samplesFunnelRequest -> {
-                final int sampleIndex = samplesFunnelRequest.getSampleIndex();
-                if (sampleIndex > samplesFunnelRequest.getLastSampleIndex()) return;
-
-                assert this.MediaIds.length > 0;
-                CountDownLatch awaitingRequestResults = new CountDownLatch(this.MediaIds.length);
-                LinkedList<DecoderResult> decoderResults = new LinkedList<>();
-                ArrayList<Integer> MediaIdsToRemove = makeRequests(sampleIndex,
-                        decoderResults,
-                        awaitingRequestResults);
-
-                try {
-                    awaitingRequestResults.await();
-                } catch (InterruptedException e) {
-                    e.printStackTrace();
-                }
-
-                if (decoderResults.size() == 0) {
-                    encoder.closeAndStop();
-                    return;
-                }
-
-                short[][][] tracks = new short[decoderResults.size()][][];
-
-                for (int i = 0; i < decoderResults.size(); i++) {
-                    DecoderResult decoderResult = decoderResults.get(i);
-                    tracks[i] = decoderResult.converterBytesToChannels(ChannelsNumber);
-                }
-
-                int longerSoundTrackSize = getLongerSoundTrackSize(tracks);
-
-                for (short[][] track : tracks) SinusoidResize.resize(track, longerSoundTrackSize);
-
-                short[][] sinusoidMixed = SinusoidManipulator.mix(tracks);
-
-                if (sampleIndex >= samplesFunnelRequest.getLastSampleIndex()) {
-                    Log.i("TAG", "close");
-                    encoder.Close();
-                }
-                encoder.addPutInputRequest(MediaDecoder.converterChannelsToBytes(sinusoidMixed));
-
-                samplesFunnelRequest.incrementRequiredSampleId();
-
-                for (int i = 0; i < MediaIdsToRemove.size(); i++) {
-                    this.MediaIds = removeAndReallocMediaId(MediaIdsToRemove.get(i));
-                }
-                if (MediaIds.length < 2) samplesFunnel = this::singleTrackFunnel;
-            };
-
-        } else {
-            samplesFunnel = this::singleTrackFunnel;
-        }
-
+    public MediaFormatConverter(MediaDecoderWithStorage decoder, MediaFormat newMediaFormat) {
+        this.SingleThreadExecutor = Executors.newSingleThreadExecutor();
+        this.decoder = decoder;
+        this.MediaDuration = (long) decoder.getTrueMediaDuration();
+        this.sampleHandler = this::treatSingleTrack;
         this.NewMediaFormat = newMediaFormat;
     }
 
-    @NotNull
-    private int[] removeAndReallocMediaId(int decoderIndex) {
-        int newSize = decoders.size() - 1;
-        if (newSize < 1) return MediaIds;
-        int[] NewMediaIds = new int[newSize];
-        int mediaIndex = 0;
-        int newMediaIndex = 0;
-        while (mediaIndex < MediaIds.length) {
-            if (MediaIds[mediaIndex] != decoderIndex) {
-                NewMediaIds[newMediaIndex] = MediaIds[mediaIndex];
-                newMediaIndex++;
-            }
-            mediaIndex++;
-        }
-        return NewMediaIds;
+    protected MediaFormatConverter(ArrayList<String> MediasToDecode,
+                                   TreeMap<String, MediaDecoderWithStorage> decoders,
+                                   MediaFormat newMediaFormat) {
+        SingleThreadExecutor = Executors.newSingleThreadExecutor();
+        this.MediasToDecode = MediasToDecode;
+        this.NewMediaFormat = newMediaFormat;
+        this.decoders = decoders;
     }
 
-    private ArrayList<Integer> makeRequests(int sampleIndex,
-                                            LinkedList<DecoderResult> decoderResults,
-                                            CountDownLatch awaitingRequestResults) {
-        ArrayList<Integer> MediaIdsToRemove = new ArrayList<>();
-        for (int mediaId : MediaIds) {
-            MediaDecoderWithStorage decoder = decoders.get(mediaId);
-            assert decoder != null;
-            decoder.makeRequest(new PeriodRequest(sampleIndex, decoderResult -> {
-                if (decoderResult.bytes.length > 0) decoderResults.add(decoderResult);
-                awaitingRequestResults.countDown();
-            }));
-
-            if (sampleIndex > decoder.getSamplesNumber()) MediaIdsToRemove.add(mediaId);
-        }
-
-        return MediaIdsToRemove;
-    }
-
-    private int getLongerSoundTrackSize(short[][][] tracks) {
+    protected int getLongerSoundTrackSize(short[][][] tracks) {
         int longerSize = 0;
         for (short[][] channels : tracks) {
             if (channels[0].length > longerSize) longerSize = channels[0].length;
@@ -163,10 +49,10 @@ public class MediaFormatConverter {
         return longerSize;
     }
 
-    private void putSamplesToEncode(SamplesFunnelRequest samplesFunnelRequest) {
+    protected void putSamplesToEncode(RulerOfHandler samplesRulerOfHandler) {
         int inputsIdsAvailableSize = encoder.getInputsIdsAvailableSize();
         do {
-            SingleThreadExecutor.execute(() -> samplesFunnel.putDataInEncode(samplesFunnelRequest));
+            SingleThreadExecutor.execute(() -> sampleHandler.treat(samplesRulerOfHandler));
             inputsIdsAvailableSize--;
         } while (inputsIdsAvailableSize > 0);
     }
@@ -175,20 +61,11 @@ public class MediaFormatConverter {
         ConverterListener = onConvert;
     }
 
-    public void setFinishListener(MediaFormatConverterFinishListener finishListener) {
+    public void setFinishListener(Runnable finishListener) {
         this.FinishListener = finishListener;
     }
 
-    public long getMediaDuration() {
-        if (MediaDuration != 0) return MediaDuration;
-        else {
-            for (int mediaId : MediaIds) {
-                MediaDecoderWithStorage decoder = decoders.get(mediaId);
-                assert decoder != null;
-                long trueMediaDuration = (long) decoder.getTrueMediaDuration();
-                if (trueMediaDuration > MediaDuration) MediaDuration = trueMediaDuration;
-            }
-        }
+    public long MediaDuration() {
         return MediaDuration;
     }
 
@@ -209,120 +86,69 @@ public class MediaFormatConverter {
     }
 
     public void start() {
-
-        SampleMetrics metrics = null;
-        for (int mediaId : MediaIds) {
-            MediaDecoderWithStorage decoder = decoders.get(mediaId);
-            assert decoder != null;
-            decoder.start();
-
-            SampleMetrics sampleMetrics = decoder.getSampleMetrics();
-            if (metrics == null || sampleMetrics.SampleDuration > metrics.SampleDuration)
-                metrics = sampleMetrics;
-        }
+        decoder.start();
 
         encoder = new EncoderCodecManager(NewMediaFormat);
-        encoder.setSampleMetrics(metrics);
+        encoder.setSampleMetrics(decoder.getSampleMetrics());
         encoder.addOnEncode(encoderResult -> ConverterListener.onConvert(encoderResult));
-        encoder.addOnFinishListener(() -> FinishListener.OnFinish());
+        encoder.addOnFinishListener(FinishListener);
 
-        HashMap<Integer, Integer> NumberOfSamples = new HashMap<>();
-        for (int mediaId : MediaIds) {
-            MediaDecoderWithStorage decoder = decoders.get(mediaId);
-            assert decoder != null;
-            NumberOfSamples.put(mediaId, decoder.getSamplesNumber());
-        }
+        int samplesNumber = decoder.getNumberOfSamples();
 
-        SamplesFunnelRequest samplesFunnelRequest = new SamplesFunnelRequest(decoders, NumberOfSamples);
-        putSamplesToEncode(samplesFunnelRequest);
+        RulerOfHandler samplesRulerOfHandler = new RulerOfHandler(samplesNumber);
+        putSamplesToEncode(samplesRulerOfHandler);
         //todo remover addOnInputIdAvailableListener on stop
-        encoder.addOnInputIdAvailableListener(() -> putSamplesToEncode(samplesFunnelRequest));
+        encoder.addOnInputIdAvailableListener(() -> putSamplesToEncode(samplesRulerOfHandler));
     }
 
     public void pause() {
-        for (int mediaId : MediaIds) {
-            MediaDecoderWithStorage decoder = decoders.get(mediaId);
-            assert decoder != null;
-            decoder.pause();
-        }
+        decoder.pause();
     }
 
     public void restart() {
-        for (int mediaId : MediaIds) {
-            MediaDecoderWithStorage decoder = decoders.get(mediaId);
-            assert decoder != null;
-            decoder.restart();
-        }
+        decoder.restart();
     }
 
-    private void singleTrackFunnel(SamplesFunnelRequest samplesFunnelRequest) {
-        final int SampleIndex = samplesFunnelRequest.getSampleIndex();
-        if (SampleIndex > samplesFunnelRequest.getLastSampleIndex()) return;
+    public void treatSingleTrack(RulerOfHandler samplesRulerOfHandler) {
+        final int sampleIndex = samplesRulerOfHandler.SampleIndex();
+        if (sampleIndex > samplesRulerOfHandler.LastSampleIndex()) return;
 
-        MediaDecoderWithStorage decoder = decoders.get(this.MediaIds[0]);
-        assert decoder != null;
-        decoder.makeRequest(new PeriodRequest(SampleIndex, decoderResult -> {
-            if (SampleIndex >= samplesFunnelRequest.LastSampleIndex) encoder.Close();
-            encoder.addPutInputRequest(decoderResult.bytes);
+        decoder.makeRequest(new PeriodRequest(sampleIndex, decoderResult -> {
+            if (sampleIndex >= samplesRulerOfHandler.LastSampleIndex)
+                encoder.addLastPutInputRequest(decoderResult.bytes);
+            else encoder.addPutInputRequest(decoderResult.bytes);
         }));
 
-        samplesFunnelRequest.incrementRequiredSampleId();
+        samplesRulerOfHandler.incrementSampleId();
     }
 
-    private interface SamplesFunnel {
-        void putDataInEncode(SamplesFunnelRequest samplesFunnelRequest);
-    }
-
-    public interface MediaFormatConverterFinishListener {
-        void OnFinish();
+    protected interface SampleHandler {
+        void treat(RulerOfHandler samplesRulerOfHandler);
     }
 
     public interface MediaFormatConverterListener {
         void onConvert(CodecManager.CodecSample codecSample);
     }
 
-    static class SamplesFunnelRequest {
-        HashMap<Integer, MediaDecoderWithStorage> decoders;
-        HashMap<Integer, Integer> NumberSamples;
-        int SampleId = 0;
+    static class RulerOfHandler {
         int LastSampleIndex;
+        int SampleId = 0;
 
-        public SamplesFunnelRequest(HashMap<Integer, MediaDecoderWithStorage> decoders,
-                                    HashMap<Integer, Integer> NumberSamples) {
-            this.decoders = decoders;
-            this.NumberSamples = NumberSamples;
-            this.LastSampleIndex = calculateLastSampleIndex();
+        public RulerOfHandler(int LastSampleIndex) {
+            this.LastSampleIndex = LastSampleIndex;
         }
 
-        public void incrementRequiredSampleId() {
+        public void incrementSampleId() {
             SampleId++;
         }
 
-        public int getSampleIndex() {
+        public int SampleIndex() {
             return SampleId;
         }
 
-        private int calculateLastSampleIndex() {
-            Iterator<Map.Entry<Integer, Integer>> iterator = NumberSamples.entrySet().iterator();
-            int lastSampleIndex = 0;
-            while (iterator.hasNext()) {
-                Map.Entry<Integer, Integer> next = iterator.next();
-                Integer key = next.getKey();
-                Integer numberOfSamples = NumberSamples.get(key);
-                assert numberOfSamples != null;
-                if (numberOfSamples > lastSampleIndex) lastSampleIndex = numberOfSamples;
-            }
-            return lastSampleIndex;
-        }
-
-        public int getLastSampleIndex() {
+        public int LastSampleIndex() {
             return LastSampleIndex;
         }
 
-        /*
-        public void setNumberSamples(int DecoderIndex, int value) {
-            NumberSamples.put(DecoderIndex, value);
-        }
-         */
     }
 }

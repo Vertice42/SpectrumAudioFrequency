@@ -74,8 +74,10 @@ public class MediaEncoderTest {
         });
         Encoder.addOnFinishListener(EndSignal::countDown);
 
-        for (int i = 0; i < SampleToEncode; i++) Encoder.addPutInputRequest(inputData);
-        Encoder.stop();
+        for (int i = 0; i < SampleToEncode - 1; i++) Encoder.addPutInputRequest(inputData);
+
+        //put last
+        Encoder.addLastPutInputRequest(inputData);
 
         EndSignal.await();
 

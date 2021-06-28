@@ -19,6 +19,7 @@ import java.util.LinkedList;
 import java.util.concurrent.CountDownLatch;
 
 import static com.example.spectrumaudiofrequency.codec.CodecManagersTests.SoundID;
+import static com.example.spectrumaudiofrequency.codec.CodecManagersTests.TrackIndex;
 import static org.junit.Assert.fail;
 
 @RunWith(AndroidJUnit4.class)
@@ -28,7 +29,7 @@ public class MediaDecoderWithStorageTest {
 
     public MediaDecoderWithStorageTest() {
         Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();
-        decoder = new MediaDecoderWithStorage(context, SoundID);
+        decoder = new MediaDecoderWithStorage(context, SoundID, TrackIndex);
         decoder.start();
     }
 
@@ -58,7 +59,7 @@ public class MediaDecoderWithStorageTest {
     public void addRequestsTest() throws InterruptedException {
         CountDownLatch wantingResults = new CountDownLatch(1);
         LinkedList<CodecTestResult> RequestsResults = new LinkedList<>();
-        int numberOfSamples = decoder.getSamplesNumber();
+        int numberOfSamples = decoder.getNumberOfSamples();
         Assert.assertTrue(numberOfSamples > 0);
 
         VerifyTimeOut verifyTimeOut = new VerifyTimeOut(this.getClass(),
@@ -81,7 +82,7 @@ public class MediaDecoderWithStorageTest {
                 RequestsResults);
 
         decoder.addOnDecoderFinishListener(() -> {
-            int TrueNumberOfSamples = decoder.getSamplesNumber();
+            int TrueNumberOfSamples = decoder.getNumberOfSamples();
             int lastSample = TrueNumberOfSamples - 1;
             //if it is necessary to make more requests
             if (TrueNumberOfSamples > numberOfSamples) {
@@ -108,9 +109,8 @@ public class MediaDecoderWithStorageTest {
         });
 
         wantingResults.await();
-        int TrueNumberOfSamples = decoder.getSamplesNumber();
         decoder.clear();
-        decoder.close();
+        decoder.closeDataBase();
         CodecErrorChecker.check(getClass().getSimpleName(), RequestsResults);
     }
 }

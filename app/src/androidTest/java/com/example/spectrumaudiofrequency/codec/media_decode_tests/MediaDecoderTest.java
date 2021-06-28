@@ -22,6 +22,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ForkJoinPool;
 
 import static com.example.spectrumaudiofrequency.codec.CodecManagersTests.SoundID;
+import static com.example.spectrumaudiofrequency.codec.CodecManagersTests.TrackIndex;
 import static com.example.spectrumaudiofrequency.core.codec_manager.MediaDecoder.converterBytesToChannels;
 import static com.example.spectrumaudiofrequency.core.codec_manager.MediaDecoder.converterChannelsToBytes;
 
@@ -72,23 +73,23 @@ public class MediaDecoderTest {
             ));
         });
 
-        decoder.addOnDecoderFinishListener(countDownLatch::countDown);
+        decoder.addOnDecoderFinishListener(() -> countDownLatch.countDown());
 
         CountTimeout(countDownLatch);
         decoder.start();
         countDownLatch.await();
-        Assert.assertTrue(DecoderResults.size() >= decoder.getSamplesNumber());
+        Assert.assertTrue(DecoderResults.size() >= decoder.getNumberOfSamples());
         CodecErrorChecker.check(this.getClass().getSimpleName(), DecoderResults);
     }
 
     @Test
     public void decode() throws InterruptedException {
-        TestDecoding(new MediaDecoder(context, SoundID));
+        TestDecoding(new MediaDecoder(context, SoundID, TrackIndex));
     }
 
     @Test
     public void decodeWithRearrangement() throws InterruptedException {
-        MediaDecoder decoder = new MediaDecoder(context, SoundID);
+        MediaDecoder decoder = new MediaDecoder(context, SoundID, TrackIndex);
 
         decoder.setSampleRearranger(metrics ->
                 new CodecManager.SampleMetrics((metrics.SampleDuration / 2),

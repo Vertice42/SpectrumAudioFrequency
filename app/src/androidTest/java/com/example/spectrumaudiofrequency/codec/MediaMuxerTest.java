@@ -17,7 +17,8 @@ import static com.example.spectrumaudiofrequency.util.Files.getUriFromResourceId
 
 @RunWith(AndroidJUnit4.class)
 public class MediaMuxerTest {
-    public static final int[] IdsOfSounds = {R.raw.game_description, R.raw.hollow};
+    private static final int VideoId = R.raw.video_input3;
+    private static final int[] IdsOfSounds = {R.raw.game_description, R.raw.hollow};
 
     @Test
     public void Mux() throws InterruptedException {
@@ -25,9 +26,9 @@ public class MediaMuxerTest {
 
         Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();
 
+        String resourceName = context.getResources().getResourceEntryName(VideoId);
         MediaMuxerManager mediaMuxerManager = new MediaMuxerManager(context,
-                getUriFromResourceId(context, R.raw.video_input3), IdsOfSounds);
-
+                resourceName, getUriFromResourceId(context, VideoId), IdsOfSounds);
 
         MediaMuxerManager.Cutoff[] cutoffs = new MediaMuxerManager.Cutoff[5];
         long cutTime = mediaMuxerManager.getVideoDuration() / cutoffs.length;
@@ -36,7 +37,6 @@ public class MediaMuxerTest {
             cutoffs[i] = new MediaMuxerManager.Cutoff(time, time + 23220 * 10);
             time += cutTime;
         }
-
 
         mediaMuxerManager.setFinishListener(EndSignal::countDown);
         mediaMuxerManager.start(cutoffs);

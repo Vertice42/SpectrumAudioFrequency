@@ -116,7 +116,7 @@ public class MainActivity extends AppCompatActivity {
         SeekBar scaleInput = this.findViewById(R.id.scaleInput);
 
         CountDownLatch countDownLatch = new CountDownLatch(1);
-        decoderManagerWithStorage = new MediaDecoderWithStorage(this, AUDIO_ID);
+        decoderManagerWithStorage = new MediaDecoderWithStorage(this, AUDIO_ID, 0);
         decoderManagerWithStorage.addOnReadyListener((SamplesHaveEqualSize, sampleMetrics)
                 -> countDownLatch.countDown());
         try {
@@ -238,7 +238,7 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onDestroy() {
         super.onDestroy();
-        this.decoderManagerWithStorage.close();
+        this.decoderManagerWithStorage.closeDataBase();
         this.sinusoidDrawn.destroy();
     }
 }

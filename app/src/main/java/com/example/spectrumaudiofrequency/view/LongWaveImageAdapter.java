@@ -184,7 +184,7 @@ public class LongWaveImageAdapter extends RecyclerView.Adapter<WaveViewHolder> {
     }
 
     void UpdateLength() {
-        this.WaveLength = decoderManagerWithStorage.getSamplesNumber() / Zoom;
+        this.WaveLength = decoderManagerWithStorage.getNumberOfSamples() / Zoom;
         this.notifyDataSetChanged();
     }
 

@@ -13,5 +13,6 @@ import org.junit.runners.Suite;
         MediaDecoderTest.class,
         MediaDecoderWithStorageTest.class})
 public class CodecManagersTests {
-    public final static int SoundID = R.raw.hollow;
+    public final static int SoundID = R.raw.video_input3;
+    public final static int TrackIndex = 1;
 }
